@@ -25,7 +25,8 @@
     { "path": "$LOCATION(ApplicationsPerformance)/hexos-test/data" }
   ],
   "app_values": {
-    "image": { "repository": "nginx", "tag": "alpine" },
+    "image": { "repository": "traefik/whoami", "tag": "latest" },
+    "envs": [{ "name": "WHOAMI_PORT_NUMBER", "value": "9999" }],
     "host_network": true,
     "storage": [
       {
@@ -41,16 +42,16 @@
     {
       "id": "before-install",
       "event": "onBeforeInstall",
-      "script": "hexos-test/hooks.py",
-      "entrypoint": "before_install",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "beforeInstall",
       "timeout": 30,
       "description": "Pre-install validation"
     },
     {
       "id": "after-install",
       "event": "onAfterInstall",
-      "script": "hexos-test/hooks.py",
-      "entrypoint": "after_install",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "afterInstall",
       "timeout": 60,
       "description": "Post-install configuration",
       "inputs": [
@@ -103,8 +104,8 @@
     {
       "id": "before-upgrade",
       "event": "onBeforeUpgrade",
-      "script": "hexos-test/hooks.py",
-      "entrypoint": "before_upgrade",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "beforeUpgrade",
       "timeout": 30,
       "description": "Pre-upgrade patch",
       "condition": { "fromVersionRange": "< 2.0.0" }
@@ -112,16 +113,16 @@
     {
       "id": "after-upgrade",
       "event": "onAfterUpgrade",
-      "script": "hexos-test/hooks.py",
-      "entrypoint": "after_upgrade",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "afterUpgrade",
       "timeout": 30,
       "description": "Post-upgrade cleanup"
     },
     {
       "id": "optional-fail",
       "event": "onAfterInstall",
-      "script": "hexos-test/hooks.py",
-      "entrypoint": "optional_fail",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "optionalFail",
       "timeout": 10,
       "description": "Optional step that intentionally fails",
       "optional": true

@@ -108,8 +108,8 @@
     {
       "id": "configure-plex",
       "event": "onAfterInstall",
-      "script": "plex/plex_hook.py",
-      "entrypoint": "after_install",
+      "script": "plex/plex_hook.ts",
+      "entrypoint": "afterInstall",
       "timeout": 300,
       "description": "Setting up Plex server",
       "optional": true,
