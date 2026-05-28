@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" fill="none">
+  <rect width="800" height="450" rx="8" fill="#171717"/>
+  <rect x="1" y="1" width="798" height="448" rx="7" stroke="#333" stroke-width="1" fill="none"/>
+  <g transform="translate(372, 170) scale(1)">
+    <path d="M12.1334 22.9759V41.0241L23.3234 47.4184L11.1776 54.3871L0 48V16L28.0002 0L40.1537 6.94483L12.1334 22.9759Z" fill="#666"/>
+    <path d="M27.9998 63.9944L15.8535 57.0537L43.8666 41.0185V22.9703L32.6838 16.5801L44.8296 9.61133L56 15.9944V47.9944L27.9998 63.9944Z" fill="#666"/>
+  </g>
+  <text x="400" y="270" text-anchor="middle" font-family="system-ui, sans-serif" font-size="18" fill="#666">HexOS Test</text>
+</svg>

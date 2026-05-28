@@ -1,19 +1,10 @@
 {
-  "version": 4,
+  "version": 5,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "2.0.0",
+    "changeLog": "V5 with post-install hooks for automated Plex configuration"
   },
   "installation_questions": [
-    {
-      "question": "Claim Token (Optional)",
-      "description": "The claim token is used to automatically login to Plex. You can obtain a claim token to login your server to your Plex account by visiting https://www.plex.tv/claim.",
-      "placeholder": "claim-xxxxxxxxxxxxxxxxxxxxx",
-      "type": "text",
-      "key": "plex_claim_token",
-      "required": false,
-      "default": ""
-    },
     {
       "question": "Do you have Plex Pass?",
       "description": "Plex Pass is required to unlock certain features.",
@@ -79,7 +70,6 @@
   ],
   "app_values": {
     "plex": {
-      "claim_token": "$QUESTION(plex_claim_token)",
       "image_selector": "$QUESTION(image_selector)",
       "additional_envs": [
         {
@@ -113,5 +103,38 @@
       },
       "gpus": "$GPU_CONFIG()"
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "configure-plex",
+      "event": "onAfterInstall",
+      "script": "plex/plex_hook.py",
+      "entrypoint": "after_install",
+      "timeout": 300,
+      "description": "Setting up Plex server",
+      "optional": true,
+      "retries": 1,
+      "inputs": [
+        {
+          "type": "oauth",
+          "id": "plex_login",
+          "name": "Sign in to Plex",
+          "description": "Link this server to your Plex account for remote access and automatic library setup.",
+          "provider": "plex",
+          "flow": {
+            "type": "pin",
+            "pinUrl": "https://plex.tv/api/v2/pins",
+            "authUrl": "https://app.plex.tv/auth#?clientID={clientId}&code={code}",
+            "pollUrl": "https://plex.tv/api/v2/pins/{pinId}",
+            "clientId": "hexos-platform",
+            "tokenField": "authToken",
+            "headers": {
+              "X-Plex-Client-Identifier": "{clientId}",
+              "X-Plex-Product": "HexOS"
+            }
+          }
+        }
+      ]
+    }
+  ]
 }

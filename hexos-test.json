@@ -1,0 +1,130 @@
+{
+  "version": 5,
+  "custom": true,
+  "internal": true,
+  "metadata": {
+    "name": "HexOS Test",
+    "description": "Internal test app for validating the hook framework.",
+    "icon": "hexos-test/icon.svg",
+    "version": "1.0.0",
+    "categories": ["dev-tools"],
+    "keywords": ["test", "hooks", "internal"],
+    "screenshots": ["hexos-test/screenshot.svg"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Hook framework validation app"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["1CORE", "100MB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [9999]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)/hexos-test/data" }
+  ],
+  "app_values": {
+    "image": { "repository": "nginx", "tag": "alpine" },
+    "host_network": true,
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/data",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/hexos-test/data"
+        }
+      }
+    ]
+  },
+  "hooks": [
+    {
+      "id": "before-install",
+      "event": "onBeforeInstall",
+      "script": "hexos-test/hooks.py",
+      "entrypoint": "before_install",
+      "timeout": 30,
+      "description": "Pre-install validation"
+    },
+    {
+      "id": "after-install",
+      "event": "onAfterInstall",
+      "script": "hexos-test/hooks.py",
+      "entrypoint": "after_install",
+      "timeout": 60,
+      "description": "Post-install configuration",
+      "inputs": [
+        {
+          "type": "oauth",
+          "id": "test_oauth",
+          "name": "Test OAuth Sign-in",
+          "description": "Validates OAuth input collection (uses mock provider in test)",
+          "provider": "plex",
+          "flow": {
+            "type": "pin",
+            "pinUrl": "https://plex.tv/api/v2/pins",
+            "authUrl": "https://app.plex.tv/auth#?clientID={clientId}&code={code}",
+            "pollUrl": "https://plex.tv/api/v2/pins/{pinId}",
+            "clientId": "hexos-test",
+            "tokenField": "authToken",
+            "headers": {
+              "X-Plex-Client-Identifier": "{clientId}",
+              "X-Plex-Product": "HexOS"
+            }
+          }
+        },
+        {
+          "type": "question",
+          "id": "test_password",
+          "question": {
+            "question": "Enter test password",
+            "type": "password",
+            "key": "test_password",
+            "required": true,
+            "default": "test123"
+          }
+        },
+        {
+          "type": "question",
+          "id": "test_select",
+          "question": {
+            "question": "Choose a test option",
+            "type": "select",
+            "key": "test_select",
+            "options": [
+              { "text": "Option A", "value": "a" },
+              { "text": "Option B", "value": "b" }
+            ],
+            "default": "a"
+          }
+        }
+      ]
+    },
+    {
+      "id": "before-upgrade",
+      "event": "onBeforeUpgrade",
+      "script": "hexos-test/hooks.py",
+      "entrypoint": "before_upgrade",
+      "timeout": 30,
+      "description": "Pre-upgrade patch",
+      "condition": { "fromVersionRange": "< 2.0.0" }
+    },
+    {
+      "id": "after-upgrade",
+      "event": "onAfterUpgrade",
+      "script": "hexos-test/hooks.py",
+      "entrypoint": "after_upgrade",
+      "timeout": 30,
+      "description": "Post-upgrade cleanup"
+    },
+    {
+      "id": "optional-fail",
+      "event": "onAfterInstall",
+      "script": "hexos-test/hooks.py",
+      "entrypoint": "optional_fail",
+      "timeout": 10,
+      "description": "Optional step that intentionally fails",
+      "optional": true
+    }
+  ]
+}
