@@ -28,6 +28,16 @@
     "image": { "repository": "traefik/whoami", "tag": "latest" },
     "envs": [{ "name": "WHOAMI_PORT_NUMBER", "value": "9999" }],
     "host_network": true,
+    "portals": [
+      {
+        "name": "Web UI",
+        "scheme": "http",
+        "use_node_ip": true,
+        "host": "",
+        "port": 9999,
+        "path": "/"
+      }
+    ],
     "storage": [
       {
         "type": "host_path",
