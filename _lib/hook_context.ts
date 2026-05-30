@@ -94,6 +94,43 @@ export interface HookContext {
    */
   updateCheckpointMessage(id: string, message: string): Promise<void>;
 
+  /**
+   * Fail the hook with a structured error. The message is shown as the primary error,
+   * and context items are rendered as labeled key-value pairs in the UI.
+   *
+   * @param message - Human-readable error message
+   * @param context - Diagnostic details: endpoint, status, response body, suggestions, etc.
+   *
+   * @example
+   * ```ts
+   * ctx.fail("Library creation rejected by Plex", [
+   *   { label: "Endpoint", value: "POST /library/sections" },
+   *   { label: "Status", value: "400 Bad Request" },
+   *   { label: "Response", value: "Couldn't create section: 'language' is invalid" },
+   * ]);
+   * ```
+   */
+  fail(message: string, context?: Array<{ label: string; value: string }>): never;
+
+  /**
+   * Pause the hook at a failed checkpoint and wait for the user to retry or skip.
+   * The error and context are surfaced in the UI exactly like `fail()`, but the hook
+   * stays alive — it resumes when the user acts.
+   *
+   * @returns "retry" if the user chose to retry, "skip" if they chose to skip
+   */
+  awaitCheckpointRetry(
+    checkpointId: string,
+    error: string,
+    context?: Array<{ label: string; value: string }>,
+  ): Promise<"retry" | "skip">;
+
+  /**
+   * Mark a checkpoint as skipped (distinct from completed).
+   * The UI renders a skip icon instead of a check mark.
+   */
+  skipCheckpoint(id: string, message?: string): Promise<void>;
+
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
 

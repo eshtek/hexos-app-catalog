@@ -113,7 +113,7 @@
       "timeout": 300,
       "description": "Setting up Plex server",
       "optional": true,
-      "retries": 1,
+      "retries": 0,
       "userOptional": {
         "label": "Pre-configure Plex",
         "description": "Sign in to your Plex account to automatically claim your server, set preferences, and create media libraries.",

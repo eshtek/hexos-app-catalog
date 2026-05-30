@@ -3,8 +3,8 @@
   "custom": true,
   "internal": true,
   "metadata": {
-    "name": "HexOS Test",
-    "description": "Internal test app for validating the hook framework.",
+    "name": "Hook Test",
+    "description": "Validates hook lifecycle: checkpoints, inputs, retries, and optional failures.",
     "icon": "hexos-test/icon.svg",
     "version": "1.0.0",
     "categories": ["dev-tools"],

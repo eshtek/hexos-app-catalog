@@ -20,7 +20,11 @@ export async function afterInstall(ctx: HookContext) {
   await ctx.waitForApp("/identity", { headers: { Accept: "application/json" } });
   await ctx.emitCheckpoint("plexReady");
 
-  await claimServer(authToken, ctx);
+  if (await isServerClaimed(authToken, ctx)) {
+    ctx.log("Server already claimed, skipping.");
+  } else {
+    await claimServer(authToken, ctx);
+  }
   await ctx.emitCheckpoint("serverClaimed");
 
   await setPreferences(authToken, ctx, serverName);
@@ -34,6 +38,20 @@ function getServerName(ctx: HookContext): string {
     return ctx.getInput<string>("server_name") || "HexOS Plex";
   } catch {
     return "HexOS Plex";
+  }
+}
+
+async function isServerClaimed(authToken: string, ctx: HookContext): Promise<boolean> {
+  try {
+    const resp = await fetch(`${ctx.baseUrl}/myplex/account?X-Plex-Token=${encodeURIComponent(authToken)}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return false;
+    const data = (await resp.json()) as { MyPlex?: { username?: string } };
+    return !!data.MyPlex?.username;
+  } catch {
+    return false;
   }
 }
 
@@ -122,74 +140,93 @@ async function getExistingLibraryPaths(authToken: string, ctx: HookContext): Pro
   }
 }
 
-async function createLibraries(authToken: string, ctx: HookContext) {
-  const libraries = [
-    { name: "Movies", type: "movie", location: "/movies", agent: "tv.plex.agents.movie", scanner: "Plex Movie", checkpointId: "lib_movies" },
-    { name: "TV Shows", type: "show", location: "/shows", agent: "tv.plex.agents.series", scanner: "Plex TV Series", checkpointId: "lib_tv" },
-    { name: "Music", type: "artist", location: "/music", agent: "tv.plex.agents.music", scanner: "Plex Music", checkpointId: "lib_music" },
-    { name: "Photos", type: "photo", location: "/photos", agent: "com.plexapp.agents.none", scanner: "Plex Photo Scanner", checkpointId: "lib_photos" },
-    { name: "Videos", type: "other", location: "/videos", agent: "com.plexapp.agents.none", scanner: "Plex Video Files Scanner", checkpointId: "lib_videos" },
-  ];
+const LIBRARIES: Array<{ name: string; type: string; location: string; agent: string; scanner: string; language: string; checkpointId: string }> = [
+  { name: "Movies", type: "movie", location: "/movies", agent: "tv.plex.agents.movie", scanner: "Plex Movie", language: "en-US", checkpointId: "lib_movies" },
+  { name: "TV Shows", type: "show", location: "/shows", agent: "tv.plex.agents.series", scanner: "Plex TV Series", language: "en-US", checkpointId: "lib_tv" },
+  { name: "Music", type: "artist", location: "/music", agent: "tv.plex.agents.music", scanner: "Plex Music", language: "en-US", checkpointId: "lib_music" },
+  { name: "Photos", type: "photo", location: "/photos", agent: "com.plexapp.agents.none", scanner: "Plex Photo Scanner", language: "xn", checkpointId: "lib_photos" },
+  { name: "Videos", type: "movie", location: "/videos", agent: "com.plexapp.agents.none", scanner: "Plex Video Files Scanner", language: "xn", checkpointId: "lib_videos" },
+];
 
+async function createLibraries(authToken: string, ctx: HookContext) {
   await ctx.sleep(5000);
 
-  // Fetch once upfront — only matters on retries where some libraries already exist
   const existingPaths = await getExistingLibraryPaths(authToken, ctx);
 
-  for (const lib of libraries) {
+  for (const lib of LIBRARIES) {
     if (existingPaths.has(lib.location)) {
       ctx.log(`Library already exists: ${lib.name}`);
       await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — already exists`);
       continue;
     }
 
-    await ctx.updateCheckpointMessage(lib.checkpointId, `Creating library: ${lib.name}...`);
-
     let created = false;
-    let backoff = 5000;
-    for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        const params = new URLSearchParams({
-          "X-Plex-Token": authToken,
-          name: lib.name,
-          type: lib.type,
-          agent: lib.agent,
-          scanner: lib.scanner,
-          language: "en-US",
-          location: lib.location,
-        });
-        const resp = await fetch(`${ctx.baseUrl}/library/sections?${params}`, {
-          method: "POST",
-          signal: AbortSignal.timeout(15000),
-        });
-        if (resp.ok) {
-          ctx.log(`Created library: ${lib.name}`);
-          created = true;
+    const lastErrors = new Map<string, LibraryError>();
+
+    while (!created) {
+      await ctx.updateCheckpointMessage(lib.checkpointId, `Creating library: ${lib.name}...`);
+      created = await tryCreateLibrary(authToken, ctx, lib, lastErrors);
+
+      if (created) {
+        await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — created`);
+      } else {
+        const lastErr = lastErrors.get(lib.name);
+        await ctx.updateCheckpointMessage(lib.checkpointId, `${lib.name} — failed`);
+
+        const action = await ctx.awaitCheckpointRetry(lib.checkpointId,
+          `Failed to create library: ${lib.name}`, [
+            { label: "Endpoint", value: `POST ${ctx.baseUrl}/library/sections` },
+            ...(lastErr?.status ? [{ label: "Status", value: lastErr.status }] : []),
+            ...(lastErr?.body ? [{ label: "Response", value: lastErr.body }] : []),
+            { label: "Agent", value: lib.agent },
+            { label: "Scanner", value: lib.scanner },
+          ]);
+
+        if (action === "skip") {
+          await ctx.skipCheckpoint(lib.checkpointId, `${lib.name} — skipped`);
           break;
         }
-        ctx.log(`${lib.name} attempt ${attempt + 1}: ${resp.status}`);
-        await ctx.updateCheckpointMessage(lib.checkpointId, `Creating library: ${lib.name} (attempt ${attempt + 2})...`);
-      } catch (e) {
-        ctx.log(`${lib.name} attempt ${attempt + 1}: ${e}`);
-        await ctx.updateCheckpointMessage(lib.checkpointId, `Creating library: ${lib.name} (attempt ${attempt + 2})...`);
       }
-      await ctx.sleep(backoff);
-      backoff = Math.min(backoff * 1.5, 20000);
-    }
-
-    if (created) {
-      await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — created`);
-    } else {
-      await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — failed after 10 attempts`);
-      ctx.log(`Failed to create library ${lib.name} after 10 attempts`);
     }
   }
+}
 
-  // Validate all libraries exist
-  const finalPaths = await getExistingLibraryPaths(authToken, ctx);
-  const missing = libraries.filter((lib) => !finalPaths.has(lib.location));
-  if (missing.length > 0) {
-    const names = missing.map((lib) => lib.name).join(", ");
-    throw new Error(`Failed to create libraries: ${names}`);
+interface LibraryError {
+  status: string;
+  body: string;
+}
+
+async function tryCreateLibrary(
+  authToken: string,
+  ctx: HookContext,
+  lib: (typeof LIBRARIES)[number],
+  lastErrors: Map<string, LibraryError>,
+): Promise<boolean> {
+  try {
+    const params = new URLSearchParams({
+      "X-Plex-Token": authToken,
+      name: lib.name,
+      type: lib.type,
+      agent: lib.agent,
+      scanner: lib.scanner,
+      language: lib.language,
+      location: lib.location,
+    });
+    const resp = await fetch(`${ctx.baseUrl}/library/sections?${params}`, {
+      method: "POST",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (resp.ok) {
+      ctx.log(`Created library: ${lib.name}`);
+      return true;
+    }
+    const body = await resp.text().catch(() => "");
+    ctx.log(`${lib.name}: ${resp.status} ${body.substring(0, 500)}`);
+    lastErrors.set(lib.name, { status: `${resp.status} ${resp.statusText}`, body: body.substring(0, 500) });
+    return false;
+  } catch (e) {
+    ctx.log(`${lib.name}: ${e}`);
+    lastErrors.set(lib.name, { status: "Network error", body: String(e) });
+    return false;
   }
 }

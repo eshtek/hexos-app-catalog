@@ -1,0 +1,91 @@
+{
+    "version": 5,
+    "custom": true,
+    "internal": true,
+    "metadata": {
+        "name": "Hook Test Fail",
+        "description": "Required hook that always fails. Tests AWAITING_RETRY state, error context, and retry UI.",
+        "icon": "hexos-test-fail/icon.svg",
+        "version": "1.0.0",
+        "categories": [
+            "dev-tools"
+        ],
+        "keywords": [
+            "test",
+            "hooks",
+            "retry",
+            "internal"
+        ],
+        "screenshots": [
+            "hexos-test-fail/screenshot.svg"
+        ]
+    },
+    "script": {
+        "version": "1.0.0",
+        "changeLog": "Required hook failure test app"
+    },
+    "requirements": {
+        "locations": [
+            "ApplicationsPerformance"
+        ],
+        "specifications": [
+            "1CORE",
+            "100MB"
+        ],
+        "permissions": [
+            "READ_WRITE_LOCATIONS"
+        ],
+        "ports": [
+            9998
+        ]
+    },
+    "ensure_directories_exists": [
+        {
+            "path": "$LOCATION(ApplicationsPerformance)/hexos-test-fail/data"
+        }
+    ],
+    "app_values": {
+        "image": {
+            "repository": "traefik/whoami",
+            "tag": "latest"
+        },
+        "envs": [
+            {
+                "name": "WHOAMI_PORT_NUMBER",
+                "value": "9998"
+            }
+        ],
+        "host_network": true,
+        "portals": [
+            {
+                "name": "Web UI",
+                "scheme": "http",
+                "use_node_ip": true,
+                "host": "",
+                "port": 9998,
+                "path": "/"
+            }
+        ],
+        "storage": [
+            {
+                "type": "host_path",
+                "mount_path": "/data",
+                "host_path_config": {
+                    "path": "$LOCATION(ApplicationsPerformance)/hexos-test-fail/data"
+                }
+            }
+        ]
+    },
+    "hooks": [
+        {
+            "id": "required-fail",
+            "event": "onAfterInstall",
+            "script": "hexos-test-fail/hooks.ts",
+            "entrypoint": "requiredFail",
+            "timeout": 30,
+            "description": "Required step that always fails",
+            "optional": false,
+            "retries": 0
+        }
+    ]
+}
