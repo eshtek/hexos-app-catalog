@@ -80,6 +80,20 @@ export interface HookContext {
    */
   emitCheckpoint(id: string, message?: string, progress?: number): Promise<void>;
 
+  /**
+   * Update a checkpoint's message without marking it completed.
+   * Useful for showing real-time progress within a long-running step.
+   *
+   * @param id - Checkpoint identifier (must match a registered ID)
+   * @param message - New message to display
+   *
+   * @example
+   * ```ts
+   * await ctx.updateCheckpointMessage("librariesCreated", "Creating library 3 of 5: Music");
+   * ```
+   */
+  updateCheckpointMessage(id: string, message: string): Promise<void>;
+
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
 

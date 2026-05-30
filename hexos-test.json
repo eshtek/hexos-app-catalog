@@ -62,8 +62,14 @@
       "event": "onAfterInstall",
       "script": "hexos-test/hooks.ts",
       "entrypoint": "afterInstall",
-      "timeout": 60,
+      "timeout": 120,
       "description": "Post-install configuration",
+      "optional": true,
+      "userOptional": {
+        "label": "Run post-install validation",
+        "description": "Exercises all hook capabilities: OAuth, questions, checkpoints, health checks, and stress testing.",
+        "default": true
+      },
       "inputs": [
         {
           "type": "oauth",
@@ -107,6 +113,19 @@
               { "text": "Option B", "value": "b" }
             ],
             "default": "a"
+          }
+        },
+        {
+          "type": "question",
+          "id": "test_app_name",
+          "question": {
+            "question": "App display name",
+            "type": "text",
+            "key": "test_app_name",
+            "required": false,
+            "default": "HexOS Test App",
+            "description": "Tests optional text input with a default value.",
+            "placeholder": "HexOS Test App"
           }
         }
       ]

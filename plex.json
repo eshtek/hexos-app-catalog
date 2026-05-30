@@ -114,6 +114,11 @@
       "description": "Setting up Plex server",
       "optional": true,
       "retries": 1,
+      "userOptional": {
+        "label": "Pre-configure Plex",
+        "description": "Sign in to your Plex account to automatically claim your server, set preferences, and create media libraries.",
+        "default": true
+      },
       "inputs": [
         {
           "type": "oauth",
@@ -132,6 +137,19 @@
               "X-Plex-Client-Identifier": "{clientId}",
               "X-Plex-Product": "HexOS"
             }
+          }
+        },
+        {
+          "type": "question",
+          "id": "server_name",
+          "question": {
+            "question": "Server name",
+            "type": "text",
+            "key": "server_name",
+            "required": false,
+            "default": "HexOS Plex",
+            "description": "The name your Plex server will appear as to you and your friends.",
+            "placeholder": "HexOS Plex"
           }
         }
       ]
