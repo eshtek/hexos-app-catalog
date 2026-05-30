@@ -148,15 +148,23 @@ const LIBRARIES: Array<{ name: string; type: string; location: string; agent: st
   { name: "Videos", type: "movie", location: "/videos", agent: "com.plexapp.agents.none", scanner: "Plex Video Files Scanner", language: "xn", checkpointId: "lib_videos" },
 ];
 
+const AUTO_RETRIES = 5;
+const AUTO_RETRY_DELAY_MS = 5000;
+const LIBRARY_PACE_MS = 5000;
+
 async function createLibraries(authToken: string, ctx: HookContext) {
-  await ctx.sleep(5000);
+  await waitForLibrarySubsystem(authToken, ctx);
+  await ctx.sleep(LIBRARY_PACE_MS);
 
   const existingPaths = await getExistingLibraryPaths(authToken, ctx);
 
-  for (const lib of LIBRARIES) {
+  for (let i = 0; i < LIBRARIES.length; i++) {
+    const lib = LIBRARIES[i];
+
     if (existingPaths.has(lib.location)) {
       ctx.log(`Library already exists: ${lib.name}`);
       await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — already exists`);
+      if (i < LIBRARIES.length - 1) await ctx.sleep(LIBRARY_PACE_MS);
       continue;
     }
 
@@ -164,8 +172,13 @@ async function createLibraries(authToken: string, ctx: HookContext) {
     const lastErrors = new Map<string, LibraryError>();
 
     while (!created) {
-      await ctx.updateCheckpointMessage(lib.checkpointId, `Creating library: ${lib.name}...`);
-      created = await tryCreateLibrary(authToken, ctx, lib, lastErrors);
+      for (let attempt = 0; attempt < AUTO_RETRIES; attempt++) {
+        await ctx.updateCheckpointMessage(lib.checkpointId,
+          attempt === 0 ? `Creating library: ${lib.name}...` : `Creating library: ${lib.name}... (retry ${attempt}/${AUTO_RETRIES})`);
+        created = await tryCreateLibrary(authToken, ctx, lib, lastErrors);
+        if (created) break;
+        await ctx.sleep(AUTO_RETRY_DELAY_MS);
+      }
 
       if (created) {
         await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — created`);
@@ -188,7 +201,31 @@ async function createLibraries(authToken: string, ctx: HookContext) {
         }
       }
     }
+
+    await ctx.sleep(LIBRARY_PACE_MS);
   }
+}
+
+async function waitForLibrarySubsystem(authToken: string, ctx: HookContext) {
+  const maxAttempts = 8;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const resp = await fetch(
+        `${ctx.baseUrl}/library/sections?X-Plex-Token=${encodeURIComponent(authToken)}`,
+        { method: "POST", signal: AbortSignal.timeout(5000) },
+      );
+      const body = await resp.text().catch(() => "");
+      if (!body.toLowerCase().includes("still starting up")) {
+        ctx.log("Library subsystem ready.");
+        return;
+      }
+      ctx.log(`Library subsystem still starting up, waiting... (${i + 1}/${maxAttempts})`);
+    } catch (e) {
+      ctx.log(`Library subsystem check error: ${e}`);
+    }
+    await ctx.sleep(5000);
+  }
+  ctx.log("Library subsystem readiness check exhausted, proceeding anyway.");
 }
 
 interface LibraryError {
