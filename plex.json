@@ -116,8 +116,12 @@
       "retries": 0,
       "userOptional": {
         "label": "Pre-configure Plex",
-        "description": "Sign in to your Plex account to automatically claim your server, set preferences, and create media libraries.",
-        "default": true
+        "description": "Sign in to your Plex account to automatically claim your server, set preferences, and create media libraries. By enabling this, you agree that HexOS will accept the Plex Terms of Service on your behalf.",
+        "default": true,
+        "link": {
+          "url": "https://www.plex.tv/about/privacy-legal/plex-terms-of-service/",
+          "label": "Plex Terms of Service"
+        }
       },
       "inputs": [
         {
