@@ -19,8 +19,7 @@
   },
   "ensure_directories_exists": [
     {
-      "path": "$LOCATION(ApplicationsPerformance)",
-      "network_share": true
+      "path": "$LOCATION(ApplicationsPerformance)"
     },
     { "path": "$LOCATION(ApplicationsPerformance)/seerr/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } }
   ],
