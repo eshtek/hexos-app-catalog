@@ -30,7 +30,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
 | [qBittorrent](qbittorrent.json) | BitTorrent client |
-| [Qui](qui.json) | A qBittorrent web UI |
+| [qui](qui.json) | A qBittorrent web UI |
 | [Radarr](radarr.json) | Movie collection manager |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
