@@ -22,6 +22,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Jellystat](jellystat.json) | Statistics App for Jellyfin |
 | [Lidarr](lidarr.json) | Music collection manager |
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
+| [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
@@ -29,6 +30,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
 | [qBittorrent](qbittorrent.json) | BitTorrent client |
+| [qui](qui.json) | A qBittorrent web UI |
 | [Radarr](radarr.json) | Movie collection manager |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
