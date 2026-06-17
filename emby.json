@@ -100,6 +100,7 @@
           "id": "admin_username",
           "question": {
             "question": "Emby username",
+            "description": "This will be the admin username for your Emby server once installed.",
             "type": "text",
             "key": "admin_username",
             "required": true
@@ -110,6 +111,7 @@
           "id": "admin_password",
           "question": {
             "question": "Emby password",
+            "description": "This will be the admin password for your Emby server once installed.",
             "type": "password",
             "key": "admin_password",
             "required": true
