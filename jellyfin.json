@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 5,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "2.0.0",
+    "changeLog": "V5 with post-install hook for automated Jellyfin configuration"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Media", "Photos", "Music", "Movies", "Shows", "Videos"],
@@ -11,36 +11,14 @@
     "ports": [30013, 30014]
   },
   "ensure_directories_exists": [
-    {
-      "path": "$LOCATION(ApplicationsPerformance)"
-    },
-    {
-      "path": "$LOCATION(ApplicationsCapacity)"
-    },
-    {
-      "path": "$LOCATION(Media)",
-      "network_share": true
-    },
-    {
-      "path": "$LOCATION(Photos)",
-      "network_share": true
-    },
-    {
-      "path": "$LOCATION(Music)",
-      "network_share": true
-    },
-    {
-      "path": "$LOCATION(Movies)",
-      "network_share": true
-    },
-    {
-      "path": "$LOCATION(Shows)",
-      "network_share": true
-    },
-    {
-      "path": "$LOCATION(Videos)",
-      "network_share": true
-    },
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(ApplicationsCapacity)" },
+    { "path": "$LOCATION(Media)", "network_share": true },
+    { "path": "$LOCATION(Photos)", "network_share": true },
+    { "path": "$LOCATION(Music)", "network_share": true },
+    { "path": "$LOCATION(Movies)", "network_share": true },
+    { "path": "$LOCATION(Shows)", "network_share": true },
+    { "path": "$LOCATION(Videos)", "network_share": true },
     { "path": "$LOCATION(ApplicationsPerformance)/jellyfin/config", "snapshot": { "id": "config" } },
     { "path": "$LOCATION(ApplicationsCapacity)/jellyfin/cache" },
     { "path": "$LOCATION(ApplicationsPerformance)/jellyfin/transcodes" }
@@ -60,21 +38,68 @@
       ]
     },
     "network": {
-      "web_port": {
-        "bind_mode": "published",
-        "port_number": 30013
-      },
-      "https_port": {
-        "bind_mode": "published",
-        "port_number": 30014
-      }
+      "web_port": { "bind_mode": "published", "port_number": 30013 },
+      "https_port": { "bind_mode": "published", "port_number": 30014 }
     },
     "resources": {
-      "limits": {
-        "cpus": 2,
-        "memory": "$MEMORY(10%, 4096)"
-      },
+      "limits": { "cpus": 2, "memory": "$MEMORY(10%, 4096)" },
       "gpus": "$GPU_CONFIG()"
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "configure-jellyfin",
+      "event": "onAfterInstall",
+      "script": "jellyfin/jellyfin_hook.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "description": "Setting up Jellyfin",
+      "optional": false,
+      "retries": 0,
+      "userOptional": {
+        "label": "Pre-configure Jellyfin",
+        "description": "Automatically set up your server, apply preferences, and create media libraries. By enabling this, you acknowledge Jellyfin's media server policy.",
+        "default": true,
+        "link": {
+          "url": "https://jellyfin.org/docs/general/community-standards/servers/",
+          "label": "Jellyfin Server Policy"
+        }
+      },
+      "inputs": [
+        {
+          "type": "question",
+          "id": "admin_username",
+          "question": {
+            "question": "Jellyfin username",
+            "type": "text",
+            "key": "admin_username",
+            "required": true
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_password",
+          "question": {
+            "question": "Jellyfin password",
+            "type": "password",
+            "key": "admin_password",
+            "required": true
+          }
+        },
+        {
+          "type": "question",
+          "id": "server_name",
+          "question": {
+            "question": "Server name",
+            "type": "text",
+            "key": "server_name",
+            "required": false,
+            "default": "HexOS Jellyfin",
+            "description": "The name your Jellyfin server will appear as to you and your friends.",
+            "placeholder": "HexOS Jellyfin"
+          }
+        }
+      ]
+    }
+  ]
 }
