@@ -1,0 +1,160 @@
+{
+  "version": 5,
+  "custom": true,
+  "internal": true,
+  "metadata": {
+    "name": "Hook Test",
+    "description": "Validates hook lifecycle: checkpoints, inputs, retries, and optional failures.",
+    "icon": "hexos-test/icon.svg",
+    "version": "1.0.0",
+    "categories": ["dev-tools"],
+    "keywords": ["test", "hooks", "internal"],
+    "screenshots": ["hexos-test/screenshot.svg"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Hook framework validation app"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["1CORE", "100MB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [9999]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)/hexos-test/data" }
+  ],
+  "app_values": {
+    "image": { "repository": "traefik/whoami", "tag": "latest" },
+    "envs": [{ "name": "WHOAMI_PORT_NUMBER", "value": "9999" }],
+    "host_network": true,
+    "portals": [
+      {
+        "name": "Web UI",
+        "scheme": "http",
+        "use_node_ip": true,
+        "host": "",
+        "port": 9999,
+        "path": "/"
+      }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/data",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/hexos-test/data"
+        }
+      }
+    ]
+  },
+  "hooks": [
+    {
+      "id": "before-install",
+      "event": "onBeforeInstall",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "beforeInstall",
+      "timeout": 30,
+      "description": "Pre-install validation"
+    },
+    {
+      "id": "after-install",
+      "event": "onAfterInstall",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 120,
+      "description": "Post-install configuration",
+      "optional": true,
+      "userOptional": {
+        "label": "Run post-install validation",
+        "description": "Exercises all hook capabilities: OAuth, questions, checkpoints, health checks, and stress testing.",
+        "default": true
+      },
+      "inputs": [
+        {
+          "type": "oauth",
+          "id": "test_oauth",
+          "name": "Test OAuth Sign-in",
+          "description": "Validates OAuth input collection (uses mock provider in test)",
+          "provider": "plex",
+          "flow": {
+            "type": "pin",
+            "pinUrl": "https://plex.tv/api/v2/pins",
+            "authUrl": "https://app.plex.tv/auth#?clientID={clientId}&code={code}",
+            "pollUrl": "https://plex.tv/api/v2/pins/{pinId}",
+            "clientId": "hexos-test",
+            "tokenField": "authToken",
+            "headers": {
+              "X-Plex-Client-Identifier": "{clientId}",
+              "X-Plex-Product": "HexOS"
+            }
+          }
+        },
+        {
+          "type": "question",
+          "id": "test_password",
+          "question": {
+            "question": "Enter test password",
+            "type": "password",
+            "key": "test_password",
+            "required": true,
+            "default": "test123"
+          }
+        },
+        {
+          "type": "question",
+          "id": "test_select",
+          "question": {
+            "question": "Choose a test option",
+            "type": "select",
+            "key": "test_select",
+            "options": [
+              { "text": "Option A", "value": "a" },
+              { "text": "Option B", "value": "b" }
+            ],
+            "default": "a"
+          }
+        },
+        {
+          "type": "question",
+          "id": "test_app_name",
+          "question": {
+            "question": "App display name",
+            "type": "text",
+            "key": "test_app_name",
+            "required": false,
+            "default": "HexOS Test App",
+            "description": "Tests optional text input with a default value.",
+            "placeholder": "HexOS Test App"
+          }
+        }
+      ]
+    },
+    {
+      "id": "before-upgrade",
+      "event": "onBeforeUpgrade",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "beforeUpgrade",
+      "timeout": 30,
+      "description": "Pre-upgrade patch",
+      "condition": { "fromVersionRange": "< 2.0.0" }
+    },
+    {
+      "id": "after-upgrade",
+      "event": "onAfterUpgrade",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "afterUpgrade",
+      "timeout": 30,
+      "description": "Post-upgrade cleanup"
+    },
+    {
+      "id": "optional-fail",
+      "event": "onAfterInstall",
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "optionalFail",
+      "timeout": 10,
+      "description": "Optional step that intentionally fails",
+      "optional": true
+    }
+  ]
+}

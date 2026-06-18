@@ -14,12 +14,15 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
+| [Fladder](fladder.json) | Front-end interface for Jellyfin |
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |
 | [Jellyfin](jellyfin.json) | Free media server |
+| [Jellystat](jellystat.json) | Statistics App for Jellyfin |
 | [Lidarr](lidarr.json) | Music collection manager |
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
+| [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
@@ -27,8 +30,10 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
 | [qBittorrent](qbittorrent.json) | BitTorrent client |
+| [qui](qui.json) | A qBittorrent web UI |
 | [Radarr](radarr.json) | Movie collection manager |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
+| [Seerr](seerr.json) | Request management and media discovery tool |
 | [Sonarr](sonarr.json) | TV series collection manager |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 

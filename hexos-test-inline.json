@@ -1,0 +1,67 @@
+{
+  "version": 5,
+  "custom": true,
+  "internal": true,
+  "metadata": {
+    "name": "Hook Test Inline",
+    "description": "Validates inline scriptContent hooks — no external .ts files needed.",
+    "icon": "hexos-test/icon.svg",
+    "version": "1.0.0",
+    "categories": ["dev-tools"],
+    "keywords": ["test", "hooks", "inline", "internal"],
+    "screenshots": ["hexos-test/screenshot.svg"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Inline hook scriptContent validation app"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["1CORE", "100MB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [9997]
+  },
+  "app_values": {
+    "image": { "repository": "traefik/whoami", "tag": "latest" },
+    "envs": [{ "name": "WHOAMI_PORT_NUMBER", "value": "9997" }],
+    "host_network": true,
+    "portals": [
+      {
+        "name": "Web UI",
+        "scheme": "http",
+        "use_node_ip": true,
+        "host": "",
+        "port": 9997,
+        "path": "/"
+      }
+    ]
+  },
+  "hooks": [
+    {
+      "id": "inline-before-install",
+      "event": "onBeforeInstall",
+      "scriptContent": "export async function beforeInstall(ctx) {\n  await ctx.registerCheckpoints([\n    { \"id\": \"validateContext\", \"message\": \"Validating install context\" },\n    { \"id\": \"validateInline\", \"message\": \"Confirming inline execution\" }\n  ]);\n\n  if (ctx.resourceType !== \"app\") throw new Error(`Wrong resourceType: ${ctx.resourceType}`);\n  if (ctx.resourceId !== \"hexos-test-inline\") throw new Error(`Wrong resourceId: ${ctx.resourceId}`);\n  if (ctx.event !== \"onBeforeInstall\") throw new Error(`Wrong event: ${ctx.event}`);\n  await ctx.emitCheckpoint(\"validateContext\");\n\n  ctx.log(\"Inline hook running — no external .ts file needed\");\n  await ctx.emitCheckpoint(\"validateInline\");\n}",
+      "entrypoint": "beforeInstall",
+      "timeout": 30,
+      "description": "Pre-install validation (inline)"
+    },
+    {
+      "id": "inline-after-install",
+      "event": "onAfterInstall",
+      "scriptContent": "export async function afterInstall(ctx) {\n  await ctx.registerCheckpoints([\n    { \"id\": \"appReachable\", \"message\": \"Waiting for app to start\" },\n    { \"id\": \"healthCheck\", \"message\": \"Running health check\" },\n    { \"id\": \"complete\", \"message\": \"Inline hook complete\" }\n  ]);\n\n  await ctx.waitForApp(\"/\");\n  await ctx.emitCheckpoint(\"appReachable\");\n\n  const resp = await fetch(`${ctx.baseUrl}/health`, {\n    signal: AbortSignal.timeout(5000)\n  });\n  ctx.log(`Health check: ${resp.status}`);\n  await ctx.emitCheckpoint(\"healthCheck\", `Health responded ${resp.status}`);\n\n  await ctx.emitCheckpoint(\"complete\", \"All inline checks passed\");\n}",
+      "entrypoint": "afterInstall",
+      "timeout": 120,
+      "description": "Post-install health check (inline)",
+      "optional": true
+    },
+    {
+      "id": "inline-optional-fail",
+      "event": "onAfterInstall",
+      "scriptContent": "export async function optionalFail(ctx) {\n  await ctx.registerCheckpoints([\n    { \"id\": \"willFail\", \"message\": \"About to fail intentionally\" }\n  ]);\n\n  await ctx.updateCheckpointMessage(\"willFail\", \"Failing now...\");\n  ctx.log(\"Inline hook intentionally fails\");\n  throw new Error(\"Intentional inline failure for testing optional hook behavior\");\n}",
+      "entrypoint": "optionalFail",
+      "timeout": 10,
+      "description": "Optional inline step that intentionally fails",
+      "optional": true
+    }
+  ]
+}

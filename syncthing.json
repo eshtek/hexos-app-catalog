@@ -28,12 +28,10 @@
   },
   "ensure_directories_exists": [
     {
-      "path": "$LOCATION(ApplicationsPerformance)",
-      "network_share": true
+      "path": "$LOCATION(ApplicationsPerformance)"
     },
     {
-      "path": "$LOCATION(ApplicationsCapacity)",
-      "network_share": true
+      "path": "$LOCATION(ApplicationsCapacity)"
     },
     {
       "path": "$LOCATION(Documents)",
