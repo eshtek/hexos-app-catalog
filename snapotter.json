@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial Script"
@@ -16,7 +16,7 @@
     },
     {
       "question": "Choose the Admin Password",
-      "description": "",
+      "description": "Only used on installation",
       "placeholder": "",
       "type": "text",
       "key": "DEFAULT_PASSWORD",
