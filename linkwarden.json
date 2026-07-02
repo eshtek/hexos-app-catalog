@@ -17,7 +17,7 @@
     {
       "path": "$LOCATION(ApplicationsCapacity)"
     },
-    { "path": "$LOCATION(ApplicationsCapacity)/linkwarden/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsCapacity)/linkwarden/data", "snapshot": { "id": "data" } },
     { "path":"$LOCATION(ApplicationsPerformance)/linkwarden/meili_data", "owner": { "user": "apps", "group": "apps" }, "snapshot": { "id": "db" } },
     { "path":"$LOCATION(ApplicationsPerformance)/linkwarden/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
   ],
