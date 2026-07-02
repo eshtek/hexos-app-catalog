@@ -21,8 +21,10 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Jellyfin](jellyfin.json) | Free media server |
 | [Jellystat](jellystat.json) | Statistics App for Jellyfin |
 | [Lidarr](lidarr.json) | Music collection manager |
+| [Linkwarden](linkwarden.json) | Webpage archiving utility |
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
 | [Mealie](mealie.json) | Recipe Management |
+| [Memos](memos.json) | Note taking tool |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
