@@ -29,8 +29,8 @@
       "Documents"
     ],
     "specifications": [
-      "2CORE",
-      "1024MB"
+      "4CORE",
+      "4096MB"
     ],
     "permissions": [
       "READ_WRITE_LOCATIONS"
@@ -39,27 +39,30 @@
   },
   "ensure_directories_exists": [
     {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
       "path": "$LOCATION(Documents)",
       "network_share": true
     },
-    { "path": "$LOCATION(Documents)/snapotter", "owner": { "user": "apps" } }
+    { "path": "$LOCATION(Documents)/snapotter", "owner": { "user": "apps" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/snapotter/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
   ],
   "app_values": {
     "storage": {
-      "additional_storage": [
-        {
-          "ix_volume_config": {
-            "acl_enable": false,
-            "dataset_name": "storage_entry"
-          },
-          "mount_path": "/tmp/workspace",
-          "read_only": false,
-          "type": "ix_volume"
-        }
-      ],
-      "data": "$HOST_PATH($LOCATION(Documents)/snapotter)"
+      "data": "$HOST_PATH($LOCATION(Documents)/snapotter)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/snapotter/postgres_data)",
+      "workspace": {
+        "ix_volume_config": {
+          "acl_enable": false,
+          "dataset_name": "workspace"
+        },
+        "type": "ix_volume"
+      }
     },
     "snapotter": {
+      "db_password": "$RANDOM_STRING(7)",
+      "redis_password": "$RANDOM_STRING(7)",
       "additional_envs": [
         {
           "name": "DEFAULT_USERNAME",
@@ -83,8 +86,8 @@
     "resources": {
       "gpus": "$GPU_CONFIG()",
       "limits": {
-        "cpus": 2,
-        "memory": "$MEMORY(10%, 2048)"
+        "cpus": 4,
+        "memory": "$MEMORY(20%, 4096)"
       }
     }
   }

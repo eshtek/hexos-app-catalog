@@ -35,12 +35,15 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
 | [qBittorrent](qbittorrent.json) | BitTorrent client |
 | [qui](qui.json) | A qBittorrent web UI |
+| [Rackula](rackula.json) | A drag and drop rack visualizer |
 | [Radarr](radarr.json) | Movie collection manager |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | Image editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Warracker](warracker.json) | warranty tracker |
+| [Wiki.js](wiki-js.json) | Open source Wiki software |
 
 For schema documentation, macros reference, and contribution guidelines, see [docs.hexos.com](https://docs.hexos.com).
 
