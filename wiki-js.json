@@ -1,0 +1,51 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
+    "specifications": ["2CORE", "256MB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30244, 30245]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    { "path": "$LOCATION(ApplicationsPerformance)/wiki_js/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
+    { "path": "$LOCATION(ApplicationsCapacity)/wiki_js/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
+  ],
+  "app_values": {
+    "wiki_js": {
+      "db_password": "$RANDOM_STRING(7)",
+      "additional_envs": []
+    },
+    "network": {
+      "http_port": {
+        "bind_mode": "published",
+        "port_number": 30244
+      },
+      "https_port": {
+        "bind_mode": "published",
+        "port_number": 30245
+      }
+    },
+    "storage": {
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/wiki_js/postgres_data)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(ApplicationsCapacity)/wiki_js/data, /data)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  }
+}
