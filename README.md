@@ -8,6 +8,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 
 | App | Description |
 |-----|-------------|
+| [AFFiNE](affine.json) | Knowledge base software |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
@@ -41,6 +42,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | Image editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
+| [Sportarr](sportarr.json) | Sports collection manager |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Warracker](warracker.json) | warranty tracker |
 | [Wiki.js](wiki-js.json) | Open source Wiki software |
