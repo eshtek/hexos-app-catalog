@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial curation"
@@ -44,7 +44,7 @@
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sportarr/config)",
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
-        "$MOUNTED_HOST_PATH($LOCATION(Media)/sports, /sports)"
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/sports, /media/sports)"
       ]
     },
     "resources": {
