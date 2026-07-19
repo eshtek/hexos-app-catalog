@@ -1,0 +1,48 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
+    "specifications": ["2CORE", "256MB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30169]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    { "path": "$LOCATION(ApplicationsCapacity)/affine/uploads", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/affine/config", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/affine/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
+  ],
+  "app_values": {
+    "affine": {
+      "db_password": "$RANDOM_STRING(7)",
+      "redis_password": "$RANDOM_STRING(7)",
+      "additional_envs": []
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30169
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/affine/config)",
+      "uploads": "$HOST_PATH($LOCATION(ApplicationsCapacity)/affine/uploads)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/affine/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  }
+}
