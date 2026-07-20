@@ -8,7 +8,7 @@ const READINESS_ATTEMPTS = 24;
 const READINESS_INTERVAL_MS = 5000;
 const AUTO_RETRIES = 5;
 const AUTO_RETRY_DELAY_MS = 5000;
-const RADDARR_PORT = 30025;
+const RADDARR_PORT = 7878;
 const SONARR_PORT = 30113;
 
 const ARR_CHECKPOINT_IDS: Record<ArrType, string> = {
