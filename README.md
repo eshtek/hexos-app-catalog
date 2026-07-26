@@ -10,6 +10,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 |-----|-------------|
 | [AFFiNE](affine.json) | Knowledge base software |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
+| [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
@@ -29,7 +30,8 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
-| [PairDrop](pairdrop.json) | Transfer Files Cross-Platform |
+| [PairDrop](pairdrop.json) | Transfer files cross-clatform |
+| [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
 | [Plex](plex.json) | Media server with Plex Pass support |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
@@ -40,7 +42,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Radarr](radarr.json) | Movie collection manager |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
-| [SnapOtter](snapotter.json) | Image editing toolkit |
+| [SnapOtter](snapotter.json) | File editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
 | [Sportarr](sportarr.json) | Sports collection manager |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
