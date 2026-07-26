@@ -7,7 +7,6 @@
     "requirements": {
         "locations": [
             "ApplicationsPerformance",
-            "ApplicationsCapacity",
             "Documents"
         ],
         "permissions": [
@@ -20,9 +19,6 @@
     "ensure_directories_exists": [
         {
             "path": "$LOCATION(ApplicationsPerformance)"
-        },
-        {
-            "path": "$LOCATION(ApplicationsCapacity)"
         },
         {
             "path": "$LOCATION(Documents)",
@@ -40,14 +36,16 @@
     ],
     "installation_questions": [
       {
-          "question": "Admin user name",
-          "type": "text",
-          "key": "admin_user",
-          "required": true,
-          "default": ""
+        "question": "Choose the Admin Username",
+        "description": "Only used during initial installation",
+        "type": "text",
+        "key": "admin_user",
+        "required": true,
+        "default": ""
       },
       {
-        "question": "Admin user password",
+        "question": "Choose the Admin Password",
+        "description": "Only used during initial installation",
         "type": "text",
         "key": "admin_password",
         "required": true,
