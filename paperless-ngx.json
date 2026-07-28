@@ -1,8 +1,8 @@
 {
     "version": 5,
     "script": {
-        "version": "1.0.0",
-        "changeLog": "Initial"
+        "version": "1.0.1",
+        "changeLog": "hotfix"
     },
     "requirements": {
         "locations": [
@@ -26,6 +26,9 @@
         },
         {
             "path": "$LOCATION(ApplicationsPerformance)/paperless"
+        },
+        {
+            "path": "$LOCATION(Documents)/paperless"
         },
         { "path": "$LOCATION(ApplicationsPerformance)/paperless/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
         { "path": "$LOCATION(ApplicationsPerformance)/paperless/data", "owner": { "user": "apps"}, "snapshot": { "id": "data" } },
