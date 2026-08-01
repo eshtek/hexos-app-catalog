@@ -1,0 +1,46 @@
+{
+    "version": 5,
+    "script": {
+        "version": "1.0.0",
+        "changeLog": "initial"
+    },
+    "requirements": {
+        "locations": [
+            "ApplicationsPerformance"
+        ],
+        "permissions": [
+            "READ_WRITE_LOCATIONS"
+        ],
+        "ports": [
+            30404
+        ]
+    },
+    "ensure_directories_exists": [
+        {
+            "path": "$LOCATION(ApplicationsPerformance)"
+        },
+        {
+            "path": "$LOCATION(ApplicationsPerformance)/sure"
+        },
+        { "path": "$LOCATION(ApplicationsPerformance)/sure/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
+        { "path": "$LOCATION(ApplicationsPerformance)/sure/data", "owner": { "user": "apps"}, "snapshot": { "id": "data" } }
+    ],
+    "app_values": {
+        "sure" : {
+          "db_password": "$RANDOM_STRING(16)",
+          "redis_password": "$RANDOM_STRING(16)",
+          "secret_key_base": "$RANDOM_STRING(32)"
+        },
+          
+        "storage": {
+            "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sure/data)",
+            "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sure/postgres_data)"
+        },
+        "network": {
+            "web_port": {
+                "bind_mode": "published",
+                "port_number": 30404
+            }
+        }
+    }
+}

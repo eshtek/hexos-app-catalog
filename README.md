@@ -9,6 +9,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | App | Description |
 |-----|-------------|
 | [AFFiNE](affine.json) | Knowledge base software |
+| [Actual Budget](actual-budget.json) | Financial planning software |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
@@ -16,6 +17,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
+| [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
@@ -45,6 +47,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [SnapOtter](snapotter.json) | File editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
 | [Sportarr](sportarr.json) | Sports collection manager |
+| [Sure](sure.json) | Financial planning software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Warracker](warracker.json) | warranty tracker |
 | [Wiki.js](wiki-js.json) | Open source Wiki software |

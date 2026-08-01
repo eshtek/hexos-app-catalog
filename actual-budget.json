@@ -1,0 +1,39 @@
+{
+    "version": 5,
+    "script": {
+        "version": "1.0.0",
+        "changeLog": "initial"
+    },
+    "requirements": {
+        "locations": [
+            "ApplicationsPerformance"
+        ],
+        "permissions": [
+            "READ_WRITE_LOCATIONS"
+        ],
+        "ports": [
+            31012
+        ]
+    },
+    "ensure_directories_exists": [
+        {
+            "path": "$LOCATION(ApplicationsPerformance)"
+        },
+        {
+            "path": "$LOCATION(ApplicationsPerformance)/actual-budget"
+        },
+        { "path": "$LOCATION(ApplicationsPerformance)/actual-budget/data", "owner": { "user": "apps"}, "snapshot": { "id": "data" } }
+    ],
+    "app_values": {
+        "storage": {
+            "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/actual-budget/data)"
+        },
+    "network": {
+      "certificate_id": 1,
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 31012
+            }
+        }
+    }
+}
