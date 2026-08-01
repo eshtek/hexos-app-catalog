@@ -1,0 +1,47 @@
+{
+    "version": 5,
+    "script": {
+        "version": "1.0.0",
+        "changeLog": "initial"
+    },
+    "requirements": {
+        "locations": [
+            "ApplicationsPerformance"
+        ],
+        "permissions": [
+            "READ_WRITE_LOCATIONS"
+        ],
+        "ports": [
+            30105
+        ]
+    },
+    "ensure_directories_exists": [
+        {
+            "path": "$LOCATION(ApplicationsPerformance)"
+        },
+        {
+            "path": "$LOCATION(ApplicationsPerformance)/firefly3"
+        },
+        { "path": "$LOCATION(ApplicationsPerformance)/firefly3/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
+        { "path": "$LOCATION(ApplicationsPerformance)/firefly3/uploads", "owner": { "user": "apps"}, "snapshot": { "id": "data" } }
+    ],
+    "app_values": {
+        "firefly_iii" : {
+          "db_password": "$RANDOM_STRING(16)",
+          "redis_password": "$RANDOM_STRING(16)",
+          "app_key": "$RANDOM_STRING(32)",
+          "app_url": "http://$SERVER_LAN_IP:30105"
+        },
+          
+        "storage": {
+            "uploads": "$HOST_PATH($LOCATION(ApplicationsPerformance)/firefly3/uploads)",
+            "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/firefly3/postgres_data)"
+        },
+        "network": {
+            "web_port": {
+                "bind_mode": "published",
+                "port_number": 30105
+            }
+        }
+    }
+}
