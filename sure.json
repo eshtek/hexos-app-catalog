@@ -1,12 +1,16 @@
 {
     "version": 5,
     "script": {
-        "version": "1.0.0",
-        "changeLog": "initial"
+        "version": "1.0.1",
+        "changeLog": "added requirements"
     },
     "requirements": {
         "locations": [
             "ApplicationsPerformance"
+        ],
+        "specifications": [
+          "2CORE",
+          "2048MB"
         ],
         "permissions": [
             "READ_WRITE_LOCATIONS"
@@ -41,6 +45,12 @@
                 "bind_mode": "published",
                 "port_number": 30404
             }
+        },
+        "resources": {
+          "limits": {
+            "cpus": 2,
+            "memory": "$MEMORY(15%, 2048)"
+          }
         }
     }
 }
