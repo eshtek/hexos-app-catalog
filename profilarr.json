@@ -1,0 +1,68 @@
+{
+    "version": 5,
+    "script": {
+        "version": "1.1",
+        "changeLog": "Added hook to connect Profilarr after installation"
+    },
+    "requirements": {
+        "locations": [
+            "ApplicationsPerformance"
+        ],
+        "specifications": [
+            "2CORE",
+            "200MB"
+        ],
+        "permissions": [
+            "READ_WRITE_LOCATIONS"
+        ],
+        "ports": [
+            6868
+        ]
+    },
+    "ensure_directories_exists": [
+        {
+            "path": "$LOCATION(ApplicationsPerformance)",
+            "network_share": true
+        },
+        {
+            "path": "$LOCATION(ApplicationsPerformance)/profilarr/config",
+            "owner": { "user": "apps", "group": "docker" },
+            "snapshot": { "id": "config" }
+        }
+    ],
+    "app_values": {
+        "profilarr": {
+            "additional_envs": [
+                {
+                    "name": "AUTH",
+                    "value": "off"
+                }                
+            ]
+        },
+        "storage": {
+            "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/profilarr/config)"
+        },
+        "network": {
+            "web_port": {
+                "bind_mode": "published",
+                "port_number": 6868
+            }
+        },
+        "resources": {
+            "limits": {
+                "cpus": 2,
+                "memory": "$MEMORY(10%, 2048)"
+            }
+        }
+    },
+    "hooks": [
+        {
+            "id": "configure-profilarr",
+            "event": "onAfterInstall",
+            "script": "profilarr/hook.ts",
+            "entrypoint": "onAfterInstall",
+            "description": "Connecting to Sonarr and Radarr",
+            "optional": true
+        }
+    ]
+}
