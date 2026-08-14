@@ -156,5 +156,89 @@
       "description": "Optional step that intentionally fails",
       "optional": true
     }
+  ],
+  "actionsSchema": 1,
+  "actions": [
+    {
+      "id": "harness-ok",
+      "title": "Harness: succeed with checkpoints",
+      "description": "Runs three checkpoints over ~4s and completes.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-fail",
+      "title": "Harness: always fails",
+      "description": "Fails at its second checkpoint to exercise structured failure.",
+      "kind": "custom",
+      "rerun": "refuse",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"explode\", message: \"This step always fails\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1000));\n  throw new Error(\"Intentional harness failure\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-needs-self-running",
+      "title": "Harness: requires this app running",
+      "description": "Visible when hexos-test is installed; runnable only while it is running.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "hexos-test"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "hexos-test"
+        }
+      ],
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-invisible",
+      "title": "Harness: should never be shown",
+      "description": "Gated on an app that does not exist.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "app-that-does-not-exist"
+        }
+      ],
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-future-condition",
+      "title": "Harness: unknown condition type",
+      "description": "Uses a predicate this platform does not know; must fail closed (hidden).",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "quantumEntanglement",
+          "qubits": 7
+        }
+      ],
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    }
   ]
 }

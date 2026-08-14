@@ -103,5 +103,138 @@
         }
       ]
     }
+  ],
+  "actionsSchema": 1,
+  "actions": [
+    {
+      "id": "connect-jellystat",
+      "title": "Connect to Jellystat",
+      "description": "Link Jellyfin to Jellystat for watch statistics. Uses your Jellyfin admin sign-in; a fresh Jellystat gets the same credentials.",
+      "kind": "connect",
+      "rerun": "converge",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "jellystat"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellystat"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "inputs": [
+        {
+          "type": "question",
+          "id": "jf_username",
+          "question": {
+            "question": "Jellyfin admin username",
+            "type": "text",
+            "key": "jf_username",
+            "required": true,
+            "description": "The administrator account from Jellyfin's setup"
+          }
+        },
+        {
+          "type": "question",
+          "id": "jf_password",
+          "question": {
+            "question": "Jellyfin admin password",
+            "type": "password",
+            "key": "jf_password",
+            "required": true
+          }
+        }
+      ],
+      "script": "jellyfin/connect_jellystat.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-seer",
+      "title": "Connect to Seer",
+      "description": "Link this Jellyfin server to Seer so requests and discovery use your library. Uses your Jellyfin admin sign-in.",
+      "kind": "connect",
+      "rerun": "converge",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "inputs": [
+        {
+          "type": "question",
+          "id": "jf_username",
+          "question": {
+            "question": "Jellyfin admin username",
+            "type": "text",
+            "key": "jf_username",
+            "required": true,
+            "description": "The administrator account from Jellyfin's setup"
+          }
+        },
+        {
+          "type": "question",
+          "id": "jf_password",
+          "question": {
+            "question": "Jellyfin admin password",
+            "type": "password",
+            "key": "jf_password",
+            "required": true
+          }
+        }
+      ],
+      "script": "jellyfin/connect_seer.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "check-fladder",
+      "title": "Check Fladder link",
+      "description": "Fladder is pointed at this Jellyfin server when it installs — this checks the link end to end.",
+      "kind": "maintain",
+      "rerun": "idempotent",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "fladder"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "fladder"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "script": "jellyfin/check_fladder.ts",
+      "entrypoint": "run",
+      "timeout": 120,
+      "retries": 0
+    }
   ]
 }

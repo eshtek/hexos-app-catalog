@@ -156,5 +156,118 @@
         }
       ]
     }
+  ],
+  "actionsSchema": 1,
+  "actions": [
+    {
+      "id": "connect-seer",
+      "title": "Connect to Seer",
+      "description": "Link this Plex server to Seer so requests and discovery use your library.",
+      "kind": "connect",
+      "rerun": "converge",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "script": "plex/connect_seer.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-tautulli",
+      "title": "Connect to Tautulli",
+      "description": "Link Tautulli to this Plex server for watch history and stats — no sign-in needed.",
+      "kind": "connect",
+      "rerun": "converge",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "tautulli"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tautulli"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0,
+      "script": "plex/connect_tautulli.ts"
+    }
+  ],
+  "widgetsSchema": 1,
+  "widgets": [
+    {
+      "id": "now-playing",
+      "title": "Now playing",
+      "description": "Active Plex streams right now.",
+      "layout": "list",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "script": "plex/widget_now_playing.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "library-totals",
+      "title": "Plex library",
+      "description": "How many items are in each Plex library.",
+      "layout": "stat",
+      "refresh": 900,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "script": "plex/widget_library_stats.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "recently-added",
+      "title": "Recently added",
+      "description": "The newest items in your Plex libraries.",
+      "layout": "list",
+      "refresh": 300,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "script": "plex/widget_recently_added.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
   ]
 }
