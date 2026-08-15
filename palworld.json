@@ -512,7 +512,7 @@
             "default": "False"
         },
         {
-            "question": "Enable player to play damage",
+            "question": "Enable player to player damage",
             "description": "This setting is required to be set to `Yes` if PVP mode is enabled",
             "type": "select",
             "key": "bEnablePlayerToPlayerDamage",
