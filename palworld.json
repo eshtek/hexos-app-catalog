@@ -1,0 +1,1807 @@
+{
+    "version": 5,
+    "script": {
+        "version": "1.0.0",
+        "changeLog": "Initial Install script"
+    },
+    "installation_questions": [
+        {
+            "question": "Select how many cpu threads to allocate",
+            "description": "Do not exceed the amount of threads available on your cpu.",
+            "type": "select",
+            "key": "cpus",
+            "required": true,
+            "options": [
+                {
+                    "text": "4 (minimum recommendation)",
+                    "value": "4"
+                },
+                {
+                    "text": "5",
+                    "value": "5"
+                },
+                {
+                    "text": "6",
+                    "value": "6"
+                },
+                {
+                    "text": "7",
+                    "value": "7"
+                },
+                {
+                    "text": "8",
+                    "value": "8"
+                },
+                {
+                    "text": "9",
+                    "value": "9"
+                },
+                {
+                    "text": "10",
+                    "value": "10"
+                },
+                {
+                    "text": "11",
+                    "value": "11"
+                },
+                {
+                    "text": "12",
+                    "value": "12"
+                },
+                {
+                    "text": "13",
+                    "value": "13"
+                },
+                {
+                    "text": "14",
+                    "value": "14"
+                },
+                {
+                    "text": "15",
+                    "value": "15"
+                },
+                {
+                    "text": "16",
+                    "value": "16"
+                },
+                {
+                    "text": "17",
+                    "value": "17"
+                },
+                {
+                    "text": "18",
+                    "value": "18"
+                },
+                {
+                    "text": "19",
+                    "value": "19"
+                },
+                {
+                    "text": "20",
+                    "value": "20"
+                },
+                {
+                    "text": "21",
+                    "value": "21"
+                },
+                {
+                    "text": "22",
+                    "value": "22"
+                },
+                {
+                    "text": "23",
+                    "value": "23"
+                },
+                {
+                    "text": "24",
+                    "value": "24"
+                }
+            ],
+            "default": "4"
+        },
+        {
+            "question": "Select how much ram to allocate",
+            "description": "Do not exceed the amount of ram available in your server.",
+            "type": "select",
+            "key": "ram",
+            "required": true,
+            "options": [
+                {
+                    "text": "8 GB (minimum recommendation)",
+                    "value": "8192"
+                },
+                {
+                    "text": "9 GB",
+                    "value": "9216"
+                },
+                {
+                    "text": "10 GB",
+                    "value": "10240"
+                },
+                {
+                    "text": "11 GB",
+                    "value": "11264"
+                },
+                {
+                    "text": "12 GB",
+                    "value": "12288"
+                },
+                {
+                    "text": "13 GB",
+                    "value": "13312"
+                },
+                {
+                    "text": "14 GB",
+                    "value": "14336"
+                },
+                {
+                    "text": "15 GB",
+                    "value": "15360"
+                },
+                {
+                    "text": "16 GB",
+                    "value": "16384"
+                },
+                {
+                    "text": "17 GB",
+                    "value": "17408"
+                },
+                {
+                    "text": "18 GB",
+                    "value": "18432"
+                },
+                {
+                    "text": "19 GB",
+                    "value": "19456"
+                },
+                {
+                    "text": "20 GB",
+                    "value": "20480"
+                },
+                {
+                    "text": "21 GB",
+                    "value": "21504"
+                },
+                {
+                    "text": "22 GB",
+                    "value": "22528"
+                },
+                {
+                    "text": "23 GB",
+                    "value": "23552"
+                },
+                {
+                    "text": "24 Gb",
+                    "value": "24576"
+                },
+                {
+                    "text": "28 GB",
+                    "value": "28672"
+                },
+                {
+                    "text": "32 GB",
+                    "value": "32768"
+                },
+                {
+                    "text": "36 GB",
+                    "value": "36864"
+                },
+                {
+                    "text": "40 GB",
+                    "value": "40960"
+                },
+                {
+                    "text": "44 GB",
+                    "value": "45056"
+                },
+                {
+                    "text": "48 GB",
+                    "value": "49152"
+                }
+            ],
+            "default": "8192"
+        },
+        {
+            "question": "Select a Server name",
+            "type": "text",
+            "key": "server_name",
+            "required": true,
+            "default": "HexOS Palworld Server"
+        },
+        {
+            "question": "Write a Server Description",
+            "type": "text",
+            "key": "server_description",
+            "required": true,
+            "default": "Palworld Server running on HexOS"
+        },
+        {
+            "question": "Input a server password",
+            "type": "text",
+            "key": "server_password",
+            "required": false,
+            "default": "",
+            "placeholder": "Leave blank for no password"
+        },
+        {
+            "question": "Input the admin password",
+            "description": "This is used to login to the rest api server management tools at http://serverIP:30443. Login username is admin. Read more about the rest api here https://docs.palworldgame.com/category/rest-api",
+            "type": "text",
+            "key": "admin_password",
+            "required": true,
+            "default": ""
+        },
+        {
+            "question": "Set Pal spawn randomizer type",
+            "type": "select",
+            "key": "RandomizerType",
+            "required": true,
+            "options": [
+                {
+                    "text": "No randomization",
+                    "value": "None"
+                },
+                {
+                    "text": "Region only",
+                    "value": "Region"
+                },
+                {
+                    "text": "Full randomization",
+                    "value": "All"
+                }
+            ],
+            "default": "None"
+        },
+        {
+            "question": "Input a randomizer seed",
+            "description": "Requires Pal spawn randomizer to be enabled. Determines the specific randomization result when Pal randomization is enabled.",
+            "type": "text",
+            "key": "RandomizerSeed",
+            "required": true,
+            "default": "$RANDOM_STRING(16)"
+        },
+        {
+            "question": "Randomize wild pal levels",
+            "description": "Selecting no keeps pals in area's intended level range",
+            "type": "select",
+            "key": "bIsRandomizerPalLevelRandom",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Select the daytime speed rate",
+            "description": "The lower this number is, the longer each day will last. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "DayTimeSpeedRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the nighttime speed rate",
+            "description": "The lower this number is, the longer each night will last. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "NightTimeSpeedRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select an Experience Multiplier",
+            "description": "The Higher this number is, the faster EXP will be gained. The Normal range is 0.1 - 20",
+            "type": "text",
+            "key": "ExpRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select a Pal capture rate",
+            "description": "The higher this number is, the greater your chance of capturing a Pal is. The Normal Range is 0.5 - 2",
+            "type": "text",
+            "key": "PalCaptureRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the Pal appearance rate",
+            "description": "This setting effects game performance. The higher this number is, the more Pals that will spawn. The Normal Range is 0.5 - 3",
+            "type": "text",
+            "key": "PalSpawnNumRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the damage from Pals multiplier",
+            "description": "The lower this number is, the less damage you and your Pals will take from wild Pals during combat. Also decreases the damage output of your Pals. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PalDamageRateAttack",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the damage to Pals multiplier",
+            "description": "The higher this number is, the more damage you and your Pals will do to wild Pals during combat. Also increases the damage your Pals receive. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PalDamageRateDefense",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the Pal hunger depletion rate",
+            "description": "The lower this number is, the longer it will take for your Pals to get hungry. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PalStomachDecreaceRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the Pal stamina depletion rate",
+            "description": "The lower this number is, the longer it will take for your Pals stamina to run out. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PalStaminaDecreaceRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the Pal auto HP regeneration rate",
+            "description": "The higher this number is, the faster your Pal will recover health. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PalAutoHPRegeneRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the Pal sleep HP regeneration rate",
+            "description": "The higher this number is, the faster your Pal will recover health when inside the Palbox. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PalAutoHPRegeneRateInSleep",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the damage multiplier of players",
+            "description": "The higher this number is, the greater the damage output of your character. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PlayerDamageRateAttack",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the damage multiplier to players",
+            "description": "The lower this number is, the less damage your character will take during combat. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PlayerDamageRateDefense",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the player hunger depletion rate",
+            "description": "The lower this number is, the longer it will take for your character to get hungry. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PlayerStomachDecreaceRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the player stamina depletion rate",
+            "description": "The lower this number is, the longer it will take for your character to run out of stamina. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PlayerStaminaDecreaceRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the player auto HP regeneration rate",
+            "description": "The higher this number is, the faster your character will recover health. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PlayerAutoHPRegeneRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the player sleep HP regeneration rate",
+            "description": "The higher this number is, the faster your character will recover health when sleeping. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "PlayerAutoHpRegeneRateInSleep",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Set the HP multiplier for structures",
+            "description": "The higher this number the more health structures will have",
+            "type": "text",
+            "key": "BuildObjectHpRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the Damage to structure multiplier",
+            "description": "The lower this number is, the less damage your structures and builds will take. The Normal Range is 0.5 - 3",
+            "type": "text",
+            "key": "BuildObjectDamageRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the structure deterioration rate",
+            "description": "The lower this number is, the slower the deterioration will be for structures and builds. The Normal Range is 0 - 10",
+            "type": "text",
+            "key": "BuildObjectDeteriorationDamageRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Set the drop rate for items obtained from gathering",
+            "type": "text",
+            "key": "CollectionDropRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the HP multiplier for gatherable resources",
+            "description": "The higher this number is, the more resources you will receive from mining, lumbering etc. The Normal Range is 0.5 - 3",
+            "type": "text",
+            "key": "CollectionObjectHpRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the gatherable objects respawn interval",
+            "description": "The lower this number is, the faster objects/resources like rocks will respawn after mining. The Normal Range is 0.5 - 3",
+            "type": "text",
+            "key": "CollectionObjectRespawnSpeedRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the dropped item multiplier",
+            "description": "The higher this number is, the more items/materials you will receive when defeating a Pal. The Normal Range is 0.5 - 3",
+            "type": "text",
+            "key": "EnemyDropItemRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the work speed Multiplier",
+            "description": "The higher this number is, the faster pals work. The Normal Range is 0.1 - 5",
+            "type": "text",
+            "key": "WorkSpeedRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Enable multiplayer mode",
+            "type": "select",
+            "key": "bIsMultiplay",
+            "required": true,
+            "options": [
+                {
+                    "text": "yes",
+                    "value": "True"
+                },
+                {
+                    "text": "no",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable pvp mode",
+            "type": "select",
+            "key": "bIsPvP",
+            "required": true,
+            "options": [
+                {
+                    "text": "yes",
+                    "value": "True"
+                },
+                {
+                    "text": "no",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable player to play damage",
+            "description": "This setting is required to be set to `Yes` if PVP mode is enabled",
+            "type": "select",
+            "key": "bEnablePlayerToPlayerDamage",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable friendly fire",
+            "type": "select",
+            "key": "bEnableFriendlyFire",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Show the number of PvP-exclusive items stored at each base on the world map",
+            "type": "select",
+            "key": "bDisplayPvPItemNumOnWorldMap_BaseCamp",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Show player locations and the number of PvP-exclusive items each player carries on the world map.",
+            "type": "select",
+            "key": "bDisplayPvPItemNumOnWorldMap_Player",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable additional PvP reward item(s) when killing another player in PvP",
+            "type": "select",
+            "key": "bAdditionalDropItemWhenPlayerKillingInPvPMode",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Set how many of the additional PvP reward item are dropped when a player kills another player",
+            "description": "Requires previous question to be set to `Yes`. This value must be set to whole numbers.",
+            "type": "text",
+            "key": "AdditionalDropItemNumWhenPlayerKillingInPvPMode",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Enable enemy invasions",
+            "type": "select",
+            "key": "bEnableInvaderEnemy",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable predator boss pals",
+            "type": "select",
+            "key": "EnablePredatorBossPal",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Allow enemy camps to spawn near base camps",
+            "type": "select",
+            "key": "bAllowEnemyCampSpawnNearBaseCamp",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Set the time to in hours to hatch massive eggs.",
+            "description": "The lower this number is, the faster eggs will hatch. The Normal Range is 0 - 240",
+            "type": "text",
+            "key": "PalEggDefaultHatchingTime",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Select the penalty for death",
+            "description": "This setting allows you to change what happens upon death.",
+            "type": "select",
+            "key": "DeathPenalty",
+            "required": true,
+            "options": [
+                {
+                    "text": "No drops",
+                    "value": "None"
+                },
+                {
+                    "text": "Drop all items except equipment",
+                    "value": "Item"
+                },
+                {
+                    "text": "Drop all items and equipment",
+                    "value": "ItemAndEquipment"
+                },
+                {
+                    "text": "Drop all items and all pals on team",
+                    "value": "All"
+                }
+            ],
+            "default": "ItemAndEquipment"
+        },
+        {
+            "question": "Select the maximum number of dropped items in a world",
+            "description": "The higher this number is, the higher the number of item stacks allowed on the ground at one time is. Increasing the limit may affect performance. The Normal Range is 0 - 5000",
+            "type": "text",
+            "key": "DropItemMaxNum",
+            "required": true,
+            "default": "3000"
+        },
+        {
+            "question": "Select how long dropped items remain in the world",
+            "description": "The higher this number is, the longer dropped items remain in the world",
+            "type": "text",
+            "key": "DropItemAliveMaxHours",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Set the total amount of base camps allowed in the server",
+            "type": "text",
+            "key": "BaseCampMaxNum",
+            "required": true,
+            "default": "128"
+        },
+        {
+            "question": "Set the maximum number of pals allowed to work on one base",
+            "description": "This may affect performance. The Normal Range is 1 - 50",
+            "type": "text",
+            "key": "BaseCampWorkerMaxNum",
+            "required": true,
+            "default": "15"
+        },
+        {
+            "question": "Select the maximum number of bases for each guild",
+            "description": "The Normal Range is 1 - 10",
+            "type": "text",
+            "key": "BaseCampMaxNumInGuild",
+            "required": true,
+            "default": "4"
+        },
+        {
+            "question": "Select the maximum number of members allowed for each guild",
+            "description": "The Normal Range is 1 - 100",
+            "type": "text",
+            "key": "GuildPlayerMaxNum",
+            "required": true,
+            "default": "20"
+        },
+        {
+            "question": "Automatically delete inactive guilds",
+            "description": "Works in tandem with the next question",
+            "type": "select",
+            "key": "bAutoResetGuildNoOnlinePlayers",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Select the amount of time in hours before a guild with no online players is considered inactive.",
+            "description": "Requires the previous question to be set to `Yes` for this setting to be active",
+            "type": "text",
+            "key": "AutoResetGuildTimeNoOnlinePlayers",
+            "required": true,
+            "default": "168"
+        },
+        {
+            "question": "Enable base Pals to defend against hostile players from other guilds",
+            "description": "Requires the previous 2 questions to be set to `Yes`. Enables defense against players from other guilds",
+            "type": "select",
+            "key": "bEnableDefenseOtherGuildPlayer",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable pick up of another guild's death penalty drop",
+            "type": "select",
+            "key": "bCanPickupOtherGuildDeathPenaltyDrop",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable fast travel",
+            "type": "select",
+            "key": "bEnableFastTravel",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Restrict fast travel to Base camps only",
+            "description": "Requires fast travel to be enabled",
+            "type": "select",
+            "key": "bEnableFastTravelOnlyBaseCamp",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Allows players to select their starting location from the map",
+            "type": "select",
+            "key": "bIsStartLocationSelectByMap",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Limit build area",
+            "description": "Limits how densely structures can be built",
+            "type": "select",
+            "key": "bBuildAreaLimit",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable Hardcore mode",
+            "type": "select",
+            "key": "bHardcore",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Allow character recreation in hardcore mode",
+            "description": "This requires hardcore mode to be enabled",
+            "type": "select",
+            "key": "bCharacterRecreateInHardcore",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Choose which technology to disable",
+            "description": "Separate technology with commas only. Leave blank to enable all technology",
+            "type": "text",
+            "key": "DenyTechnologyList",
+            "required": false,
+            "default": "",
+            "placeholder": "technology1,technology2,technology3"
+        },
+        {
+            "question": "Permanently lose party Pals when the player dies",
+            "type": "select",
+            "key": "bPalLost",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable upgrading the health stat",
+            "type": "select",
+            "key": "bAllowEnhanceStat_Health",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable upgrading the attack stat",
+            "type": "select",
+            "key": "bAllowEnhanceStat_Attack",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable upgrading the stamina stat",
+            "type": "select",
+            "key": "bAllowEnhanceStat_Stamina",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable upgrading the weight stat",
+            "type": "select",
+            "key": "bAllowEnhanceStat_Weight",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable upgrading the work speed stat",
+            "type": "select",
+            "key": "bAllowEnhanceStat_WorkSpeed",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Set the Maximum number of server players",
+            "type": "text",
+            "key": "ServerPlayerMaxNum",
+            "required": true,
+            "default": "32"
+        },
+        {
+            "question": "Set the maximum number of players in a co-op session",
+            "type": "text",
+            "key": "CoopPlayerMaxNum",
+            "required": true,
+            "default": "4"
+        },
+        {
+            "question": "Choose an item weight multiplier",
+            "description": "Increasing this makes items heavier",
+            "type": "text",
+            "key": "ItemWeightRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Choose how fast equipment loses durability",
+            "description": "Increasing this makes equipment wear out faster. Inputting `0` disables equipment wear",
+            "type": "text",
+            "key": "EquipmentDurabilityDamageRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Set the maximum amount of buildings in the world",
+            "description": "Inputting `0` disables the the limit",
+            "type": "text",
+            "key": "MaxBuildingLimitNum",
+            "required": true,
+            "default": "0"
+        },
+        {
+            "question": "Set the interval between supply drops",
+            "description": "Increasing this value makes supply drops less frequent",
+            "type": "text",
+            "key": "SupplyDropSpan",
+            "required": true,
+            "default": "180"
+        },
+        {
+            "question": "Set a chat limit",
+            "description": "Limits are per player per minute. Increasing this value permits more messages per minute",
+            "type": "text",
+            "key": "ChatPostLimitPerMinute",
+            "required": true,
+            "default": "30"
+        },
+        {
+            "question": "Set the rate at which perishable items spoil",
+            "description": "Increasing this value will make items spoil faster",
+            "type": "text",
+            "key": "ItemCorruptionMultiplier",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Set the production speed at Pal ranches",
+            "description": "Increasing this value makes production faster",
+            "type": "text",
+            "key": "MonsterFarmActionSpeedRate",
+            "required": true,
+            "default": "1"
+        },
+        {
+            "question": "Keep Players in the world after logout",
+            "type": "select",
+            "key": "bExistPlayerAfterLogout",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable penalty for prolonged not logging in",
+            "type": "select",
+            "key": "bEnableNonLoginPenalty",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable aim assist for users using controllers",
+            "type": "select",
+            "key": "bEnableAimAssistPad",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable aim assist for users using mouse & keyboard",
+            "type": "select",
+            "key": "bEnableAimAssistKeyboard",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Hide the base-area effect of other guilds",
+            "type": "select",
+            "key": "bInvisibleOtherGuildBaseCampAreaFX",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Set the amount of days a guild leader can be inactive before leadership is transferred",
+            "type": "text",
+            "key": "AutoTransferMasterThresholdDays",
+            "required": true,
+            "default": "14"
+        },
+        {
+            "question": "Set the amount of time a player has to wait before they can rejoin a guild they left",
+            "description": "This time is in minutes",
+            "type": "text",
+            "key": "GuildRejoinCooldownMinutes",
+            "required": true,
+            "default": "0"
+        },
+        {
+            "question": "Enable exporting pals to the Global Palbox",
+            "type": "select",
+            "key": "bAllowGlobalPalboxExport",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Enable importing pals from the Global Palbox",
+            "type": "select",
+            "key": "bAllowGlobalPalboxImport",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Enable Voice chat",
+            "type": "select",
+            "key": "bEnableVoiceChat",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Set how close a player has to be in order to be heard at full volume",
+            "description": "This requires voice chat to be enabled. This value should be smaller than the next question.",
+            "type": "text",
+            "key": "VoiceChatMaxVolumeDistance",
+            "required": true,
+            "default": "3000"
+        },
+        {
+            "question": "Set how far a player has to be in order to no longer be heard.",
+            "description": "This requires voice chat to be enabled. This value should be larger than the previous question.",
+            "type": "text",
+            "key": "VoiceChatZeroVolumeDistance",
+            "required": true,
+            "default": "15000"
+        },
+        {
+            "question": "Show player IDs associated with buildings",
+            "type": "select",
+            "key": "bEnableBuildingPlayerUIdDisplay",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Show player list in the world menu",
+            "type": "select",
+            "key": "bShowPlayerList",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "False"
+        },
+        {
+            "question": "Show player join/left message",
+            "type": "select",
+            "key": "bIsShowJoinLeftMessage",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Allow client-side mods",
+            "type": "select",
+            "key": "bAllowClientMod",
+            "required": true,
+            "options": [
+                {
+                    "text": "Yes",
+                    "value": "True"
+                },
+                {
+                    "text": "No",
+                    "value": "False"
+                }
+            ],
+            "default": "True"
+        },
+        {
+            "question": "Set the respawn time delay.",
+            "description": "This value is in seconds. The higher this value the longer a user will have to wait before respawning",
+            "type": "text",
+            "key": "BlockRespawnTime",
+            "required": true,
+            "default": "0"
+        },
+        {
+            "question": "Set the threshold before repeated deaths start extending respawn time",
+            "type": "text",
+            "key": "RespawnPenaltyDurationThreshold",
+            "required": true,
+            "default": "0"
+        },
+        {
+            "question": "Set the multiplier applied to respawn time once the penalty applies",
+            "description": "Requires the previous question not to be set to `0`. Increasing this value makes repeated deaths more punishing.",
+            "type": "text",
+            "key": "RespawnPenaltyTimeScale",
+            "required": true,
+            "default": "2"
+        }
+    ],
+    "requirements": {
+        "locations": [
+            "Media",
+            "ApplicationsPerformance"
+        ],
+        "permissions": [],
+        "specifications": [],
+        "ports": []
+    },
+    "ensure_directories_exists": [
+        {
+            "path": "$LOCATION(Media)",
+            "network_share": true
+        },
+        {
+            "path": "$LOCATION(ApplicationsPerformance)",
+            "network_share": true
+        },
+        {
+            "path": "$LOCATION(Media)/palworld",
+            "owner": "apps"
+        },
+        {
+            "path": "$LOCATION(ApplicationsPerformance)/palworld/steamcmd",
+            "owner": "apps"
+        }
+    ],
+    "app_values": {
+        "labels": [],
+        "network": {
+            "api_port": {
+                "bind_mode": "published",
+                "host_ips": [],
+                "port_number": 30443
+            },
+            "host_network": false,
+            "networks": [],
+            "rcon_port": {
+                "bind_mode": "published",
+                "host_ips": [],
+                "port_number": 38212
+            },
+            "server_port": {
+                "bind_mode": "published",
+                "host_ips": [],
+                "port_number": 38211
+            }
+        },
+        "palworld": {
+            "additional_envs": [],
+            "admin_password": "$QUESTION(admin_password)",
+            "allow_platform": "Steam",
+            "backup": {
+                "enabled": true,
+                "interval": 120,
+                "keep": 3
+            },
+            "game_params": [
+                "EpicApp=PalServer"
+            ],
+            "game_params_extra": [
+                "-useperfthreads",
+                "-NoAsyncLoadingThread",
+                "-UseMultithreadForDS"
+            ],
+            "ini_keys": [
+                {
+                    "key": "ExpRate",
+                    "value": "$QUESTION(ExpRate)"
+                },
+                {
+                    "key": "DayTimeSpeedRate",
+                    "value": "$QUESTION(DayTimeSpeedRate)"
+                },
+                {
+                    "key": "NightTimeSpeedRate",
+                    "value": "$QUESTION(NightTimeSpeedRate)"
+                },
+                {
+                    "key": "PalCaptureRate",
+                    "value": "$QUESTION(PalCaptureRate)"
+                },
+                {
+                    "key": "PalSpawnNumRate",
+                    "value": "$QUESTION(PalSpawnNumRate)"
+                },
+                {
+                    "key": "PalDamageRateAttack",
+                    "value": "$QUESTION(PalDamageRateAttack)"
+                },
+                {
+                    "key": "PalDamageRateDefense",
+                    "value": "$QUESTION(PalDamageRateDefense)"
+                },
+                {
+                    "key": "PlayerDamageRateAttack",
+                    "value": "$QUESTION(PlayerDamageRateAttack)"
+                },
+                {
+                    "key": "PlayerDamageRateDefense",
+                    "value": "$QUESTION(PlayerDamageRateDefense)"
+                },
+                {
+                    "key": "PlayerStomachDecreaceRate",
+                    "value": "$QUESTION(PlayerStomachDecreaceRate)"
+                },
+                {
+                    "key": "PlayerStaminaDecreaceRate",
+                    "value": "$QUESTION(PlayerStaminaDecreaceRate)"
+                },
+                {
+                    "key": "PlayerAutoHPRegeneRate",
+                    "value": "$QUESTION(PlayerAutoHPRegeneRate)"
+                },
+                {
+                    "key": "PlayerAutoHpRegeneRateInSleep",
+                    "value": "$QUESTION(PlayerAutoHpRegeneRateInSleep)"
+                },
+                {
+                    "key": "PalStomachDecreaceRate",
+                    "value": "$QUESTION(PalStomachDecreaceRate)"
+                },
+                {
+                    "key": "PalStaminaDecreaceRate",
+                    "value": "$QUESTION(PalStaminaDecreaceRate)"
+                },
+                {
+                    "key": "PalAutoHPRegeneRate",
+                    "value": "$QUESTION(PalAutoHPRegeneRate)"
+                },
+                {
+                    "key": "PalAutoHPRegeneRateInSleep",
+                    "value": "$QUESTION(PalAutoHPRegeneRateInSleep)"
+                },
+                {
+                    "key": "BuildObjectDamageRate",
+                    "value": "$QUESTION(BuildObjectDamageRate)"
+                },
+                {
+                    "key": "BuildObjectDeteriorationDamageRate",
+                    "value": "$QUESTION(BuildObjectDeteriorationDamageRate)"
+                },
+                {
+                    "key": "CollectionDropRate",
+                    "value": "$QUESTION(CollectionDropRate)"
+                },
+                {
+                    "key": "CollectionObjectHpRate",
+                    "value": "$QUESTION(CollectionObjectHpRate)"
+                },
+                {
+                    "key": "CollectionObjectRespawnSpeedRate",
+                    "value": "$QUESTION(CollectionObjectRespawnSpeedRate)"
+                },
+                {
+                    "key": "EnemyDropItemRate",
+                    "value": "$QUESTION(EnemyDropItemRate)"
+                },
+                {
+                    "key": "WorkSpeedRate",
+                    "value": "$QUESTION(WorkSpeedRate)"
+                },
+                {
+                    "key": "PalEggDefaultHatchingTime",
+                    "value": "$QUESTION(PalEggDefaultHatchingTime)"
+                },
+                {
+                    "key": "DeathPenalty",
+                    "value": "$QUESTION(DeathPenalty)"
+                },
+                {
+                    "key": "DropItemMaxNum",
+                    "value": "$QUESTION(DropItemMaxNum)"
+                },
+                {
+                    "key": "DropItemAliveMaxHours",
+                    "value": "$QUESTION(DropItemAliveMaxHours)"
+                },
+                {
+                    "key": "BaseCampMaxNum",
+                    "value": "$QUESTION(BaseCampMaxNum)"
+                },
+                {
+                    "key": "BaseCampWorkerMaxNum",
+                    "value": "$QUESTION(BaseCampWorkerMaxNum)"
+                },
+                {
+                    "key": "BaseCampMaxNumInGuild",
+                    "value": "$QUESTION(BaseCampMaxNumInGuild)"
+                },
+                {
+                    "key": "GuildPlayerMaxNum",
+                    "value": "$QUESTION(GuildPlayerMaxNum)"
+                },
+                {
+                    "key": "AutoResetGuildTimeNoOnlinePlayers",
+                    "value": "$QUESTION(AutoResetGuildTimeNoOnlinePlayers)"
+                },
+                {
+                    "key": "bAutoResetGuildNoOnlinePlayers",
+                    "value": "$QUESTION(bAutoResetGuildNoOnlinePlayers)"
+                },
+                {
+                    "key": "bIsMultiplay",
+                    "value": "$QUESTION(bIsMultiplay)"
+                },
+                {
+                    "key": "bIsPvP",
+                    "value": "$QUESTION(bIsPvP)"
+                },
+                {
+                    "key": "bEnablePlayerToPlayerDamage",
+                    "value": "$QUESTION(bEnablePlayerToPlayerDamage)"
+                },
+                {
+                    "key": "bEnableFriendlyFire",
+                    "value": "$QUESTION(bEnableFriendlyFire)"
+                },
+                {
+                    "key": "bEnableInvaderEnemy",
+                    "value": "$QUESTION(bEnableInvaderEnemy)"
+                },
+                {
+                    "key": "bCanPickupOtherGuildDeathPenaltyDrop",
+                    "value": "$QUESTION(bCanPickupOtherGuildDeathPenaltyDrop)"
+                },
+                {
+                    "key": "bEnableDefenseOtherGuildPlayer",
+                    "value": "$QUESTION(bEnableDefenseOtherGuildPlayer)"
+                },
+                {
+                    "key": "bExistPlayerAfterLogout",
+                    "value": "$QUESTION(bExistPlayerAfterLogout)"
+                },
+                {
+                    "key": "bEnableNonLoginPenalty",
+                    "value": "$QUESTION(bEnableNonLoginPenalty)"
+                },
+                {
+                    "key": "bEnableFastTravel",
+                    "value": "$QUESTION(bEnableFastTravel)"
+                },
+                {
+                    "key": "bIsStartLocationSelectByMap",
+                    "value": "$QUESTION(bIsStartLocationSelectByMap)"
+                },
+                {
+                    "key": "bBuildAreaLimit",
+                    "value": "$QUESTION(bBuildAreaLimit)"
+                },
+                {
+                    "key": "bHardcore",
+                    "value": "$QUESTION(bHardcore)"
+                },
+                {
+                    "key": "bPalLost",
+                    "value": "$QUESTION(bPalLost)"
+                },
+                {
+                    "key": "ServerPlayerMaxNum",
+                    "value": "$QUESTION(ServerPlayerMaxNum)"
+                },
+                {
+                    "key": "CoopPlayerMaxNum",
+                    "value": "$QUESTION(CoopPlayerMaxNum)"
+                },
+                {
+                    "key": "ItemWeightRate",
+                    "value": "$QUESTION(ItemWeightRate)"
+                },
+                {
+                    "key": "EquipmentDurabilityDamageRate",
+                    "value": "$QUESTION(EquipmentDurabilityDamageRate)"
+                },
+                {
+                    "key": "MaxBuildingLimitNum",
+                    "value": "$QUESTION(MaxBuildingLimitNum)"
+                },
+                {
+                    "key": "SupplyDropSpan",
+                    "value": "$QUESTION(SupplyDropSpan)"
+                },
+                {
+                    "key": "ChatPostLimitPerMinute",
+                    "value": "$QUESTION(ChatPostLimitPerMinute)"
+                },
+                {
+                    "key": "ItemCorruptionMultiplier",
+                    "value": "$QUESTION(ItemCorruptionMultiplier)"
+                },
+                {
+                    "key": "MonsterFarmActionSpeedRate",
+                    "value": "$QUESTION(MonsterFarmActionSpeedRate)"
+                },
+                {
+                    "key": "bEnableAimAssistPad",
+                    "value": "$QUESTION(bEnableAimAssistPad)"
+                },
+                {
+                    "key": "bEnableAimAssistKeyboard",
+                    "value": "$QUESTION(bEnableAimAssistKeyboard)"
+                },
+                {
+                    "key": "bInvisibleOtherGuildBaseCampAreaFX",
+                    "value": "$QUESTION(bInvisibleOtherGuildBaseCampAreaFX)"
+                },
+                {
+                    "key": "AutoTransferMasterThresholdDays",
+                    "value": "$QUESTION(AutoTransferMasterThresholdDays)"
+                },
+                {
+                    "key": "GuildRejoinCooldownMinutes",
+                    "value": "$QUESTION(GuildRejoinCooldownMinutes)"
+                },
+                {
+                    "key": "DenyTechnologyList",
+                    "value": "$QUESTION(DenyTechnologyList)"
+                },
+                {
+                    "key": "bAllowGlobalPalboxExport",
+                    "value": "$QUESTION(bAllowGlobalPalboxExport)"
+                },
+                {
+                    "key": "bAllowGlobalPalboxImport",
+                    "value": "$QUESTION(bAllowGlobalPalboxImport)"
+                },
+                {
+                    "key": "bEnableVoiceChat",
+                    "value": "$QUESTION(bEnableVoiceChat)"
+                },
+                {
+                    "key": "VoiceChatMaxVolumeDistance",
+                    "value": "$QUESTION(VoiceChatMaxVolumeDistance)"
+                },
+                {
+                    "key": "VoiceChatZeroVolumeDistance",
+                    "value": "$QUESTION(VoiceChatZeroVolumeDistance)"
+                },
+                {
+                    "key": "bDisplayPvPItemNumOnWorldMap_BaseCamp",
+                    "value": "$QUESTION(bDisplayPvPItemNumOnWorldMap_BaseCamp)"
+                },
+                {
+                    "key": "bDisplayPvPItemNumOnWorldMap_Player",
+                    "value": "$QUESTION(bDisplayPvPItemNumOnWorldMap_Player)"
+                },
+                {
+                    "key": "bAdditionalDropItemWhenPlayerKillingInPvPMode",
+                    "value": "$QUESTION(bAdditionalDropItemWhenPlayerKillingInPvPMode)"
+                },
+                {
+                    "key": "AdditionalDropItemNumWhenPlayerKillingInPvPMode",
+                    "value": "$QUESTION(AdditionalDropItemNumWhenPlayerKillingInPvPMode)"
+                },
+                {
+                    "key": "bAllowEnhanceStat_Health",
+                    "value": "$QUESTION(bAllowEnhanceStat_Health)"
+                },
+                {
+                    "key": "bAllowEnhanceStat_Attack",
+                    "value": "$QUESTION(bAllowEnhanceStat_Attack)"
+                },
+                {
+                    "key": "bAllowEnhanceStat_Stamina",
+                    "value": "$QUESTION(bAllowEnhanceStat_Stamina)"
+                },
+                {
+                    "key": "bAllowEnhanceStat_Weight",
+                    "value": "$QUESTION(bAllowEnhanceStat_Weight)"
+                },
+                {
+                    "key": "bEnableBuildingPlayerUIdDisplay",
+                    "value": "$QUESTION(bEnableBuildingPlayerUIdDisplay)"
+                },
+                {
+                    "key": "bIsShowJoinLeftMessage",
+                    "value": "$QUESTION(bIsShowJoinLeftMessage)"
+                },
+                {
+                    "key": "bAllowClientMod",
+                    "value": "$QUESTION(bAllowClientMod)"
+                },
+                {
+                    "key": "BlockRespawnTime",
+                    "value": "$QUESTION(BlockRespawnTime)"
+                },
+                {
+                    "key": "RespawnPenaltyDurationThreshold",
+                    "value": "$QUESTION(RespawnPenaltyDurationThreshold)"
+                },
+                {
+                    "key": "RespawnPenaltyTimeScale",
+                    "value": "$QUESTION(RespawnPenaltyTimeScale)"
+                },
+                {
+                    "key": "RandomizerType",
+                    "value": "$QUESTION(RandomizerType)"
+                },
+                {
+                    "key": "RandomizerSeed",
+                    "value": "$QUESTION(RandomizerSeed)"
+                },
+                {
+                    "key": "bIsRandomizerPalLevelRandom",
+                    "value": "$QUESTION(bIsRandomizerPalLevelRandom)"
+                },
+                {
+                    "key": "BuildObjectHpRate",
+                    "value": "$QUESTION(BuildObjectHpRate)"
+                },
+                {
+                    "key": "EnablePredatorBossPal",
+                    "value": "$QUESTION(EnablePredatorBossPal)"
+                },
+                {
+                    "key": "bEnableFastTravelOnlyBaseCamp",
+                    "value": "$QUESTION(bEnableFastTravelOnlyBaseCamp)"
+                },
+                {
+                    "key": "bCharacterRecreateInHardcore",
+                    "value": "$QUESTION(bCharacterRecreateInHardcore)"
+                },
+                {
+                    "key": "bAllowEnhanceStat_WorkSpeed",
+                    "value": "$QUESTION(bAllowEnhanceStat_WorkSpeed)"
+                },
+                {
+                    "key": "bAllowEnemyCampSpawnNearBaseCamp",
+                    "value": "$QUESTION(bAllowEnemyCampSpawnNearBaseCamp)"
+                },
+                {
+                    "key": "bShowPlayerList",
+                    "value": "$QUESTION(bShowPlayerList)"
+                }
+            ],
+            "server": {
+                "description": "$QUESTION(server_description)",
+                "name": "$QUESTION(server_name)",
+                "password": "$QUESTION(server_password)"
+            },
+            "update_public_ip": false,
+            "username": "",
+            "validate": false
+        },
+        "release_name": "palworld",
+        "resources": {
+            "limits": {
+                "cpus": "$QUESTION(cpus)",
+                "memory": "$QUESTION(ram)"
+            }
+        },
+        "run_as": {
+            "group": 568,
+            "user": 568
+        },
+        "storage": {
+            "additional_storage": [],
+            "server": "$HOST_PATH($LOCATION(Media)/palworld)",
+            "steamcmd": "$HOST_PATH($LOCATION(ApplicationsPerformance)/palworld/steamcmd)"
+        }
+    }
+}
