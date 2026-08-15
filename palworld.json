@@ -1,8 +1,8 @@
 {
     "version": 5,
     "script": {
-        "version": "1.0.0",
-        "changeLog": "Initial Install script"
+        "version": "1.0.1",
+        "changeLog": "Updated requirements"
     },
     "installation_questions": [
         {
@@ -1348,9 +1348,9 @@
             "Media",
             "ApplicationsPerformance"
         ],
-        "permissions": [],
-        "specifications": [],
-        "ports": []
+        "permissions": ["READ_WRITE_LOCATIONS"],
+        "specifications": ["4CORE", "8GB"],
+        "ports": [30443, 38212, 38211]
     },
     "ensure_directories_exists": [
         {
