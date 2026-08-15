@@ -33,6 +33,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
+| [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
 | [Plex](plex.json) | Media server with Plex Pass support |
