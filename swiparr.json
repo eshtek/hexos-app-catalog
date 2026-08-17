@@ -1,0 +1,651 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script"
+  },
+  "installation_questions": [
+    {
+      "question": "Choose your preferred media provider",
+      "description": "This would be your main media server application",
+      "type": "select",
+      "key": "provider",
+      "required": true,
+      "options": [
+        {
+          "text": "Jellyfin",
+          "value": "jellyfin"
+        },
+        {
+          "text": "Emby (experimental)",
+          "value": "emby"
+        },
+        {
+          "text": "Plex (experimental)",
+          "value": "plex"
+        },
+        {
+          "text": "TMBD (No Media Server Required)",
+          "value": "tmdb"
+        }
+      ],
+      "default": "jellyfin"
+    },
+    {
+      "question": "Input your TMDB access token (Only required for TMDB users)",
+      "description": "The TMDB API Read-Only Access Token can be obtained at https://www.themoviedb.org/settings/api",
+      "type": "text",
+      "key": "tmdb_access_token",
+      "required": false
+    },
+    {
+      "question": "Choose your TMDB default region (Only required for TMDB users)", 
+      "description": "This Would set yout default TMDB region for streaming availability",
+      "type": "select",
+      "key": "tmdb_default_region",
+      "required": false,
+      "options": [
+        {
+          "text": "Andorra",
+          "value": "AD"
+        },
+        {
+          "text": "United Arab Emirates (الإمارات العربية المتحدة)",
+          "value": "AE"
+        },
+        {
+          "text": "Antigua & Barbuda",
+          "value": "AG"
+        },
+        {
+          "text": "Albania (Shqipëri)",
+          "value": "AL"
+        },
+        {
+          "text": "Angola",
+          "value": "AO"
+        },
+        {
+          "text": "Argentina",
+          "value": "AR"
+        },
+        {
+          "text": "Austria (Österreich)",
+          "value": "AT"
+        },
+        {
+          "text": "Australia",
+          "value": "AU"
+        },
+        {
+          "text": "Azerbaijan (Azərbaycan)",
+          "value": "AZ"
+        },
+        {
+          "text": "Bosnia & Herzegovina (Bosna i Hercegovina)",
+          "value": "BA"
+        },
+        {
+          "text": "Barbados",
+          "value": "BB"
+        },
+        {
+          "text": "Belgium (België)",
+          "value": "BE"
+        },
+        {
+          "text": "Burkina Faso",
+          "value": "BF"
+        },
+        {
+          "text": "Bulgaria (България)",
+          "value": "BG"
+        },
+        {
+          "text": "Bahrain (البحرين)",
+          "value": "BH"
+        },
+        {
+          "text": "Bermuda",
+          "value": "BM"
+        },
+        {
+          "text": "Bolivia",
+          "value": "BO"
+        },
+        {
+          "text": "Brazil (Brasil)",
+          "value": "BR"
+        },
+        {
+          "text": "Bahamas",
+          "value": "BS"
+        },
+        {
+          "text": "Belarus (Беларусь)",
+          "value": "BY"
+        },
+        {
+          "text": "Belize",
+          "value": "BZ"
+        },
+        {
+          "text": "Canada",
+          "value": "CA"
+        },
+        {
+          "text": "Congo (Congo-Kinshasa)",
+          "value": "CD"
+        },
+        {
+          "text": "Switzerland (Schweiz)",
+          "value": "CH"
+        },
+        {
+          "text": "Côte D'Ivoire",
+          "value": "CI"
+        },
+        {
+          "text": "Chile",
+          "value": "CL"
+        },
+        {
+          "text": "Cameroon (Cameroun)",
+          "value": "CM"
+        },
+        {
+          "text": "Colombia",
+          "value": "CO"
+        },
+        {
+          "text": "Costa Rica",
+          "value": "CR"
+        },
+        {
+          "text": "Cuba",
+          "value": "CU"
+        },
+        {
+          "text": "Cape Verde (Cabo Verde)",
+          "value": "CV"
+        },
+        {
+          "text": "Cyprus (Κύπρος)",
+          "value": "CY"
+        },
+        {
+          "text": "Czech Republic (Česko)",
+          "value": "CZ"
+        },
+        {
+          "text": "Germany (Deutschland)",
+          "value": "DE"
+        },
+        {
+          "text": "Denmark (Danmark)",
+          "value": "DK"
+        },
+        {
+          "text": "Dominican Republic (República Dominicana)",
+          "value": "DO"
+        },
+        {
+          "text": "Algeria (الجزائر)",
+          "value": "DZ"
+        },
+        {
+          "text": "Ecuador",
+          "value": "EC"
+        },
+        {
+          "text": "Estonia (Eesti)",
+          "value": "EE"
+        },
+        {
+          "text": "Egypt (مصر)",
+          "value": "EG"
+        },
+        {
+          "text": "Spain (España)",
+          "value": "ES"
+        },
+        {
+          "text": "Finland (Suomi)",
+          "value": "FI"
+        },
+        {
+          "text": "Fiji",
+          "value": "FJ"
+        },
+        {
+          "text": "France",
+          "value": "FR"
+        },
+        {
+          "text": "United Kingdom",
+          "value": "GB"
+        },
+        {
+          "text": "French Guiana (Guyane française)",
+          "value": "GF"
+        },
+        {
+          "text": "Ghana",
+          "value": "GH"
+        },
+        {
+          "text": "Gibraltar",
+          "value": "GI"
+        },
+        {
+          "text": "Guadaloupe (Guadeloupe)",
+          "value": "GP"
+        },
+        {
+          "text": "Equatorial Guinea (Guinea Ecuatorial)",
+          "value": "GQ"
+        },
+        {
+          "text": "Greece (Ελλάδα)",
+          "value": "GR"
+        },
+        {
+          "text": "Guatemala",
+          "value": "GT"
+        },
+        {
+          "text": "Guyana",
+          "value": "GY"
+        },
+        {
+          "text": "Hong Kong (香港)",
+          "value": "HK"
+        },
+        {
+          "text": "Honduras",
+          "value": "HN"
+        },
+        {
+          "text": "Croatia (Hrvatska)",
+          "value": "HR"
+        },
+        {
+          "text": "Hungary (Magyarország)",
+          "value": "HU"
+        },
+        {
+          "text": "Indonesia",
+          "value": "ID"
+        },
+        {
+          "text": "Ireland",
+          "value": "IE"
+        },
+        {
+          "text": "Israel (ישראל)",
+          "value": "IL"
+        },
+        {
+          "text": "India (भारत)",
+          "value": "IN"
+        },
+        {
+          "text": "Iraq (العراق)",
+          "value": "IQ"
+        },
+        {
+          "text": "Iceland (Ísland)",
+          "value": "IS"
+        },
+        {
+          "text": "Italy (Italia)",
+          "value": "IT"
+        },
+        {
+          "text": "Jamaica",
+          "value": "JM"
+        },
+        {
+          "text": "Jordan (الأردن)",
+          "value": "JO"
+        },
+        {
+          "text": "Japan (日本)",
+          "value": "JP"
+        },
+        {
+          "text": "Kenya",
+          "value": "KE"
+        },
+        {
+          "text": "South Korea (대한민국)",
+          "value": "KR"
+        },
+        {
+          "text": "Kuwait (الكويت)",
+          "value": "KW"
+        },
+        {
+          "text": "Lebanon (لبنان)",
+          "value": "LB"
+        },
+        {
+          "text": "St. Lucia",
+          "value": "LC"
+        },
+        {
+          "text": "Liechtenstein",
+          "value": "LI"
+        },
+        {
+          "text": "Lithuania (Lietuva)",
+          "value": "LT"
+        },
+        {
+          "text": "Luxembourg (Lëtzebuerg)",
+          "value": "LU"
+        },
+        {
+          "text": "Latvia (Latvija)",
+          "value": "LV"
+        },
+        {
+          "text": "Libyan Arab Jamahiriya (ليبيا)",
+          "value": "LY"
+        },
+        {
+          "text": "Morocco (المغرب)",
+          "value": "MA"
+        },
+        {
+          "text": "Monaco",
+          "value": "MC"
+        },
+        {
+          "text": "Moldova (Republica Moldova)",
+          "value": "MD"
+        },
+        {
+          "text": "Montenegro (Црна Гора)",
+          "value": "ME"
+        },
+        {
+          "text": "Madagascar (Madagasikara)",
+          "value": "MG"
+        },
+        {
+          "text": "Macedonia (Северна Македонија)",
+          "value": "MK"
+        },
+        {
+          "text": "Mali",
+          "value": "ML"
+        },
+        {
+          "text": "Malta",
+          "value": "MT"
+        },
+        {
+          "text": "Mauritius",
+          "value": "MU"
+        },
+        {
+          "text": "Malawi",
+          "value": "MW"
+        },
+        {
+          "text": "México",
+          "value": "MX"
+        },
+        {
+          "text": "Malaysia",
+          "value": "MY"
+        },
+        {
+          "text": "Mozambique (Moçambique)",
+          "value": "MZ"
+        },
+        {
+          "text": "Niger",
+          "value": "NE"
+        },
+        {
+          "text": "Nigeria",
+          "value": "NG"
+        },
+        {
+          "text": "Nicaragua",
+          "value": "NI"
+        },
+        {
+          "text": "Netherlands (Nederland)",
+          "value": "NL"
+        },
+        {
+          "text": "Norway (Norge)",
+          "value": "NO"
+        },
+        {
+          "text": "New Zealand",
+          "value": "NZ"
+        },
+        {
+          "text": "Oman (عُمان)",
+          "value": "OM"
+        },
+        {
+          "text": "Panamá",
+          "value": "PA"
+        },
+        {
+          "text": "Perú",
+          "value": "PE"
+        },
+        {
+          "text": "French Polynesia (Polynésie française)",
+          "value": "PF"
+        },
+        {
+          "text": "Papua New Guinea",
+          "value": "PG"
+        },
+        {
+          "text": "Philippines",
+          "value": "PH"
+        },
+        {
+          "text": "Pakistan (پاکستان)",
+          "value": "PK"
+        },
+        {
+          "text": "Poland (Polska)",
+          "value": "PL"
+        },
+        {
+          "text": "Palestinian Territory (الأراضي الفلسطينية)",
+          "value": "PS"
+        },
+        {
+          "text": "Portugal",
+          "value": "PT"
+        },
+        {
+          "text": "Paraguay",
+          "value": "PY"
+        },
+        {
+          "text": "Qatar (قطر)",
+          "value": "QA"
+        },
+        {
+          "text": "România",
+          "value": "RO"
+        },
+        {
+          "text": "Serbia (Србија)",
+          "value": "RS"
+        },
+        {
+          "text": "Russia (Россия)",
+          "value": "RU"
+        },
+        {
+          "text": "Saudi Arabia (المملكة العربية السعودية)",
+          "value": "SA"
+        },
+        {
+          "text": "Seychelles",
+          "value": "SC"
+        },
+        {
+          "text": "Sweden (Sverige)",
+          "value": "SE"
+        },
+        {
+          "text": "Singapore",
+          "value": "SG"
+        },
+        {
+          "text": "Slovenia (Slovenija)",
+          "value": "SI"
+        },
+        {
+          "text": "Slovakia (Slovensko)",
+          "value": "SK"
+        },
+        {
+          "text": "San Marino",
+          "value": "SM"
+        },
+        {
+          "text": "Sénégal",
+          "value": "SN"
+        },
+        {
+          "text": "El Salvador",
+          "value": "SV"
+        },
+        {
+          "text": "Turks & Caicos Islands",
+          "value": "TC"
+        },
+        {
+          "text": "Chad (Tchad)",
+          "value": "TD"
+        },
+        {
+          "text": "Thailand (ไทย)",
+          "value": "TH"
+        },
+        {
+          "text": "Tunisia (تونس)",
+          "value": "TN"
+        },
+        {
+          "text": "Turkey (Türkiye)",
+          "value": "TR"
+        },
+        {
+          "text": "Trinidad & Tobago",
+          "value": "TT"
+        },
+        {
+          "text": "Taiwan (台灣)",
+          "value": "TW"
+        },
+        {
+          "text": "Tanzania",
+          "value": "TZ"
+        },
+        {
+          "text": "Ukraine (Україна)",
+          "value": "UA"
+        },
+        {
+          "text": "Uganda",
+          "value": "UG"
+        },
+        {
+          "text": "United States of America",
+          "value": "US"
+        },
+        {
+          "text": "Uruguay",
+          "value": "UY"
+        },
+        {
+          "text": "Holy See (Città del Vaticano)",
+          "value": "VA"
+        },
+        {
+          "text": "Venezuela",
+          "value": "VE"
+        },
+        {
+          "text": "Kosovo (Kosovë)",
+          "value": "XK"
+        },
+        {
+          "text": "Yemen (اليمن)",
+          "value": "YE"
+        },
+        {
+          "text": "South Africa",
+          "value": "ZA"
+        },
+        {
+          "text": "Zambia",
+          "value": "ZM"
+        },
+        {
+          "text": "Zimbabwe",
+          "value": "ZW"
+        }
+      ],
+       "default": "US"
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "200MB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30462]
+  },
+    "ensure_directories_exists": [
+        {
+            "path": "$LOCATION(ApplicationsPerformance)"
+        },
+        {
+            "path": "$LOCATION(ApplicationsPerformance)/swiparr"
+        },
+        { "path": "$LOCATION(ApplicationsPerformance)/swiparr/data", "owner": { "user": "apps"}, "snapshot": { "id": "data" } }
+    ],
+  "app_values": {
+    "swiparr": {
+      "auth_secret": "$RANDOM_STRING(32)",
+      "provider": "$QUESTION(provider)",
+      "provider_lock": false ,
+      "allow_private_provider_urls": true ,
+      "jellyfin_url": "http://$SERVER_LAN_IP:30013",
+      "emby_url": "http://$SERVER_LAN_IP:9096",
+      "plex_url": "http://$SERVER_LAN_IP:32400",
+      "tmdb_access_token": "QUESTION(tmdb_access_token)",
+      "tmdb_default_region": "$QUESTION(tmdb_default_region)"
+    },
+   "storage": {
+       "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/swiparr/data)"
+    },
+  "network": {
+    "web_port": {
+      "bind_mode": "published",
+      "port_number": 30462
+    }
+  },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(5%, 1024)"
+      }
+    }
+  }
+}

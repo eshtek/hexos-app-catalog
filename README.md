@@ -49,6 +49,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Sonarr](sonarr.json) | TV series collection manager |
 | [Sportarr](sportarr.json) | Sports collection manager |
 | [Sure](sure.json) | Financial planning software |
+| [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Warracker](warracker.json) | warranty tracker |
 | [Wiki.js](wiki-js.json) | Open source Wiki software |
