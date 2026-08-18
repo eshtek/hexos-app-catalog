@@ -22,7 +22,7 @@
   ],
   "app_values": {
     "warracker": {
-      "db_password": "$RANDOM_STRING(7)"
+      "db_password": "$RANDOM_STRING(16)"
     },
     "network": {
       "web_port": {

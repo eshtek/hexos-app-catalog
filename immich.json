@@ -26,8 +26,8 @@
     "immich": {
       "enable_ml": true,
       "ml_image_selector": "ml_image",
-      "db_password": "$RANDOM_STRING(7)",
-      "redis_password": "$RANDOM_STRING(7)",
+      "db_password": "$RANDOM_STRING(16)",
+      "redis_password": "$RANDOM_STRING(16)",
       "log_level": "log",
       "hugging_face_endpoint": "",
       "db_storage_type": "SSD",

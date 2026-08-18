@@ -23,9 +23,9 @@
   ],
   "app_values": {
     "linkwarden": {
-      "db_password": "$RANDOM_STRING(7)",
-      "nextauth_secret": "$RANDOM_STRING(7)",
-      "meilisearch_master_key": "$RANDOM_STRING(7)"
+      "db_password": "$RANDOM_STRING(16)",
+      "nextauth_secret": "$RANDOM_STRING(32)",
+      "meilisearch_master_key": "$RANDOM_STRING(32)"
     },
     "storage": {
       "data": "$HOST_PATH($LOCATION(ApplicationsCapacity)/linkwarden/data)",
