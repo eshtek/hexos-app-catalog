@@ -49,10 +49,10 @@
       {
         "question": "Choose the Admin Password",
         "description": "Only used during initial installation",
-        "type": "text",
+        "type": "password",
         "key": "admin_password",
         "required": true,
-        "default": ""
+        "default": "$RANDOM_STRING(16)"
         }
     ],
     "app_values": {
