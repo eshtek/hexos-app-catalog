@@ -19,6 +19,27 @@
  * }
  * ```
  */
+/**
+ * One mount entry from the app's live config — the same shape every script
+ * surface receives (hooks, actions, widgets).
+ */
+export interface ContextMount {
+  /** Host path (/mnt/...). */
+  hostPath: string;
+  /**
+   * The same directory as the app sees it inside its container — null for
+   * chart-style primary storage (config/data/logs) whose container path the
+   * chart fixes internally. Match those by hostPath instead.
+   */
+  containerPath: string | null;
+  /**
+   * The same directory as THIS script can read it (the local node's host
+   * bind-mount). Use for harvesting app config files, e.g. Plex's
+   * Preferences.xml — no more hand-walking /host/mnt.
+   */
+  localPath: string;
+}
+
 export interface HookContext {
   /** "app" or "vm" */
   readonly resourceType: string;
@@ -62,6 +83,13 @@ export interface HookContext {
       size?: number;
     }>;
   };
+
+  /**
+   * The app's live mounts, pre-resolved (empty when the app doesn't exist
+   * yet, e.g. onBeforeInstall, or mount discovery failed — scripts must
+   * tolerate an empty list).
+   */
+  readonly mounts: ContextMount[];
 
   /**
    * Type-safe input accessor. Throws if the input is missing.

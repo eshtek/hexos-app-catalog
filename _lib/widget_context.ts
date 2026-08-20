@@ -9,22 +9,10 @@
  * checkpoints, no inputs — return data or { needsSetup }.
  */
 
-export interface WidgetMount {
-  /** Host path (/mnt/...). */
-  hostPath: string;
-  /**
-   * The same directory as the app sees it inside its container — null for
-   * chart-style primary storage (config/data/logs) whose container path
-   * the chart fixes internally. Match those by hostPath instead.
-   */
-  containerPath: string | null;
-  /**
-   * The same directory as THIS script can read it (the local node's host
-   * bind-mount). Use for harvesting app config files, e.g. Plex's
-   * Preferences.xml.
-   */
-  localPath: string;
-}
+import type { ContextMount } from "./hook_context";
+
+/** One mount shape across every script surface — defined once in hook_context. */
+export type WidgetMount = ContextMount;
 
 export interface WidgetContext {
   readonly appId: string;
