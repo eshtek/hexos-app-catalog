@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
     "version": "2.0.0",
     "changeLog": "V5 with post-install hooks for automated Plex configuration"
@@ -105,15 +105,13 @@
   "hooks": [
     {
       "id": "configure-plex",
-      "event": "onAfterInstall",
-      "script": "plex/plex_hook.ts",
-      "entrypoint": "afterInstall",
-      "timeout": 300,
+      "title": "Pre-configure Plex",
       "description": "Setting up Plex server",
+      "triggers": [
+        "onAfterInstall"
+      ],
       "optional": true,
-      "retries": 0,
       "userOptional": {
-        "label": "Pre-configure Plex",
         "description": "Sign in to your Plex account to automatically claim your server, set preferences, and create media libraries. By enabling this, you agree that HexOS will accept the Plex Terms of Service on your behalf.",
         "default": true,
         "link": {
@@ -154,17 +152,17 @@
             "placeholder": "HexOS Plex"
           }
         }
-      ]
-    }
-  ],
-  "actionsSchema": 1,
-  "actions": [
+      ],
+      "script": "plex/plex_hook.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "retries": 0
+    },
     {
       "id": "connect-seer",
       "title": "Connect to Seer",
       "description": "Link this Plex server to Seer so requests and discovery use your library.",
       "kind": "connect",
-      "rerun": "converge",
       "conditions": [
         {
           "role": "visibility",
@@ -182,6 +180,7 @@
           "app": "plex"
         }
       ],
+      "rerun": "converge",
       "script": "plex/connect_seer.ts",
       "entrypoint": "run",
       "timeout": 300,
@@ -192,7 +191,6 @@
       "title": "Connect to Tautulli",
       "description": "Link Tautulli to this Plex server for watch history and stats — no sign-in needed.",
       "kind": "connect",
-      "rerun": "converge",
       "conditions": [
         {
           "role": "visibility",
@@ -210,10 +208,11 @@
           "app": "plex"
         }
       ],
+      "rerun": "converge",
+      "script": "plex/connect_tautulli.ts",
       "entrypoint": "run",
       "timeout": 300,
-      "retries": 0,
-      "script": "plex/connect_tautulli.ts"
+      "retries": 0
     }
   ],
   "widgetsSchema": 1,

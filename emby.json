@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
     "version": "2.0.0",
     "changeLog": "V5 with post-install hook for automated Emby configuration"
@@ -78,15 +78,13 @@
   "hooks": [
     {
       "id": "configure-emby",
-      "event": "onAfterInstall",
-      "script": "emby/emby_hook.ts",
-      "entrypoint": "afterInstall",
-      "timeout": 300,
+      "title": "Pre-configure Emby",
       "description": "Setting up Emby",
+      "triggers": [
+        "onAfterInstall"
+      ],
       "optional": false,
-      "retries": 0,
       "userOptional": {
-        "label": "Pre-configure Emby",
         "description": "Automatically set up your server, apply preferences, and create media libraries. By enabling this, you agree that HexOS will accept the Emby Terms of Service on your behalf.",
         "default": true,
         "link": {
@@ -130,7 +128,11 @@
             "placeholder": "HexOS Emby"
           }
         }
-      ]
+      ],
+      "script": "emby/emby_hook.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "retries": 0
     }
   ]
 }

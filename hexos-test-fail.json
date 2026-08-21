@@ -1,5 +1,5 @@
 {
-    "version": 5,
+    "version": 6,
     "custom": true,
     "internal": true,
     "metadata": {
@@ -79,12 +79,15 @@
     "hooks": [
         {
             "id": "required-fail",
-            "event": "onAfterInstall",
+            "title": "Required step that always fails",
+            "description": "Required step that always fails",
+            "triggers": [
+                "onAfterInstall"
+            ],
+            "optional": false,
             "script": "hexos-test-fail/hooks.ts",
             "entrypoint": "requiredFail",
             "timeout": 30,
-            "description": "Required step that always fails",
-            "optional": false,
             "retries": 0
         }
     ]

@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "custom": true,
   "internal": true,
   "metadata": {
@@ -51,22 +51,24 @@
   "hooks": [
     {
       "id": "before-install",
-      "event": "onBeforeInstall",
+      "title": "Pre-install validation",
+      "description": "Pre-install validation",
+      "triggers": [
+        "onBeforeInstall"
+      ],
       "script": "hexos-test/hooks.ts",
       "entrypoint": "beforeInstall",
-      "timeout": 30,
-      "description": "Pre-install validation"
+      "timeout": 30
     },
     {
       "id": "after-install",
-      "event": "onAfterInstall",
-      "script": "hexos-test/hooks.ts",
-      "entrypoint": "afterInstall",
-      "timeout": 120,
+      "title": "Run post-install validation",
       "description": "Post-install configuration",
+      "triggers": [
+        "onAfterInstall"
+      ],
       "optional": true,
       "userOptional": {
-        "label": "Run post-install validation",
         "description": "Exercises all hook capabilities: OAuth, questions, checkpoints, health checks, and stress testing.",
         "default": true
       },
@@ -109,8 +111,14 @@
             "type": "select",
             "key": "test_select",
             "options": [
-              { "text": "Option A", "value": "a" },
-              { "text": "Option B", "value": "b" }
+              {
+                "text": "Option A",
+                "value": "a"
+              },
+              {
+                "text": "Option B",
+                "value": "b"
+              }
             ],
             "default": "a"
           }
@@ -128,37 +136,48 @@
             "placeholder": "HexOS Test App"
           }
         }
-      ]
+      ],
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 120
     },
     {
       "id": "before-upgrade",
-      "event": "onBeforeUpgrade",
+      "title": "Pre-upgrade patch",
+      "description": "Pre-upgrade patch",
+      "triggers": [
+        {
+          "event": "onBeforeUpgrade",
+          "from": "< 2.0.0"
+        }
+      ],
       "script": "hexos-test/hooks.ts",
       "entrypoint": "beforeUpgrade",
-      "timeout": 30,
-      "description": "Pre-upgrade patch",
-      "condition": { "fromVersionRange": "< 2.0.0" }
+      "timeout": 30
     },
     {
       "id": "after-upgrade",
-      "event": "onAfterUpgrade",
+      "title": "Post-upgrade cleanup",
+      "description": "Post-upgrade cleanup",
+      "triggers": [
+        "onAfterUpgrade"
+      ],
       "script": "hexos-test/hooks.ts",
       "entrypoint": "afterUpgrade",
-      "timeout": 30,
-      "description": "Post-upgrade cleanup"
+      "timeout": 30
     },
     {
       "id": "optional-fail",
-      "event": "onAfterInstall",
+      "title": "Optional step that intentionally fails",
+      "description": "Optional step that intentionally fails",
+      "triggers": [
+        "onAfterInstall"
+      ],
+      "optional": true,
       "script": "hexos-test/hooks.ts",
       "entrypoint": "optionalFail",
-      "timeout": 10,
-      "description": "Optional step that intentionally fails",
-      "optional": true
-    }
-  ],
-  "actionsSchema": 1,
-  "actions": [
+      "timeout": 10
+    },
     {
       "id": "harness-ok",
       "title": "Harness: succeed with checkpoints",
@@ -186,7 +205,6 @@
       "title": "Harness: requires this app running",
       "description": "Visible when hexos-test is installed; runnable only while it is running.",
       "kind": "custom",
-      "rerun": "idempotent",
       "conditions": [
         {
           "role": "visibility",
@@ -199,6 +217,7 @@
           "app": "hexos-test"
         }
       ],
+      "rerun": "idempotent",
       "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
       "entrypoint": "run",
       "timeout": 60,
@@ -209,7 +228,6 @@
       "title": "Harness: should never be shown",
       "description": "Gated on an app that does not exist.",
       "kind": "custom",
-      "rerun": "idempotent",
       "conditions": [
         {
           "role": "visibility",
@@ -217,6 +235,7 @@
           "app": "app-that-does-not-exist"
         }
       ],
+      "rerun": "idempotent",
       "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
       "entrypoint": "run",
       "timeout": 60,
@@ -227,7 +246,6 @@
       "title": "Harness: unknown condition type",
       "description": "Uses a predicate this platform does not know; must fail closed (hidden).",
       "kind": "custom",
-      "rerun": "idempotent",
       "conditions": [
         {
           "role": "visibility",
@@ -235,6 +253,7 @@
           "qubits": 7
         }
       ],
+      "rerun": "idempotent",
       "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
       "entrypoint": "run",
       "timeout": 60,

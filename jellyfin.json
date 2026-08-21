@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
     "version": "2.0.0",
     "changeLog": "V5 with post-install hook for automated Jellyfin configuration"
@@ -49,15 +49,13 @@
   "hooks": [
     {
       "id": "configure-jellyfin",
-      "event": "onAfterInstall",
-      "script": "jellyfin/jellyfin_hook.ts",
-      "entrypoint": "afterInstall",
-      "timeout": 300,
+      "title": "Pre-configure Jellyfin",
       "description": "Setting up Jellyfin",
+      "triggers": [
+        "onAfterInstall"
+      ],
       "optional": false,
-      "retries": 0,
       "userOptional": {
-        "label": "Pre-configure Jellyfin",
         "description": "Automatically set up your server, apply preferences, and create media libraries. By enabling this, you acknowledge Jellyfin's media server policy.",
         "default": true,
         "link": {
@@ -101,17 +99,17 @@
             "placeholder": "HexOS Jellyfin"
           }
         }
-      ]
-    }
-  ],
-  "actionsSchema": 1,
-  "actions": [
+      ],
+      "script": "jellyfin/jellyfin_hook.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "retries": 0
+    },
     {
       "id": "connect-jellystat",
       "title": "Connect to Jellystat",
       "description": "Link Jellyfin to Jellystat for watch statistics. Uses your Jellyfin admin sign-in; a fresh Jellystat gets the same credentials.",
       "kind": "connect",
-      "rerun": "converge",
       "conditions": [
         {
           "role": "visibility",
@@ -152,6 +150,7 @@
           }
         }
       ],
+      "rerun": "converge",
       "script": "jellyfin/connect_jellystat.ts",
       "entrypoint": "run",
       "timeout": 300,
@@ -162,7 +161,6 @@
       "title": "Connect to Seer",
       "description": "Link this Jellyfin server to Seer so requests and discovery use your library. Uses your Jellyfin admin sign-in.",
       "kind": "connect",
-      "rerun": "converge",
       "conditions": [
         {
           "role": "visibility",
@@ -203,6 +201,7 @@
           }
         }
       ],
+      "rerun": "converge",
       "script": "jellyfin/connect_seer.ts",
       "entrypoint": "run",
       "timeout": 300,
@@ -213,7 +212,6 @@
       "title": "Check Fladder link",
       "description": "Fladder is pointed at this Jellyfin server when it installs — this checks the link end to end.",
       "kind": "maintain",
-      "rerun": "idempotent",
       "conditions": [
         {
           "role": "visibility",
@@ -231,6 +229,7 @@
           "app": "jellyfin"
         }
       ],
+      "rerun": "idempotent",
       "script": "jellyfin/check_fladder.ts",
       "entrypoint": "run",
       "timeout": 120,
