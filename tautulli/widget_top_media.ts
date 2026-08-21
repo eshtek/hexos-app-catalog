@@ -72,10 +72,15 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const images = await Promise.all(media.map((row) => fetchThumb(base, apiKey, row.thumb || row.grandparent_thumb)));
 
   return {
-    items: media.map((row, i) => ({
-      title: row.title ?? "Unknown",
-      meta: row.total_plays !== undefined ? `${row.total_plays} plays` : undefined,
-      image: images[i],
-    })),
+    fields: {
+      top: {
+        type: "list",
+        entries: media.map((row, i) => ({
+          title: row.title ?? "Unknown",
+          meta: row.total_plays !== undefined ? `${row.total_plays} plays` : undefined,
+          image: images[i],
+        })),
+      },
+    },
   };
 }

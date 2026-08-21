@@ -73,11 +73,16 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   );
 
   return {
-    items: top.map((row, i) => ({
-      title: row.full_title ?? "Unknown",
-      subtitle: [row.friendly_name, row.player].filter(Boolean).join(" · ") || undefined,
-      meta: dayLabel(row.date),
-      image: images[i],
-    })),
+    fields: {
+      recent: {
+        type: "list",
+        entries: top.map((row, i) => ({
+          title: row.full_title ?? "Unknown",
+          subtitle: [row.friendly_name, row.player].filter(Boolean).join(" · ") || undefined,
+          meta: dayLabel(row.date),
+          image: images[i],
+        })),
+      },
+    },
   };
 }

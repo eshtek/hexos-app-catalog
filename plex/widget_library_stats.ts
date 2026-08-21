@@ -32,8 +32,11 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   };
   const sections = sectionsBody.MediaContainer?.Directory ?? [];
 
-  const stats: Array<{ label: string; value: string }> = [];
-  for (const section of sections.slice(0, 4)) {
+  // Library names are user-defined, so per-section STABLE field names don't
+  // exist — sections ride as one list field; `total` is the stat projection.
+  const entries: Array<{ title: string; meta?: string }> = [];
+  let total = 0;
+  for (const section of sections.slice(0, 6)) {
     // Container-Size=0 returns just totalSize — no item payload
     const response = await fetch(
       `${base}/library/sections/${section.key}/all?X-Plex-Container-Start=0&X-Plex-Container-Size=0`,
@@ -41,8 +44,15 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
     );
     if (!response.ok) continue;
     const body = (await response.json()) as { MediaContainer?: { totalSize?: number } };
-    stats.push({ label: section.title, value: String(body.MediaContainer?.totalSize ?? 0) });
+    const count = body.MediaContainer?.totalSize ?? 0;
+    total += count;
+    entries.push({ title: section.title, meta: String(count) });
   }
 
-  return { stats };
+  return {
+    fields: {
+      total: { type: "stat", label: "Library items", value: String(total) },
+      sections: { type: "list", entries },
+    },
+  };
 }

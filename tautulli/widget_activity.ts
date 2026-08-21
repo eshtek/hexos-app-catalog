@@ -88,26 +88,36 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
     sessions.map((s) => fetchThumb(base, apiKey, s.grandparent_thumb || s.thumb)),
   );
 
-  return {
-    items: sessions.map((session, i) => {
-      const offsetMs = Number(session.view_offset);
-      const durationMs = Number(session.duration);
-      const hasPosition = Number.isFinite(offsetMs) && Number.isFinite(durationMs) && durationMs > 0;
-      const paused = session.state === "paused";
-      return {
-        title: session.full_title ?? "Unknown",
-        subtitle:
-          [session.friendly_name, streamLabel(session), bandwidthLabel(session)].filter(Boolean).join(" · ") ||
-          undefined,
-        // Text floor: static timecode; capable renderers tick via `elapsed`.
-        meta: hasPosition
-          ? `${paused ? "paused · " : ""}${timecode(offsetMs)} / ${timecode(durationMs)}`
-          : undefined,
-        elapsed: hasPosition
-          ? { ms: offsetMs, ofMs: durationMs, state: paused ? ("paused" as const) : ("running" as const) }
-          : undefined,
-        image: images[i],
-      };
-    }),
+  const fields: NonNullable<WidgetQueryResult["fields"]> = {
+    streams: { type: "stat", label: "Streams", value: String(sessions.length) },
+    sessions: {
+      type: "list",
+      entries: sessions.map((session, i) => {
+        const offsetMs = Number(session.view_offset);
+        const durationMs = Number(session.duration);
+        const hasPosition = Number.isFinite(offsetMs) && Number.isFinite(durationMs) && durationMs > 0;
+        const paused = session.state === "paused";
+        return {
+          title: session.full_title ?? "Unknown",
+          subtitle:
+            [session.friendly_name, streamLabel(session), bandwidthLabel(session)].filter(Boolean).join(" · ") ||
+            undefined,
+          // Text floor: static timecode; capable renderers tick via `elapsed`.
+          meta: hasPosition
+            ? `${paused ? "paused · " : ""}${timecode(offsetMs)} / ${timecode(durationMs)}`
+            : undefined,
+          elapsed: hasPosition
+            ? { ms: offsetMs, ofMs: durationMs, state: paused ? ("paused" as const) : ("running" as const) }
+            : undefined,
+          image: images[i],
+        };
+      }),
+    },
   };
+
+  // The media slot's source: the first session with a poster.
+  const art = images.find((image) => image !== undefined);
+  if (art) fields.art = { type: "image", image: art, alt: sessions[0]?.full_title };
+
+  return { fields };
 }

@@ -71,10 +71,15 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const metadata = body.MediaContainer?.Metadata ?? [];
 
   return {
-    items: metadata.slice(0, 8).map((entry) => ({
-      title: itemTitle(entry),
-      subtitle: itemSubtitle(entry),
-      meta: addedAgo(entry.addedAt),
-    })),
+    fields: {
+      recent: {
+        type: "list",
+        entries: metadata.slice(0, 8).map((entry) => ({
+          title: itemTitle(entry),
+          subtitle: itemSubtitle(entry),
+          meta: addedAgo(entry.addedAt),
+        })),
+      },
+    },
   };
 }

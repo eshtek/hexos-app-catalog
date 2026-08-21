@@ -215,13 +215,12 @@
       "retries": 0
     }
   ],
-  "widgetsSchema": 1,
+  "widgetsSchema": 2,
   "widgets": [
     {
       "id": "now-playing",
       "title": "Now playing",
       "description": "Active Plex streams right now.",
-      "layout": "list",
       "refresh": 10,
       "conditions": [
         {
@@ -230,6 +229,52 @@
           "app": "plex"
         }
       ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            }
+          ]
+        },
+        "medium": {
+          "media": {
+            "placement": "left",
+            "field": "art"
+          },
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            },
+            {
+              "type": "list",
+              "field": "sessions"
+            }
+          ]
+        },
+        "large": {
+          "quadrants": [
+            {
+              "type": "image",
+              "field": "art"
+            },
+            {
+              "type": "stat",
+              "field": "streams"
+            },
+            {
+              "type": "list",
+              "field": "sessions"
+            },
+            {
+              "type": "text",
+              "field": "summary"
+            }
+          ]
+        }
+      },
       "script": "plex/widget_now_playing.ts",
       "entrypoint": "run",
       "timeout": 10
@@ -238,7 +283,6 @@
       "id": "library-totals",
       "title": "Plex library",
       "description": "How many items are in each Plex library.",
-      "layout": "stat",
       "refresh": 900,
       "conditions": [
         {
@@ -247,6 +291,24 @@
           "app": "plex"
         }
       ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "total"
+            }
+          ]
+        },
+        "medium": {
+          "slots": [
+            {
+              "type": "list",
+              "field": "sections"
+            }
+          ]
+        }
+      },
       "script": "plex/widget_library_stats.ts",
       "entrypoint": "run",
       "timeout": 10
@@ -255,7 +317,6 @@
       "id": "recently-added",
       "title": "Recently added",
       "description": "The newest items in your Plex libraries.",
-      "layout": "list",
       "refresh": 300,
       "conditions": [
         {
@@ -264,6 +325,16 @@
           "app": "plex"
         }
       ],
+      "sizes": {
+        "medium": {
+          "slots": [
+            {
+              "type": "list",
+              "field": "recent"
+            }
+          ]
+        }
+      },
       "script": "plex/widget_recently_added.ts",
       "entrypoint": "run",
       "timeout": 10

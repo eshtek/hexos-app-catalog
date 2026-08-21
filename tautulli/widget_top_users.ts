@@ -45,10 +45,17 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
     .filter((r) => r.friendly_name || r.user)
     .slice(0, 6);
 
+  // Usernames are dynamic, so per-user stat fields have no stable names —
+  // the ranking rides as one list field.
   return {
-    stats: users.map((row) => ({
-      label: row.friendly_name || row.user || "Unknown",
-      value: String(row.total_plays ?? 0),
-    })),
+    fields: {
+      top: {
+        type: "list",
+        entries: users.map((row) => ({
+          title: row.friendly_name || row.user || "Unknown",
+          meta: `${row.total_plays ?? 0} plays`,
+        })),
+      },
+    },
   };
 }

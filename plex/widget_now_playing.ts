@@ -1,4 +1,5 @@
 // Type imports only — each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
+import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 
 import type { WidgetContext, WidgetQueryResult } from "../_lib/widget_context";
@@ -18,6 +19,27 @@ function harvestPlexToken(ctx: WidgetContext): string | null {
   }
 }
 
+/** Poster as a size-capped data URI via Plex's photo transcoder. */
+async function fetchThumb(
+  base: string,
+  token: string,
+  thumb: string | undefined,
+): Promise<string | undefined> {
+  if (!thumb) return undefined;
+  try {
+    const response = await fetch(
+      `${base}/photo/:/transcode?width=120&height=180&minSize=1&url=${encodeURIComponent(thumb)}&X-Plex-Token=${token}`,
+    );
+    if (!response.ok) return undefined;
+    const type = response.headers.get("content-type") ?? "";
+    if (!type.startsWith("image/")) return undefined;
+    const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
+    return uri.length <= 60_000 ? uri : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface PlexSession {
   title: string;
   type?: string;
@@ -26,6 +48,8 @@ interface PlexSession {
   index?: number;
   viewOffset?: number;
   duration?: number;
+  thumb?: string;
+  grandparentThumb?: string;
   User?: { title?: string };
   Player?: { title?: string; product?: string; state?: string };
 }
@@ -72,23 +96,45 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const response = await fetch(`${base}/status/sessions`, { headers });
   if (!response.ok) throw new Error(`Plex sessions query failed (${response.status})`);
   const body = (await response.json()) as { MediaContainer?: { Metadata?: PlexSession[] } };
-  const sessions = body.MediaContainer?.Metadata ?? [];
+  const sessions = (body.MediaContainer?.Metadata ?? []).slice(0, 5);
 
-  return {
-    items: sessions.slice(0, 5).map((session) => ({
-      title: sessionTitle(session),
-      subtitle: sessionSubtitle(session),
-      // Text floor: a static timecode any renderer can show as-is.
-      meta: sessionMeta(session),
-      // Enrichment: capable renderers tick this between polls.
-      elapsed:
-        session.viewOffset !== undefined && session.duration
-          ? {
-              ms: session.viewOffset,
-              ofMs: session.duration,
-              state: session.Player?.state === "paused" ? ("paused" as const) : ("running" as const),
-            }
-          : undefined,
-    })),
+  const images = await Promise.all(
+    sessions.map((session) => fetchThumb(base, token, session.grandparentThumb || session.thumb)),
+  );
+
+  const fields: NonNullable<WidgetQueryResult["fields"]> = {
+    streams: { type: "stat", label: "Streams", value: String(sessions.length) },
+    sessions: {
+      type: "list",
+      entries: sessions.map((session, i) => ({
+        title: sessionTitle(session),
+        subtitle: sessionSubtitle(session),
+        // Text floor: a static timecode any renderer can show as-is.
+        meta: sessionMeta(session),
+        // Enrichment: capable renderers tick this between polls.
+        elapsed:
+          session.viewOffset !== undefined && session.duration
+            ? {
+                ms: session.viewOffset,
+                ofMs: session.duration,
+                state: session.Player?.state === "paused" ? ("paused" as const) : ("running" as const),
+              }
+            : undefined,
+        image: images[i],
+      })),
+    },
+    summary: {
+      type: "text",
+      text:
+        sessions.length === 0
+          ? "Nothing playing"
+          : `${sessions.length} stream${sessions.length === 1 ? "" : "s"} · ${sessionTitle(sessions[0])}`,
+    },
   };
+
+  // The media slot's source: the first session with a poster.
+  const art = images.find((image) => image !== undefined);
+  if (art) fields.art = { type: "image", image: art, alt: sessionTitle(sessions[0]) };
+
+  return { fields };
 }
