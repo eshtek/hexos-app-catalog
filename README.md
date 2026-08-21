@@ -43,6 +43,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [qui](qui.json) | A qBittorrent web UI |
 | [Rackula](rackula.json) | A drag and drop rack visualizer |
 | [Radarr](radarr.json) | Movie collection manager |
+| [Ratelog](radarr.json) | App for rating movies and TV shows |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |

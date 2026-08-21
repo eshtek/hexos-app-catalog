@@ -607,7 +607,7 @@
   ],
   "requirements": {
     "locations": ["ApplicationsPerformance"],
-    "specifications": ["2CORE", "200MB"],
+    "specifications": ["2CORE", "1GBRAM"],
     "permissions": ["READ_WRITE_LOCATIONS"],
     "ports": [30462]
   },
