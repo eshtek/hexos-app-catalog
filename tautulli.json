@@ -77,7 +77,7 @@
             }
           ]
         },
-        "medium": {
+        "large": {
           "media": {
             "placement": "left",
             "field": "art"
@@ -107,7 +107,7 @@
         }
       ],
       "sizes": {
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "list",
@@ -133,7 +133,7 @@
         }
       ],
       "sizes": {
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "list",
@@ -159,7 +159,7 @@
         }
       ],
       "sizes": {
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "list",

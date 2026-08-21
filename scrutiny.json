@@ -67,7 +67,7 @@
       "description": "S.M.A.R.T. health summary from Scrutiny.",
       "refresh": 3600,
       "sizes": {
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "text",

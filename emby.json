@@ -143,7 +143,7 @@
       "description": "Emby server activity at a glance.",
       "refresh": 3600,
       "sizes": {
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "text",

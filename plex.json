@@ -238,7 +238,7 @@
             }
           ]
         },
-        "medium": {
+        "large": {
           "media": {
             "placement": "left",
             "field": "art"
@@ -251,26 +251,6 @@
             {
               "type": "list",
               "field": "sessions"
-            }
-          ]
-        },
-        "large": {
-          "quadrants": [
-            {
-              "type": "image",
-              "field": "art"
-            },
-            {
-              "type": "stat",
-              "field": "streams"
-            },
-            {
-              "type": "list",
-              "field": "sessions"
-            },
-            {
-              "type": "text",
-              "field": "summary"
             }
           ]
         }
@@ -300,7 +280,7 @@
             }
           ]
         },
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "list",
@@ -326,7 +306,7 @@
         }
       ],
       "sizes": {
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "list",

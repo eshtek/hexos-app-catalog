@@ -69,7 +69,7 @@
       "description": "Playback activity and user stats from Jellystat.",
       "refresh": 3600,
       "sizes": {
-        "medium": {
+        "large": {
           "slots": [
             {
               "type": "text",
