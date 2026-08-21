@@ -58,5 +58,26 @@
         "memory": 2048
       }
     }
-  }
+  },
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "disk-health",
+      "title": "Disk health",
+      "description": "S.M.A.R.T. health summary from Scrutiny.",
+      "refresh": 3600,
+      "sizes": {
+        "medium": {
+          "slots": [
+            {
+              "type": "text",
+              "field": "status"
+            }
+          ]
+        }
+      },
+      "scriptContent": "export const run = async () => ({ fields: { status: { type: \"text\", text: \"Scrutiny widgets are coming soon.\" } } });",
+      "entrypoint": "run"
+    }
+  ]
 }

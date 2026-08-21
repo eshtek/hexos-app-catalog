@@ -60,5 +60,26 @@
         "memory": "$MEMORY(10%, 4096)"
       }
     }
-  }
+  },
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "watch-stats",
+      "title": "Watch statistics",
+      "description": "Playback activity and user stats from Jellystat.",
+      "refresh": 3600,
+      "sizes": {
+        "medium": {
+          "slots": [
+            {
+              "type": "text",
+              "field": "status"
+            }
+          ]
+        }
+      },
+      "scriptContent": "export const run = async () => ({ fields: { status: { type: \"text\", text: \"Jellystat widgets are coming soon.\" } } });",
+      "entrypoint": "run"
+    }
+  ]
 }

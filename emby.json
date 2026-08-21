@@ -134,5 +134,26 @@
       "timeout": 300,
       "retries": 0
     }
+  ],
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "overview",
+      "title": "Server overview",
+      "description": "Emby server activity at a glance.",
+      "refresh": 3600,
+      "sizes": {
+        "medium": {
+          "slots": [
+            {
+              "type": "text",
+              "field": "status"
+            }
+          ]
+        }
+      },
+      "scriptContent": "export const run = async () => ({ fields: { status: { type: \"text\", text: \"Emby widgets are coming soon.\" } } });",
+      "entrypoint": "run"
+    }
   ]
 }
