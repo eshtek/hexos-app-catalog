@@ -275,9 +275,6 @@
           ]
         }
       },
-      "buttons": [
-        "connect-seer"
-      ],
       "script": "plex/widget_now_playing.ts",
       "entrypoint": "run",
       "timeout": 10
