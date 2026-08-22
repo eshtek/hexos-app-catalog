@@ -40,8 +40,8 @@ export async function run(ctx: HookContext) {
   }
   await ctx.emitCheckpoint("precheck");
 
-  const username = ctx.getInput<string>("jf_username");
-  const password = ctx.getInput<string>("jf_password");
+  const username = ctx.getInput<string>("admin_username");
+  const password = ctx.getInput<string>("admin_password");
   const authResponse = await fetch(`${seerUrl}/api/v1/auth/jellyfin`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

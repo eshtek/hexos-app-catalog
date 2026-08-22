@@ -109,8 +109,8 @@ export async function run(ctx: HookContext) {
   if (!ctx.baseUrl) throw new Error("Missing Jellyfin host/port in action context");
   await ctx.emitCheckpoint("locate");
 
-  const username = ctx.getInput<string>("jf_username");
-  const password = ctx.getInput<string>("jf_password");
+  const username = ctx.getInput<string>("admin_username");
+  const password = ctx.getInput<string>("admin_password");
   const accessToken = await jellyfinSignIn(ctx.baseUrl, username, password);
   await ctx.emitCheckpoint("auth");
 

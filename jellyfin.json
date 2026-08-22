@@ -108,8 +108,9 @@
     {
       "id": "connect-jellystat",
       "title": "Connect to Jellystat",
-      "description": "Link Jellyfin to Jellystat for watch statistics. Uses your Jellyfin admin sign-in; a fresh Jellystat gets the same credentials.",
+      "description": "Link Jellyfin to Jellystat for watch statistics. Jellystat is set up with the same admin sign-in you enter during Jellyfin preconfiguration - no extra passwords.",
       "kind": "connect",
+      "requiresHooks": ["configure-jellyfin"],
       "conditions": [
         {
           "role": "visibility",
@@ -130,22 +131,22 @@
       "inputs": [
         {
           "type": "question",
-          "id": "jf_username",
+          "id": "admin_username",
           "question": {
             "question": "Jellyfin admin username",
             "type": "text",
-            "key": "jf_username",
+            "key": "admin_username",
             "required": true,
             "description": "The administrator account from Jellyfin's setup"
           }
         },
         {
           "type": "question",
-          "id": "jf_password",
+          "id": "admin_password",
           "question": {
             "question": "Jellyfin admin password",
             "type": "password",
-            "key": "jf_password",
+            "key": "admin_password",
             "required": true
           }
         }
@@ -159,8 +160,9 @@
     {
       "id": "connect-seer",
       "title": "Connect to Seer",
-      "description": "Link this Jellyfin server to Seer so requests and discovery use your library. Uses your Jellyfin admin sign-in.",
+      "description": "Link this Jellyfin server to Seer so requests and discovery use your library. Uses the admin sign-in from Jellyfin preconfiguration - no extra passwords.",
       "kind": "connect",
+      "requiresHooks": ["configure-jellyfin"],
       "conditions": [
         {
           "role": "visibility",
@@ -181,22 +183,22 @@
       "inputs": [
         {
           "type": "question",
-          "id": "jf_username",
+          "id": "admin_username",
           "question": {
             "question": "Jellyfin admin username",
             "type": "text",
-            "key": "jf_username",
+            "key": "admin_username",
             "required": true,
             "description": "The administrator account from Jellyfin's setup"
           }
         },
         {
           "type": "question",
-          "id": "jf_password",
+          "id": "admin_password",
           "question": {
             "question": "Jellyfin admin password",
             "type": "password",
-            "key": "jf_password",
+            "key": "admin_password",
             "required": true
           }
         }
