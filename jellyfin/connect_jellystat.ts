@@ -3,6 +3,85 @@ import type { HookContext } from "../_lib/hook_context";
 const JELLYFIN_AUTH_HEADER = 'MediaBrowser Client="HexOS", Device="HexOS", DeviceId="hexos-app-actions", Version="1.0"';
 const API_KEY_APP_NAME = "Jellystat";
 
+// ---- Keccak-512 (pre-standard, CryptoJS.SHA3-compatible) ----
+// Jellystat's web UI hashes the password with CryptoJS.SHA3 before BOTH
+// account creation and login, and the backend stores/compares the digest
+// verbatim. Sending the raw password creates an account the UI can never
+// sign into (the API accepts raw while the UI sends the digest) — so we
+// must hash exactly like the UI. Bun/Node ship NIST SHA-3 (different
+// padding byte), hence this small self-contained implementation.
+const KECCAK_M64 = (1n << 64n) - 1n;
+const KECCAK_RC = [
+  0x0000000000000001n, 0x0000000000008082n, 0x800000000000808an, 0x8000000080008000n,
+  0x000000000000808bn, 0x0000000080000001n, 0x8000000080008081n, 0x8000000000008009n,
+  0x000000000000008an, 0x0000000000000088n, 0x0000000080008009n, 0x000000008000000an,
+  0x000000008000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
+  0x8000000000008002n, 0x8000000000000080n, 0x000000000000800an, 0x800000008000000an,
+  0x8000000080008081n, 0x8000000000008080n, 0x0000000080000001n, 0x8000000080008008n,
+];
+const KECCAK_ROT = [
+  [0n, 36n, 3n, 41n, 18n],
+  [1n, 44n, 10n, 45n, 2n],
+  [62n, 6n, 43n, 15n, 61n],
+  [28n, 55n, 25n, 21n, 56n],
+  [27n, 20n, 39n, 8n, 14n],
+];
+const keccakRotl = (x: bigint, n: bigint) => (n === 0n ? x : (((x << n) | (x >> (64n - n))) & KECCAK_M64));
+
+function keccakF(state: bigint[]): void {
+  for (let round = 0; round < 24; round++) {
+    const c: bigint[] = [];
+    for (let x = 0; x < 5; x++) {
+      c[x] = state[x]! ^ state[x + 5]! ^ state[x + 10]! ^ state[x + 15]! ^ state[x + 20]!;
+    }
+    for (let x = 0; x < 5; x++) {
+      const d = c[(x + 4) % 5]! ^ keccakRotl(c[(x + 1) % 5]!, 1n);
+      for (let y = 0; y < 5; y++) state[x + 5 * y] = state[x + 5 * y]! ^ d;
+    }
+    const b: bigint[] = Array.from({ length: 25 }, () => 0n);
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        b[y + 5 * ((2 * x + 3 * y) % 5)] = keccakRotl(state[x + 5 * y]!, KECCAK_ROT[x]![y]!);
+      }
+    }
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        state[x + 5 * y] = b[x + 5 * y]! ^ (~b[((x + 1) % 5) + 5 * y]! & KECCAK_M64 & b[((x + 2) % 5) + 5 * y]!);
+      }
+    }
+    state[0] = state[0]! ^ KECCAK_RC[round]!;
+  }
+}
+
+function keccak512Hex(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  const rate = 72; // 576-bit rate for 512-bit output
+  const padded = new Uint8Array(Math.ceil((bytes.length + 1) / rate) * rate);
+  padded.set(bytes);
+  padded[bytes.length] = 0x01; // original Keccak domain byte (NIST SHA-3 uses 0x06)
+  padded[padded.length - 1]! |= 0x80;
+
+  const state: bigint[] = Array.from({ length: 25 }, () => 0n);
+  for (let off = 0; off < padded.length; off += rate) {
+    for (let i = 0; i < rate / 8; i++) {
+      let lane = 0n;
+      for (let j = 7; j >= 0; j--) lane = (lane << 8n) | BigInt(padded[off + i * 8 + j]!);
+      state[i] = state[i]! ^ lane;
+    }
+    keccakF(state);
+  }
+
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    let lane = state[i]!;
+    for (let j = 0; j < 8; j++) {
+      out += Number(lane & 0xffn).toString(16).padStart(2, "0");
+      lane >>= 8n;
+    }
+  }
+  return out;
+}
+
 async function jellyfinSignIn(baseUrl: string, username: string, password: string): Promise<string> {
   const response = await fetch(`${baseUrl}/Users/AuthenticateByName`, {
     method: "POST",
@@ -68,11 +147,15 @@ function tokenFrom(payload: unknown): string | undefined {
 }
 
 async function jellystatSignIn(baseUrl: string, username: string, password: string, ctx: HookContext): Promise<string> {
-    // Account create errors when a user already exists - fall through to login.
+  // Match the web UI byte-for-byte: it sends keccak512(password), and the
+  // backend stores/compares that digest verbatim. Raw passwords here would
+  // create an account the login PAGE rejects even though the raw API accepts.
+  const hashed = keccak512Hex(password);
+  // Account create errors when a user already exists - fall through to login.
   const create = await fetch(`${baseUrl}/auth/createuser`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password: hashed }),
   }).catch(() => null);
   if (create?.ok) {
     ctx.log("Created Jellystat admin account (same credentials as Jellyfin)");
@@ -83,7 +166,7 @@ async function jellystatSignIn(baseUrl: string, username: string, password: stri
   const login = await fetch(`${baseUrl}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password: hashed }),
   });
   if (!login.ok) {
     throw new Error(
