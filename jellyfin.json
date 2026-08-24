@@ -237,5 +237,88 @@
       "timeout": 120,
       "retries": 0
     }
+  ],
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "now-playing",
+      "title": "Now playing",
+      "description": "Active Jellyfin streams right now.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            }
+          ]
+        },
+        "large": {
+          "media": {
+            "placement": "left",
+            "field": "art"
+          },
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            },
+            {
+              "type": "list",
+              "field": "sessions"
+            }
+          ]
+        }
+      },
+      "script": "jellyfin/widget_now_playing.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "library-stats",
+      "title": "Jellyfin library",
+      "description": "How many items are in your Jellyfin library.",
+      "refresh": 900,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "total"
+            }
+          ]
+        },
+        "large": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "total"
+            },
+            {
+              "type": "list",
+              "field": "kinds"
+            }
+          ]
+        }
+      },
+      "script": "jellyfin/widget_library_stats.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
   ]
 }
