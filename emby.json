@@ -138,22 +138,84 @@
   "widgetsSchema": 2,
   "widgets": [
     {
-      "id": "overview",
-      "title": "Server overview",
-      "description": "Emby server activity at a glance.",
-      "refresh": 3600,
+      "id": "now-playing",
+      "title": "Now playing",
+      "description": "Active Emby streams right now.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "emby"
+        }
+      ],
       "sizes": {
-        "large": {
+        "small": {
           "slots": [
             {
-              "type": "text",
-              "field": "status"
+              "type": "stat",
+              "field": "streams"
+            }
+          ]
+        },
+        "large": {
+          "media": {
+            "placement": "left",
+            "field": "art"
+          },
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            },
+            {
+              "type": "list",
+              "field": "sessions"
             }
           ]
         }
       },
-      "scriptContent": "export const run = async () => ({ fields: { status: { type: \"text\", text: \"Emby widgets are coming soon.\" } } });",
-      "entrypoint": "run"
+      "script": "emby/widget_now_playing.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "library-stats",
+      "title": "Emby library",
+      "description": "How many items are in your Emby library.",
+      "refresh": 900,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "emby"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "total"
+            }
+          ]
+        },
+        "large": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "total"
+            },
+            {
+              "type": "list",
+              "field": "kinds"
+            }
+          ]
+        }
+      },
+      "script": "emby/widget_library_stats.ts",
+      "entrypoint": "run",
+      "timeout": 10
     }
   ]
 }
