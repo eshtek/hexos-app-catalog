@@ -147,9 +147,7 @@ function tokenFrom(payload: unknown): string | undefined {
 }
 
 async function jellystatSignIn(baseUrl: string, username: string, password: string, ctx: HookContext): Promise<string> {
-  // Match the web UI byte-for-byte: it sends keccak512(password), and the
-  // backend stores/compares that digest verbatim. Raw passwords here would
-  // create an account the login PAGE rejects even though the raw API accepts.
+  // Hash exactly like the web UI — see the Keccak-512 note at the top.
   const hashed = keccak512Hex(password);
   // Account create errors when a user already exists - fall through to login.
   const create = await fetch(`${baseUrl}/auth/createuser`, {

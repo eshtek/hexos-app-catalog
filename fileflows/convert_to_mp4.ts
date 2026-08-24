@@ -88,11 +88,10 @@ function flowDefinition(): Record<string, unknown> {
         Outputs: 1,
         Type: 6,
         OutputConnections: [{ Input: 1, Output: 1, InputNode: nCustom }],
-        // Hardware-first (auto): CPU-only proved ~0.15x realtime — a 24-min
-        // episode took an hour. The forced 8-bit output below is what lets
-        // hardware encoders take 10-bit sources (no encoder anywhere does
-        // 10-bit H.264); if hardware still fails, the executor's error path
-        // falls over to CPU.
+        // Hardware-first (auto): CPU-only runs ~0.15x realtime. The forced
+        // 8-bit output below is what lets hardware encoders take 10-bit
+        // sources (no encoder anywhere does 10-bit H.264); if hardware still
+        // fails, the executor's error path falls over to CPU.
         Model: { Codec: "h264", Encoder: "", Quality: 6, Speed: 3 },
       },
       {
