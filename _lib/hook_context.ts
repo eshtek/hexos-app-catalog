@@ -118,7 +118,7 @@ export interface HookContext {
    * ```
    */
   /**
-   * Base URL of another installed app (e.g. "http://192.168.8.199:5055"),
+   * Base URL of another installed app (e.g. "http://192.168.1.50:5055"),
    * or null when it isn't installed or has no known port. Available to app
    * actions; lifecycle hooks may receive null depending on platform version.
    */

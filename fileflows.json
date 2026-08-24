@@ -1,144 +1,143 @@
 {
-    "version": 4,
-    "script": {
-        "version": "1.0.0",
-        "changeLog": "Initial script"
-    },
-    "requirements": {
-        "locations": [
-            "ApplicationsPerformance",
-            "ApplicationsCapacity",
-            "Media",
-            "Movies",
-            "Music",
-            "Photos",
-            "Shows",
-            "Documents"
-        ],
-        "specifications": [
-            "2CORE",
-            "512MB"
-        ],
-        "permissions": [
-            "READ_WRITE_LOCATIONS"
-        ],
-        "ports": [
-            30200
-        ]
-    },
-    "ensure_directories_exists": [
-        {
-            "path": "$LOCATION(ApplicationsPerformance)"
-        },
-        {
-            "path": "$LOCATION(ApplicationsCapacity)"
-        },
-        {
-            "path": "$LOCATION(Media)",
-            "network_share": true
-        },
-        {
-            "path": "$LOCATION(Movies)",
-            "network_share": true
-        },
-        {
-            "path": "$LOCATION(Music)",
-            "network_share": true
-        },
-        {
-            "path": "$LOCATION(Photos)",
-            "network_share": true
-        },
-        {
-            "path": "$LOCATION(Shows)",
-            "network_share": true
-        },
-        {
-            "path": "$LOCATION(Documents)",
-            "network_share": true
-        },
-        {
-            "path": "$LOCATION(ApplicationsPerformance)/fileflows/data",
-            "snapshot": {
-                "id": "data"
-            }
-        },
-        {
-            "path": "$LOCATION(ApplicationsCapacity)/fileflows/logs"
-        },
-        {
-            "path": "$LOCATION(ApplicationsCapacity)/fileflows/temp"
-        }
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Media",
+      "Movies",
+      "Music",
+      "Photos",
+      "Shows",
+      "Documents"
     ],
-    "app_values": {
-        "fileflows": {
-            "additional_envs": []
-        },
-        "network": {
-            "server_port": {
-                "bind_mode": "published",
-                "port_number": 30200
-            }
-        },
-        "storage": {
-            "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/fileflows/data)",
-            "logs": "$HOST_PATH($LOCATION(ApplicationsCapacity)/fileflows/logs)",
-            "temp": "$HOST_PATH($LOCATION(ApplicationsCapacity)/fileflows/temp)",
-            "additional_storage": [
-                "$MOUNTED_HOST_PATH($LOCATION(Media), /media)",
-                "$MOUNTED_HOST_PATH($LOCATION(Movies), /movies)",
-                "$MOUNTED_HOST_PATH($LOCATION(Music), /music)",
-                "$MOUNTED_HOST_PATH($LOCATION(Photos), /photos)",
-                "$MOUNTED_HOST_PATH($LOCATION(Shows), /shows)",
-                "$MOUNTED_HOST_PATH($LOCATION(Documents), /documents)"
-            ]
-        },
-        "resources": {
-            "limits": {
-                "cpus": 4,
-                "memory": "$MEMORY(10%, 4096)"
-            },
-            "gpus": "$GPU_CONFIG()"
-        }
-    },
-    "actionsSchema": 1,
-    "actions": [
-        {
-            "id": "convert-to-mp4",
-            "title": "Convert to MP4",
-            "description": "Convert this video to an MP4 file using FileFlows. The converted copy appears next to the original; the original file is not changed.",
-            "kind": "custom",
-            "target": {
-                "type": "files",
-                "accepts": [
-                    ".mkv",
-                    ".avi",
-                    ".mov",
-                    ".wmv",
-                    ".flv",
-                    ".webm",
-                    ".mpg",
-                    ".mpeg",
-                    ".m4v",
-                    ".ts"
-                ],
-                "maxFiles": 5,
-                "requiresTargetMount": true
-            },
-            "conditions": [
-                {
-                    "role": "availability",
-                    "type": "appRunning",
-                    "app": "fileflows"
-                }
-            ],
-            "rerun": "converge",
-            "script": "fileflows/convert_to_mp4.ts",
-            "entrypoint": "run",
-            "timeout": 3600,
-            "retries": 0
-        }
+    "specifications": [
+      "2CORE",
+      "512MB"
     ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30200
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Movies)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Music)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Photos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Shows)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Documents)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/fileflows/data",
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/fileflows/logs"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/fileflows/temp"
+    }
+  ],
+  "app_values": {
+    "fileflows": {
+      "additional_envs": []
+    },
+    "network": {
+      "server_port": {
+        "bind_mode": "published",
+        "port_number": 30200
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/fileflows/data)",
+      "logs": "$HOST_PATH($LOCATION(ApplicationsCapacity)/fileflows/logs)",
+      "temp": "$HOST_PATH($LOCATION(ApplicationsCapacity)/fileflows/temp)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Media), /media)",
+        "$MOUNTED_HOST_PATH($LOCATION(Movies), /movies)",
+        "$MOUNTED_HOST_PATH($LOCATION(Music), /music)",
+        "$MOUNTED_HOST_PATH($LOCATION(Photos), /photos)",
+        "$MOUNTED_HOST_PATH($LOCATION(Shows), /shows)",
+        "$MOUNTED_HOST_PATH($LOCATION(Documents), /documents)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": 4,
+        "memory": "$MEMORY(10%, 4096)"
+      },
+      "gpus": "$GPU_CONFIG()"
+    }
+  },
+  "hooks": [
+    {
+      "id": "convert-to-mp4",
+      "title": "Convert to MP4",
+      "description": "Convert this video to an MP4 file using FileFlows. The converted copy appears next to the original; the original file is not changed.",
+      "kind": "custom",
+      "target": {
+        "type": "files",
+        "accepts": [
+          ".mkv",
+          ".avi",
+          ".mov",
+          ".wmv",
+          ".flv",
+          ".webm",
+          ".mpg",
+          ".mpeg",
+          ".m4v",
+          ".ts"
+        ],
+        "maxFiles": 5,
+        "requiresTargetMount": true
+      },
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "fileflows"
+        }
+      ],
+      "rerun": "converge",
+      "script": "fileflows/convert_to_mp4.ts",
+      "entrypoint": "run",
+      "timeout": 3600,
+      "retries": 0
+    }
+  ],
   "widgetsSchema": 2,
   "widgets": [
     {
