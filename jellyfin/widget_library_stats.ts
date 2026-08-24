@@ -6,7 +6,9 @@ import type { WidgetContext, WidgetQueryResult } from "../_lib/widget_context";
 // Same harvest as the now-playing widget: API keys first, freshest device
 // token as fallback — both minted by Jellyfin itself on the config mount.
 function harvestJellyfinToken(ctx: WidgetContext): string | null {
-  const config = ctx.mounts.find((m) => m.containerPath === "/config");
+  const config =
+    ctx.mounts.find((m) => m.containerPath === "/config") ??
+    ctx.mounts.find((m) => m.hostPath.endsWith("/jellyfin/config"));
   if (!config) return null;
   try {
     const db = new Database(`${config.localPath}/data/jellyfin.db`, { readonly: true });

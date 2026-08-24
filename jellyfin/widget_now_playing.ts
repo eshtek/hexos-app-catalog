@@ -9,7 +9,9 @@ import type { WidgetContext, WidgetQueryResult } from "../_lib/widget_context";
 // API keys (created when apps like Jellystat or Seerr connect — not tied to
 // a login session), fall back to the freshest device token.
 function harvestJellyfinToken(ctx: WidgetContext): string | null {
-  const config = ctx.mounts.find((m) => m.containerPath === "/config");
+  const config =
+    ctx.mounts.find((m) => m.containerPath === "/config") ??
+    ctx.mounts.find((m) => m.hostPath.endsWith("/jellyfin/config"));
   if (!config) return null;
   try {
     const db = new Database(`${config.localPath}/data/jellyfin.db`, { readonly: true });
