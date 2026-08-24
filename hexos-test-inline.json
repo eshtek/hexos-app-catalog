@@ -41,7 +41,7 @@
       "id": "inline-before-install",
       "title": "Pre-install validation (inline)",
       "description": "Pre-install validation (inline)",
-      "triggers": [
+      "events": [
         "onBeforeInstall"
       ],
       "scriptContent": "export async function beforeInstall(ctx) {\n  await ctx.registerCheckpoints([\n    { \"id\": \"validateContext\", \"message\": \"Validating install context\" },\n    { \"id\": \"validateInline\", \"message\": \"Confirming inline execution\" }\n  ]);\n\n  if (ctx.resourceType !== \"app\") throw new Error(`Wrong resourceType: ${ctx.resourceType}`);\n  if (ctx.resourceId !== \"hexos-test-inline\") throw new Error(`Wrong resourceId: ${ctx.resourceId}`);\n  if (ctx.event !== \"onBeforeInstall\") throw new Error(`Wrong event: ${ctx.event}`);\n  await ctx.emitCheckpoint(\"validateContext\");\n\n  ctx.log(\"Inline hook running — no external .ts file needed\");\n  await ctx.emitCheckpoint(\"validateInline\");\n}",
@@ -52,7 +52,7 @@
       "id": "inline-after-install",
       "title": "Post-install health check (inline)",
       "description": "Post-install health check (inline)",
-      "triggers": [
+      "events": [
         "onAfterInstall"
       ],
       "optional": true,
@@ -64,7 +64,7 @@
       "id": "inline-optional-fail",
       "title": "Optional inline step that intentionally fails",
       "description": "Optional inline step that intentionally fails",
-      "triggers": [
+      "events": [
         "onAfterInstall"
       ],
       "optional": true,

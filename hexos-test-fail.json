@@ -81,7 +81,7 @@
             "id": "required-fail",
             "title": "Required step that always fails",
             "description": "Required step that always fails",
-            "triggers": [
+            "events": [
                 "onAfterInstall"
             ],
             "optional": false,

@@ -107,7 +107,7 @@
       "id": "configure-plex",
       "title": "Pre-configure Plex",
       "description": "Setting up Plex server",
-      "triggers": [
+      "events": [
         "onAfterInstall"
       ],
       "optional": true,

@@ -53,7 +53,7 @@
       "id": "before-install",
       "title": "Pre-install validation",
       "description": "Pre-install validation",
-      "triggers": [
+      "events": [
         "onBeforeInstall"
       ],
       "script": "hexos-test/hooks.ts",
@@ -64,7 +64,7 @@
       "id": "after-install",
       "title": "Run post-install validation",
       "description": "Post-install configuration",
-      "triggers": [
+      "events": [
         "onAfterInstall"
       ],
       "optional": true,
@@ -145,7 +145,7 @@
       "id": "before-upgrade",
       "title": "Pre-upgrade patch",
       "description": "Pre-upgrade patch",
-      "triggers": [
+      "events": [
         {
           "event": "onBeforeUpgrade",
           "from": "< 2.0.0"
@@ -159,7 +159,7 @@
       "id": "after-upgrade",
       "title": "Post-upgrade cleanup",
       "description": "Post-upgrade cleanup",
-      "triggers": [
+      "events": [
         "onAfterUpgrade"
       ],
       "script": "hexos-test/hooks.ts",
@@ -170,7 +170,7 @@
       "id": "optional-fail",
       "title": "Optional step that intentionally fails",
       "description": "Optional step that intentionally fails",
-      "triggers": [
+      "events": [
         "onAfterInstall"
       ],
       "optional": true,

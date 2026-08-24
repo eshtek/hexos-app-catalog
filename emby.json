@@ -80,7 +80,7 @@
       "id": "configure-emby",
       "title": "Pre-configure Emby",
       "description": "Setting up Emby",
-      "triggers": [
+      "events": [
         "onAfterInstall"
       ],
       "optional": false,

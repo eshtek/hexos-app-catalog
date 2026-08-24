@@ -51,7 +51,7 @@
       "id": "configure-jellyfin",
       "title": "Pre-configure Jellyfin",
       "description": "Setting up Jellyfin",
-      "triggers": [
+      "events": [
         "onAfterInstall"
       ],
       "optional": false,
