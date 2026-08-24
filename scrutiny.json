@@ -64,20 +64,40 @@
     {
       "id": "disk-health",
       "title": "Disk health",
-      "description": "S.M.A.R.T. health summary from Scrutiny.",
-      "refresh": 3600,
+      "description": "S.M.A.R.T. status and temperatures from Scrutiny.",
+      "refresh": 900,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "scrutiny"
+        }
+      ],
       "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "passing"
+            }
+          ]
+        },
         "large": {
           "slots": [
             {
-              "type": "text",
-              "field": "status"
+              "type": "stat",
+              "field": "passing"
+            },
+            {
+              "type": "list",
+              "field": "disks"
             }
           ]
         }
       },
-      "scriptContent": "export const run = async () => ({ fields: { status: { type: \"text\", text: \"Scrutiny widgets are coming soon.\" } } });",
-      "entrypoint": "run"
+      "script": "scrutiny/widget_disk_health.ts",
+      "entrypoint": "run",
+      "timeout": 10
     }
   ]
 }
