@@ -1,0 +1,32 @@
+# Install scripts are executed on users' machines, and a script that is merely
+# valid JSON can still abort an install — an unknown $LOCATION throws, a
+# $QUESTION with no question behind it resolves to nothing, an icon path that
+# is not in the repo 404s in the catalog UI. This runs on GitHub-hosted runners
+# with no secrets, so it is safe on pull_request from forks.
+name: Validate install scripts
+
+on:
+  pull_request:
+  push:
+    branches: [staging, prod]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    # Seconds of work; anything approaching this is a hang, not a slow run.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - name: Install tooling dependencies
+        run: bun install
+        working-directory: _lib
+      # Typecheck first, deliberately: bun executes TypeScript by stripping
+      # types, so a type error in _lib never stops the validator from running —
+      # it just makes its verdict untrustworthy. Checking the checker before
+      # believing it keeps a broken validator from reporting a green catalog.
+      - name: Typecheck the tooling
+        run: bun run typecheck
+        working-directory: _lib
+      - name: Validate install scripts
+        run: bun _lib/validate.ts
