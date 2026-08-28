@@ -194,8 +194,19 @@
       "title": "Harness: always fails",
       "description": "Fails at its second checkpoint to exercise structured failure.",
       "kind": "custom",
-      "rerun": "refuse",
+      "rerun": "idempotent",
       "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"explode\", message: \"This step always fails\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1000));\n  throw new Error(\"Intentional harness failure\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-refuse",
+      "title": "Harness: runs once",
+      "description": "Refuses to run a second time once it has completed.",
+      "kind": "custom",
+      "rerun": "refuse",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1500));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
       "entrypoint": "run",
       "timeout": 60,
       "retries": 0
@@ -258,6 +269,64 @@
       "entrypoint": "run",
       "timeout": 60,
       "retries": 0
+    },
+    {
+      "id": "harness-file-verb",
+      "title": "Harness: convert selected file",
+      "description": "Runs against selected .txt files in the file browser.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "surfaces": ["fileBrowser"],
+      "target": { "type": "files", "accepts": [".txt"], "maxFiles": 5, "requiresTargetMount": false },
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1500));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-widget-button",
+      "title": "Harness: widget button",
+      "description": "Fired from the dashboard widget.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "surfaces": ["card", "widget"],
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1500));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    }
+  ],
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "harness-stats",
+      "title": "Harness stats",
+      "description": "Renders one field of each widget kind.",
+      "refresh": 30,
+      "entrypoint": "run",
+      "scriptContent": "export async function run(ctx) {\n  return {\n    fields: {\n      headline: { type: \"text\", text: \"Harness widget\" },\n      streams: { type: \"stat\", label: \"Streams\", value: \"3\" },\n      items: { type: \"list\", entries: [{ title: \"First\" }, { title: \"Second\" }] },\n    },\n  };\n}\n",
+      "timeout": 10,
+      "buttons": ["harness-widget-button"],
+      "sizes": {
+        "small": { "slots": [{ "type": "stat", "field": "streams" }] },
+        "large": {
+          "slots": [
+            { "type": "text", "field": "headline" },
+            { "type": "stat", "field": "streams" },
+            { "type": "list", "field": "items" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "harness-needs-setup",
+      "title": "Harness needs setup",
+      "description": "Always reports that it needs setup.",
+      "refresh": 30,
+      "entrypoint": "run",
+      "scriptContent": "export async function run(ctx) {\n  return { needsSetup: true, reason: \"Harness widget needs setup\" };\n}\n",
+      "timeout": 10,
+      "sizes": { "small": { "slots": [{ "type": "text", "field": "headline" }] } }
     }
   ]
 }
