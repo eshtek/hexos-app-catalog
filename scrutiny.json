@@ -58,5 +58,46 @@
         "memory": 2048
       }
     }
-  }
+  },
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "disk-health",
+      "title": "Disk health",
+      "description": "S.M.A.R.T. status and temperatures from Scrutiny.",
+      "refresh": 900,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "scrutiny"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "passing"
+            }
+          ]
+        },
+        "large": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "passing"
+            },
+            {
+              "type": "list",
+              "field": "disks"
+            }
+          ]
+        }
+      },
+      "script": "scrutiny/widget_disk_health.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
+  ]
 }

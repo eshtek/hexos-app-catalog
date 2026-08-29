@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "custom": true,
   "internal": true,
   "metadata": {
@@ -39,29 +39,38 @@
   "hooks": [
     {
       "id": "inline-before-install",
-      "event": "onBeforeInstall",
+      "title": "Pre-install validation (inline)",
+      "description": "Pre-install validation (inline)",
+      "events": [
+        "onBeforeInstall"
+      ],
       "scriptContent": "export async function beforeInstall(ctx) {\n  await ctx.registerCheckpoints([\n    { \"id\": \"validateContext\", \"message\": \"Validating install context\" },\n    { \"id\": \"validateInline\", \"message\": \"Confirming inline execution\" }\n  ]);\n\n  if (ctx.resourceType !== \"app\") throw new Error(`Wrong resourceType: ${ctx.resourceType}`);\n  if (ctx.resourceId !== \"hexos-test-inline\") throw new Error(`Wrong resourceId: ${ctx.resourceId}`);\n  if (ctx.event !== \"onBeforeInstall\") throw new Error(`Wrong event: ${ctx.event}`);\n  await ctx.emitCheckpoint(\"validateContext\");\n\n  ctx.log(\"Inline hook running — no external .ts file needed\");\n  await ctx.emitCheckpoint(\"validateInline\");\n}",
       "entrypoint": "beforeInstall",
-      "timeout": 30,
-      "description": "Pre-install validation (inline)"
+      "timeout": 30
     },
     {
       "id": "inline-after-install",
-      "event": "onAfterInstall",
+      "title": "Post-install health check (inline)",
+      "description": "Post-install health check (inline)",
+      "events": [
+        "onAfterInstall"
+      ],
+      "optional": true,
       "scriptContent": "export async function afterInstall(ctx) {\n  await ctx.registerCheckpoints([\n    { \"id\": \"appReachable\", \"message\": \"Waiting for app to start\" },\n    { \"id\": \"healthCheck\", \"message\": \"Running health check\" },\n    { \"id\": \"complete\", \"message\": \"Inline hook complete\" }\n  ]);\n\n  await ctx.waitForApp(\"/\");\n  await ctx.emitCheckpoint(\"appReachable\");\n\n  const resp = await fetch(`${ctx.baseUrl}/health`, {\n    signal: AbortSignal.timeout(5000)\n  });\n  ctx.log(`Health check: ${resp.status}`);\n  await ctx.emitCheckpoint(\"healthCheck\", `Health responded ${resp.status}`);\n\n  await ctx.emitCheckpoint(\"complete\", \"All inline checks passed\");\n}",
       "entrypoint": "afterInstall",
-      "timeout": 120,
-      "description": "Post-install health check (inline)",
-      "optional": true
+      "timeout": 120
     },
     {
       "id": "inline-optional-fail",
-      "event": "onAfterInstall",
+      "title": "Optional inline step that intentionally fails",
+      "description": "Optional inline step that intentionally fails",
+      "events": [
+        "onAfterInstall"
+      ],
+      "optional": true,
       "scriptContent": "export async function optionalFail(ctx) {\n  await ctx.registerCheckpoints([\n    { \"id\": \"willFail\", \"message\": \"About to fail intentionally\" }\n  ]);\n\n  await ctx.updateCheckpointMessage(\"willFail\", \"Failing now...\");\n  ctx.log(\"Inline hook intentionally fails\");\n  throw new Error(\"Intentional inline failure for testing optional hook behavior\");\n}",
       "entrypoint": "optionalFail",
-      "timeout": 10,
-      "description": "Optional inline step that intentionally fails",
-      "optional": true
+      "timeout": 10
     }
   ]
 }

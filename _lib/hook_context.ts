@@ -1,6 +1,10 @@
 /**
  * HookContext — the runtime context passed to every hook entrypoint.
  *
+ * MIRROR: this interface is a hand-maintained copy of the public surface of
+ * hexos-platform/packages/backend/src/interface/hooks.ts (class HookContext).
+ * Update BOTH files when the contract grows — nothing checks this for you.
+ *
  * The actual class is provided by hexos-platform at execution time.
  * Hook scripts import this interface for autocompletion and type safety.
  *
@@ -15,6 +19,27 @@
  * }
  * ```
  */
+/**
+ * One mount entry from the app's live config — the same shape every script
+ * surface receives (hooks, actions, widgets).
+ */
+export interface ContextMount {
+  /** Host path (/mnt/...). */
+  hostPath: string;
+  /**
+   * The same directory as the app sees it inside its container — null for
+   * chart-style primary storage (config/data/logs) whose container path the
+   * chart fixes internally. Match those by hostPath instead.
+   */
+  containerPath: string | null;
+  /**
+   * The same directory as THIS script can read it (the local node's host
+   * bind-mount). Use for harvesting app config files, e.g. Plex's
+   * Preferences.xml — no more hand-walking /host/mnt.
+   */
+  localPath: string;
+}
+
 export interface HookContext {
   /** "app" or "vm" */
   readonly resourceType: string;
@@ -42,6 +67,31 @@ export interface HookContext {
   readonly inputs: Record<string, unknown>;
 
   /**
+   * File-targeted actions only: the files the user selected. `containerPath`
+   * is the same file as THIS app sees it (pre-resolved from its mounts), or
+   * null when the file isn't under any of the app's mounts — scripts for
+   * requiresTargetMount:false actions must handle null (e.g. deliver the
+   * file themselves via the platform mounts).
+   */
+  readonly target?: {
+    type: "files";
+    files: Array<{
+      path: string;
+      containerPath: string | null;
+      name: string;
+      extension: string;
+      size?: number;
+    }>;
+  };
+
+  /**
+   * The app's live mounts, pre-resolved (empty when the app doesn't exist
+   * yet, e.g. onBeforeInstall, or mount discovery failed — scripts must
+   * tolerate an empty list).
+   */
+  readonly mounts: ContextMount[];
+
+  /**
    * Type-safe input accessor. Throws if the input is missing.
    *
    * @example
@@ -67,6 +117,13 @@ export interface HookContext {
    * ]);
    * ```
    */
+  /**
+   * Base URL of another installed app (e.g. "http://192.168.1.50:5055"),
+   * or null when it isn't installed or has no known port. Available to app
+   * actions; lifecycle hooks may receive null depending on platform version.
+   */
+  getInstalledAppUrl(appId: string): Promise<string | null>;
+
   registerCheckpoints(checkpoints: Array<{ id: string; message: string }>): Promise<void>;
 
   /**
@@ -93,6 +150,21 @@ export interface HookContext {
    * ```
    */
   updateCheckpointMessage(id: string, message: string): Promise<void>;
+
+  /**
+   * Drive the task's progress bar directly (clamped 0-99) without touching
+   * checkpoints. For long-running work whose real progress the script can
+   * measure — e.g. frames encoded out of a known total. A later
+   * emitCheckpoint WITHOUT an explicit progress reverts the bar to
+   * checkpoint-fraction math, so pass explicit progress on the final
+   * checkpoint when using this.
+   *
+   * @example
+   * ```ts
+   * await ctx.setProgress(42);
+   * ```
+   */
+  setProgress(percent: number): Promise<void>;
 
   /**
    * Fail the hook with a structured error. The message is shown as the primary error,

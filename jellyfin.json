@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
     "version": "2.0.0",
     "changeLog": "V5 with post-install hook for automated Jellyfin configuration"
@@ -49,15 +49,13 @@
   "hooks": [
     {
       "id": "configure-jellyfin",
-      "event": "onAfterInstall",
-      "script": "jellyfin/jellyfin_hook.ts",
-      "entrypoint": "afterInstall",
-      "timeout": 300,
+      "title": "Pre-configure Jellyfin",
       "description": "Setting up Jellyfin",
+      "events": [
+        "onAfterInstall"
+      ],
       "optional": false,
-      "retries": 0,
       "userOptional": {
-        "label": "Pre-configure Jellyfin",
         "description": "Automatically set up your server, apply preferences, and create media libraries. By enabling this, you acknowledge Jellyfin's media server policy.",
         "default": true,
         "link": {
@@ -101,7 +99,226 @@
             "placeholder": "HexOS Jellyfin"
           }
         }
-      ]
+      ],
+      "script": "jellyfin/jellyfin_hook.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-jellystat",
+      "title": "Connect to Jellystat",
+      "description": "Link Jellyfin to Jellystat for watch statistics. Jellystat is set up with the same admin sign-in you enter during Jellyfin preconfiguration - no extra passwords.",
+      "kind": "connect",
+      "requiresHooks": ["configure-jellyfin"],
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "jellystat"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellystat"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "inputs": [
+        {
+          "type": "question",
+          "id": "admin_username",
+          "question": {
+            "question": "Jellyfin admin username",
+            "type": "text",
+            "key": "admin_username",
+            "required": true,
+            "description": "The administrator account from Jellyfin's setup"
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_password",
+          "question": {
+            "question": "Jellyfin admin password",
+            "type": "password",
+            "key": "admin_password",
+            "required": true
+          }
+        }
+      ],
+      "rerun": "converge",
+      "script": "jellyfin/connect_jellystat.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-seer",
+      "title": "Connect to Seer",
+      "description": "Link this Jellyfin server to Seer so requests and discovery use your library. Uses the admin sign-in from Jellyfin preconfiguration - no extra passwords.",
+      "kind": "connect",
+      "requiresHooks": ["configure-jellyfin"],
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "inputs": [
+        {
+          "type": "question",
+          "id": "admin_username",
+          "question": {
+            "question": "Jellyfin admin username",
+            "type": "text",
+            "key": "admin_username",
+            "required": true,
+            "description": "The administrator account from Jellyfin's setup"
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_password",
+          "question": {
+            "question": "Jellyfin admin password",
+            "type": "password",
+            "key": "admin_password",
+            "required": true
+          }
+        }
+      ],
+      "rerun": "converge",
+      "script": "jellyfin/connect_seer.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "check-fladder",
+      "title": "Check Fladder link",
+      "description": "Fladder is pointed at this Jellyfin server when it installs — this checks the link end to end.",
+      "kind": "maintain",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "fladder"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "fladder"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "rerun": "idempotent",
+      "script": "jellyfin/check_fladder.ts",
+      "entrypoint": "run",
+      "timeout": 120,
+      "retries": 0
+    }
+  ],
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "now-playing",
+      "title": "Now playing",
+      "description": "Active Jellyfin streams right now.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            }
+          ]
+        },
+        "large": {
+          "media": {
+            "placement": "left",
+            "field": "art"
+          },
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            },
+            {
+              "type": "list",
+              "field": "sessions"
+            }
+          ]
+        }
+      },
+      "script": "jellyfin/widget_now_playing.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "library-stats",
+      "title": "Jellyfin library",
+      "description": "How many items are in your Jellyfin library.",
+      "refresh": 900,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "total"
+            }
+          ]
+        },
+        "large": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "total"
+            },
+            {
+              "type": "list",
+              "field": "kinds"
+            }
+          ]
+        }
+      },
+      "script": "jellyfin/widget_library_stats.ts",
+      "entrypoint": "run",
+      "timeout": 10
     }
   ]
 }

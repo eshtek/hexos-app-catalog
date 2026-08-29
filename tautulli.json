@@ -1,0 +1,176 @@
+{
+  "version": 4,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script — Tautulli as a Plex companion (widgets + zero-click connect from Plex)"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "512MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30181
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/tautulli/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "tautulli": {
+      "additional_envs": []
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30181
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/tautulli/config)",
+      "additional_storage": []
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "activity",
+      "title": "Live activity",
+      "description": "Who's watching right now, with stream quality and bandwidth from Tautulli.",
+      "refresh": 15,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tautulli"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            }
+          ]
+        },
+        "large": {
+          "media": {
+            "placement": "left",
+            "field": "art"
+          },
+          "slots": [
+            {
+              "type": "list",
+              "field": "sessions"
+            }
+          ]
+        }
+      },
+      "script": "tautulli/widget_activity.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "recently-watched",
+      "title": "Recently watched",
+      "description": "The last few things watched on your Plex server, from Tautulli.",
+      "refresh": 60,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tautulli"
+        }
+      ],
+      "sizes": {
+        "large": {
+          "slots": [
+            {
+              "type": "list",
+              "field": "recent"
+            }
+          ]
+        }
+      },
+      "script": "tautulli/widget_recently_watched.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "top-media",
+      "title": "Most watched (30 days)",
+      "description": "Your most-played movies and shows over the last month, from Tautulli.",
+      "refresh": 3600,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tautulli"
+        }
+      ],
+      "sizes": {
+        "large": {
+          "slots": [
+            {
+              "type": "list",
+              "field": "top"
+            }
+          ]
+        }
+      },
+      "script": "tautulli/widget_top_media.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    },
+    {
+      "id": "top-users",
+      "title": "Top viewers (30 days)",
+      "description": "Who watches most on your Plex server, from Tautulli.",
+      "refresh": 3600,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tautulli"
+        }
+      ],
+      "sizes": {
+        "large": {
+          "slots": [
+            {
+              "type": "list",
+              "field": "top"
+            }
+          ]
+        }
+      },
+      "script": "tautulli/widget_top_users.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
+  ]
+}

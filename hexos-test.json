@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "custom": true,
   "internal": true,
   "metadata": {
@@ -51,22 +51,24 @@
   "hooks": [
     {
       "id": "before-install",
-      "event": "onBeforeInstall",
+      "title": "Pre-install validation",
+      "description": "Pre-install validation",
+      "events": [
+        "onBeforeInstall"
+      ],
       "script": "hexos-test/hooks.ts",
       "entrypoint": "beforeInstall",
-      "timeout": 30,
-      "description": "Pre-install validation"
+      "timeout": 30
     },
     {
       "id": "after-install",
-      "event": "onAfterInstall",
-      "script": "hexos-test/hooks.ts",
-      "entrypoint": "afterInstall",
-      "timeout": 120,
+      "title": "Run post-install validation",
       "description": "Post-install configuration",
+      "events": [
+        "onAfterInstall"
+      ],
       "optional": true,
       "userOptional": {
-        "label": "Run post-install validation",
         "description": "Exercises all hook capabilities: OAuth, questions, checkpoints, health checks, and stress testing.",
         "default": true
       },
@@ -109,8 +111,14 @@
             "type": "select",
             "key": "test_select",
             "options": [
-              { "text": "Option A", "value": "a" },
-              { "text": "Option B", "value": "b" }
+              {
+                "text": "Option A",
+                "value": "a"
+              },
+              {
+                "text": "Option B",
+                "value": "b"
+              }
             ],
             "default": "a"
           }
@@ -128,33 +136,197 @@
             "placeholder": "HexOS Test App"
           }
         }
-      ]
+      ],
+      "script": "hexos-test/hooks.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 120
     },
     {
       "id": "before-upgrade",
-      "event": "onBeforeUpgrade",
+      "title": "Pre-upgrade patch",
+      "description": "Pre-upgrade patch",
+      "events": [
+        {
+          "event": "onBeforeUpgrade",
+          "from": "< 2.0.0"
+        }
+      ],
       "script": "hexos-test/hooks.ts",
       "entrypoint": "beforeUpgrade",
-      "timeout": 30,
-      "description": "Pre-upgrade patch",
-      "condition": { "fromVersionRange": "< 2.0.0" }
+      "timeout": 30
     },
     {
       "id": "after-upgrade",
-      "event": "onAfterUpgrade",
+      "title": "Post-upgrade cleanup",
+      "description": "Post-upgrade cleanup",
+      "events": [
+        "onAfterUpgrade"
+      ],
       "script": "hexos-test/hooks.ts",
       "entrypoint": "afterUpgrade",
-      "timeout": 30,
-      "description": "Post-upgrade cleanup"
+      "timeout": 30
     },
     {
       "id": "optional-fail",
-      "event": "onAfterInstall",
+      "title": "Optional step that intentionally fails",
+      "description": "Optional step that intentionally fails",
+      "events": [
+        "onAfterInstall"
+      ],
+      "optional": true,
       "script": "hexos-test/hooks.ts",
       "entrypoint": "optionalFail",
+      "timeout": 10
+    },
+    {
+      "id": "harness-ok",
+      "title": "Harness: succeed with checkpoints",
+      "description": "Runs three checkpoints over ~4s and completes.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-fail",
+      "title": "Harness: always fails",
+      "description": "Fails at its second checkpoint to exercise structured failure.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"explode\", message: \"This step always fails\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1000));\n  throw new Error(\"Intentional harness failure\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-refuse",
+      "title": "Harness: runs once",
+      "description": "Refuses to run a second time once it has completed.",
+      "kind": "custom",
+      "rerun": "refuse",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1500));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-needs-self-running",
+      "title": "Harness: requires this app running",
+      "description": "Visible when hexos-test is installed; runnable only while it is running.",
+      "kind": "custom",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "hexos-test"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "hexos-test"
+        }
+      ],
+      "rerun": "idempotent",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-invisible",
+      "title": "Harness: should never be shown",
+      "description": "Gated on an app that does not exist.",
+      "kind": "custom",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "app-that-does-not-exist"
+        }
+      ],
+      "rerun": "idempotent",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-future-condition",
+      "title": "Harness: unknown condition type",
+      "description": "Uses a predicate this platform does not know; must fail closed (hidden).",
+      "kind": "custom",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "quantumEntanglement",
+          "qubits": 7
+        }
+      ],
+      "rerun": "idempotent",
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"work\", message: \"Doing the work\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"work\");\n  await new Promise((r) => setTimeout(r, 2000));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-file-verb",
+      "title": "Harness: convert selected file",
+      "description": "Runs against selected .txt files in the file browser.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "surfaces": ["fileBrowser"],
+      "target": { "type": "files", "accepts": [".txt"], "maxFiles": 5, "requiresTargetMount": false },
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1500));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "harness-widget-button",
+      "title": "Harness: widget button",
+      "description": "Fired from the dashboard widget.",
+      "kind": "custom",
+      "rerun": "idempotent",
+      "surfaces": ["card", "widget"],
+      "scriptContent": "export async function run(ctx) {\n  await ctx.registerCheckpoints([\n    { id: \"prepare\", message: \"Preparing\" },\n    { id: \"verify\", message: \"Verifying\" },\n  ]);\n  await ctx.emitCheckpoint(\"prepare\");\n  await new Promise((r) => setTimeout(r, 1500));\n  await ctx.emitCheckpoint(\"verify\");\n}\n",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    }
+  ],
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "harness-stats",
+      "title": "Harness stats",
+      "description": "Renders one field of each widget kind.",
+      "refresh": 30,
+      "entrypoint": "run",
+      "scriptContent": "export async function run(ctx) {\n  return {\n    fields: {\n      headline: { type: \"text\", text: \"Harness widget\" },\n      streams: { type: \"stat\", label: \"Streams\", value: \"3\" },\n      items: { type: \"list\", entries: [{ title: \"First\" }, { title: \"Second\" }] },\n    },\n  };\n}\n",
       "timeout": 10,
-      "description": "Optional step that intentionally fails",
-      "optional": true
+      "buttons": ["harness-widget-button"],
+      "sizes": {
+        "small": { "slots": [{ "type": "stat", "field": "streams" }] },
+        "large": {
+          "slots": [
+            { "type": "text", "field": "headline" },
+            { "type": "stat", "field": "streams" },
+            { "type": "list", "field": "items" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "harness-needs-setup",
+      "title": "Harness needs setup",
+      "description": "Always reports that it needs setup.",
+      "refresh": 30,
+      "entrypoint": "run",
+      "scriptContent": "export async function run(ctx) {\n  return { needsSetup: true, reason: \"Harness widget needs setup\" };\n}\n",
+      "timeout": 10,
+      "sizes": { "small": { "slots": [{ "type": "text", "field": "headline" }] } }
     }
   ]
 }
