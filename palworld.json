@@ -217,7 +217,7 @@
         },
         {
             "question": "Input a server password",
-            "type": "text",
+            "type": "password",
             "key": "server_password",
             "required": false,
             "default": "",
@@ -226,10 +226,10 @@
         {
             "question": "Input the admin password",
             "description": "This is used to login to the rest api server management tools at http://serverIP:30443. Login username is admin. Read more about the rest api here https://docs.palworldgame.com/category/rest-api",
-            "type": "text",
+            "type": "password",
             "key": "admin_password",
             "required": true,
-            "default": ""
+            "default": "$RANDOM_STRING(16)"
         },
         {
             "question": "Set Pal spawn randomizer type",

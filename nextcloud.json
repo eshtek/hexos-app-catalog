@@ -28,10 +28,11 @@
     },
     {
       "question": "Nextcloud Password",
-      "description": "Create a password for the admin account. You'll need this to log in via web browser and mobile apps. Choose something secure but memorable!",
-      "type": "text",
+      "description": "Create a password for the admin account, or press the button to generate one. You'll need this to log in via web browser and mobile apps, so copy it somewhere safe.",
+      "type": "password",
       "key": "admin_password",
-      "required": true
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
     },
     {
       "question": "Default Phone Region",
