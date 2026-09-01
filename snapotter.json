@@ -12,7 +12,8 @@
       "type": "text",
       "key": "DEFAULT_USERNAME",
       "required": true,
-      "default": ""
+      "default": "",
+      "installonly": true
     },
     {
       "question": "Choose the Admin Password",
@@ -21,7 +22,8 @@
       "type": "password",
       "key": "DEFAULT_PASSWORD",
       "required": true,
-      "default": "$RANDOM_STRING(16)"
+"default": "$RANDOM_STRING(16)",
+      "installonly": true
     }
   ],
   "requirements": {

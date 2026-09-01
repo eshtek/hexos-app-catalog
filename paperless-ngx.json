@@ -49,7 +49,8 @@
         "type": "text",
         "key": "admin_user",
         "required": true,
-        "default": ""
+        "default": "",
+        "installonly": true
       },
       {
         "question": "Choose the Admin Password",
@@ -57,7 +58,8 @@
         "type": "password",
         "key": "admin_password",
         "required": true,
-        "default": "$RANDOM_STRING(16)"
+"default": "$RANDOM_STRING(16)",
+        "installonly": true
         }
     ],
     "app_values": {
