@@ -1,11 +1,11 @@
 {
   "version": 5,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "initial install script"
+    "version": "1.0.1",
+    "changeLog": "Corrected the declared locations to match the ones used"
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance", "documents"],
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
     "specifications": ["2CORE", "256MB"],
     "permissions": ["READ_WRITE_LOCATIONS"],
     "ports": [30148]
@@ -22,7 +22,7 @@
   ],
   "app_values": {
     "warracker": {
-      "db_password": "$RANDOM_STRING(7)"
+      "db_password": "$RANDOM_STRING(16)"
     },
     "network": {
       "web_port": {

@@ -39,8 +39,8 @@
 
   "app_values": {
     "jellystat": {
-      "db_password": "$RANDOM_STRING(7)",
-      "jwt_secret": "$RANDOM_STRING(7)",
+      "db_password": "$RANDOM_STRING(16)",
+      "jwt_secret": "$RANDOM_STRING(32)",
       "is_emby_api": "$QUESTION(is_emby_api)",
       "additional_envs": []
     },

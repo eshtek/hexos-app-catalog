@@ -1,0 +1,51 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "installation_questions": [
+    {
+      "question": "Input your TMDB api key",
+      "description": "A TMDB API key can be obtained at https://www.themoviedb.org/settings/api",
+      "type": "text",
+      "key": "tmdb_api_key",
+      "required": true
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30466]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    { "path": "$LOCATION(ApplicationsPerformance)/ratelog/" },
+    { "path": "$LOCATION(ApplicationsPerformance)/ratelog/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
+  ],
+  "app_values": {
+    "ratelog": {
+      "db_password": "$RANDOM_STRING(7)",
+      "tmdb_api_key": "$QUESTION(tmdb_api_key)",
+      "additional_envs": []
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30466
+      }
+    },
+    "storage": {
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/ratelog/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(5%, 2048)"
+      }
+    }
+  }
+}

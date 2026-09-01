@@ -33,6 +33,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
+| [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
 | [Plex](plex.json) | Media server with Plex Pass support |
@@ -42,17 +43,38 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [qui](qui.json) | A qBittorrent web UI |
 | [Rackula](rackula.json) | A drag and drop rack visualizer |
 | [Radarr](radarr.json) | Movie collection manager |
+| [Ratelog](radarr.json) | App for rating movies and TV shows |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
 | [Sportarr](sportarr.json) | Sports collection manager |
 | [Sure](sure.json) | Financial planning software |
+| [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Warracker](warracker.json) | warranty tracker |
 | [Wiki.js](wiki-js.json) | Open source Wiki software |
 
 For schema documentation, macros reference, and contribution guidelines, see [docs.hexos.com](https://docs.hexos.com).
+
+## Requirement specifications
+
+`requirements.specifications` values are parametric â€” any sensible number works without a platform change. The accepted patterns:
+
+| Pattern | Meaning | Examples |
+|---------|---------|----------|
+| `{n}CORE` | Minimum CPU cores | `2CORE`, `4CORE`, `6CORE` |
+| `{n}MB` / `{n}GB` | Approximate storage needed for installation | `256MB`, `1GB`, `30GB` |
+| `{n}MBRAM` / `{n}GBRAM` | Minimum memory | `512MBRAM`, `8GBRAM` |
+| `GPU` | GPU recommended | `GPU` |
+
+Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU` â€” anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
+
+```json
+"requirements": {
+  "specifications": ["4CORE", "30GB", "16GBRAM"]
+}
+```
 
 ## Contributing
 

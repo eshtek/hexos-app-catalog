@@ -1,13 +1,18 @@
 {
     "version": 5,
     "script": {
-        "version": "1.0.1",
-        "changeLog": "hotfix"
+        "version": "1.0.2",
+        "changeLog": "Declared CPU, install size, and RAM requirements"
     },
     "requirements": {
         "locations": [
             "ApplicationsPerformance",
             "Documents"
+        ],
+        "specifications": [
+            "2CORE",
+            "2GB",
+            "2GBRAM"
         ],
         "permissions": [
             "READ_WRITE_LOCATIONS"
@@ -50,10 +55,10 @@
       {
         "question": "Choose the Admin Password",
         "description": "Only used during initial installation",
-        "type": "text",
+        "type": "password",
         "key": "admin_password",
         "required": true,
-        "default": "",
+"default": "$RANDOM_STRING(16)",
         "installonly": true
         }
     ],

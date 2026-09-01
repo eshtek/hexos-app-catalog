@@ -19,10 +19,10 @@
       "question": "Choose the Admin Password",
       "description": "Only used on installation",
       "placeholder": "",
-      "type": "text",
+      "type": "password",
       "key": "DEFAULT_PASSWORD",
       "required": true,
-      "default": "",
+"default": "$RANDOM_STRING(16)",
       "installonly": true
     }
   ],
@@ -32,7 +32,7 @@
     ],
     "specifications": [
       "4CORE",
-      "4096MB"
+      "4GB"
     ],
     "permissions": [
       "READ_WRITE_LOCATIONS"
@@ -62,8 +62,8 @@
       }
     },
     "snapotter": {
-      "db_password": "$RANDOM_STRING(7)",
-      "redis_password": "$RANDOM_STRING(7)",
+      "db_password": "$RANDOM_STRING(16)",
+      "redis_password": "$RANDOM_STRING(16)",
       "additional_envs": [
         {
           "name": "DEFAULT_USERNAME",

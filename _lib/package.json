@@ -1,0 +1,13 @@
+{
+  "name": "hexos-app-catalog-lib",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "cd .. && bun _lib/validate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}
