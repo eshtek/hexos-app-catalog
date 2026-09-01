@@ -1,8 +1,8 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "2.0.0",
-    "changeLog": "V5 with post-install hooks for automated Plex configuration"
+    "version": "2.1.0",
+    "changeLog": "Added the now-playing widget and moved to the v6 install script format"
   },
   "installation_questions": [
     {
@@ -105,15 +105,13 @@
   "hooks": [
     {
       "id": "configure-plex",
-      "event": "onAfterInstall",
-      "script": "plex/plex_hook.ts",
-      "entrypoint": "afterInstall",
-      "timeout": 300,
+      "title": "Pre-configure Plex",
       "description": "Setting up Plex server",
+      "events": [
+        "onAfterInstall"
+      ],
       "optional": true,
-      "retries": 0,
       "userOptional": {
-        "label": "Pre-configure Plex",
         "description": "Sign in to your Plex account to automatically claim your server, set preferences, and create media libraries. By enabling this, you agree that HexOS will accept the Plex Terms of Service on your behalf.",
         "default": true,
         "link": {
@@ -154,7 +152,56 @@
             "placeholder": "HexOS Plex"
           }
         }
-      ]
+      ],
+      "script": "plex/plex_hook.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "retries": 0
+    }
+  ],
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "now-playing",
+      "title": "Now playing",
+      "description": "Active Plex streams right now.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            }
+          ]
+        },
+        "large": {
+          "media": {
+            "placement": "left",
+            "field": "art"
+          },
+          "slots": [
+            {
+              "type": "stat",
+              "field": "streams"
+            },
+            {
+              "type": "list",
+              "field": "sessions"
+            }
+          ]
+        }
+      },
+      "script": "plex/widget_now_playing.ts",
+      "entrypoint": "run",
+      "timeout": 10
     }
   ]
 }
