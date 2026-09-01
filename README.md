@@ -57,6 +57,25 @@ Install scripts are JSON configurations that automate app deployment on HexOS �
 
 For schema documentation, macros reference, and contribution guidelines, see [docs.hexos.com](https://docs.hexos.com).
 
+## Requirement specifications
+
+`requirements.specifications` values are parametric — any sensible number works without a platform change. The accepted patterns:
+
+| Pattern | Meaning | Examples |
+|---------|---------|----------|
+| `{n}CORE` | Minimum CPU cores | `2CORE`, `4CORE`, `6CORE` |
+| `{n}MB` / `{n}GB` | Approximate storage needed for installation | `256MB`, `1GB`, `30GB` |
+| `{n}MBRAM` / `{n}GBRAM` | Minimum memory | `512MBRAM`, `8GBRAM` |
+| `GPU` | GPU recommended | `GPU` |
+
+Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU` — anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
+
+```json
+"requirements": {
+  "specifications": ["4CORE", "30GB", "16GBRAM"]
+}
+```
+
 ## Contributing
 
 1. Fork this repository

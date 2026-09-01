@@ -6,7 +6,7 @@
     },
     "requirements": {
         "locations": [],
-        "specifications": ["2CORE", "1024MB"],
+        "specifications": ["2CORE", "1GB"],
         "permissions": [],
         "ports": [30064]
     },

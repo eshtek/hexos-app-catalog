@@ -30,7 +30,7 @@
     ],
     "specifications": [
       "4CORE",
-      "4096MB"
+      "4GB"
     ],
     "permissions": [
       "READ_WRITE_LOCATIONS"

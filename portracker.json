@@ -10,7 +10,7 @@
     ],
     "specifications": [
       "2CORE",
-      "1024MB"
+      "1GB"
     ],
     "permissions": [
       "READ_WRITE_LOCATIONS"
