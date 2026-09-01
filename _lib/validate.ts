@@ -9,12 +9,21 @@ import { readdirSync, existsSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
   CALL_MACROS,
+  HOOK_CONDITION_ROLES,
+  HOOK_CONDITION_TYPES,
+  HOOK_EVENT_SPECS,
   HOOK_EVENTS,
+  HOOK_KINDS,
+  HOOK_RERUNS,
+  HOOK_SURFACES,
+  HOOK_TARGET_TYPES,
   LOCATIONS,
   PERMISSIONS,
   QUESTION_TYPES,
   SPEC_REGEX,
   SUPPORTED_VERSIONS,
+  SUPPORTED_WIDGETS_SCHEMA,
+  WIDGET_SLOT_TYPES,
 } from "./contract";
 
 type Problem = { file: string; message: string };
@@ -56,6 +65,40 @@ function checkAssetPath(file: string, field: string, value: string) {
   }
   if (!existsSync(value) || !statSync(value).isFile()) {
     err(file, `${field}: "${value}" does not exist in the repository`);
+  }
+}
+
+function checkCondition(file: string, where: string, cond: unknown) {
+  if (!isObject(cond)) {
+    err(file, `${where}: must be an object`);
+    return;
+  }
+  if (typeof cond.role !== "string" || !(HOOK_CONDITION_ROLES as readonly string[]).includes(cond.role)) {
+    err(file, `${where}: role must be "visibility" or "availability"`);
+  }
+  if (typeof cond.type !== "string" || !cond.type.trim()) {
+    err(file, `${where}: type is missing`);
+    return;
+  }
+  if ((HOOK_CONDITION_TYPES as readonly string[]).includes(cond.type)) {
+    if (cond.type === "appInstalled" || cond.type === "appRunning") {
+      if (typeof cond.app !== "string" || !cond.app.trim()) {
+        err(file, `${where}: ${cond.type} condition requires an app name`);
+      }
+    }
+    if (cond.type === "appVersion") {
+      if (typeof cond.app !== "string" || !cond.app.trim()) {
+        err(file, `${where}: appVersion condition requires an app name`);
+      }
+      if (typeof cond.range !== "string" || !cond.range.trim()) {
+        err(file, `${where}: appVersion condition requires a range`);
+      }
+    }
+    if (cond.type === "script") {
+      if (typeof cond.script !== "string" || !cond.script.trim()) {
+        err(file, `${where}: script condition requires a script path`);
+      }
+    }
   }
 }
 
@@ -183,14 +226,16 @@ function validate(file: string, script: Record<string, unknown>) {
 
   // --- questions ---
   const questionKeys = new Set<string>();
-  const collectQuestion = (q: unknown, where: string) => {
+  const collectQuestion = (q: unknown, where: string, scopeKeys?: Set<string>) => {
     if (!isObject(q)) return;
     const key = q.key;
     if (typeof key !== "string" || !key.trim()) {
       err(file, `${where}: question is missing a key`);
       return;
     }
-    if (questionKeys.has(key)) err(file, `${where}: duplicate question key "${key}"`);
+    const dupeSet = scopeKeys ?? questionKeys;
+    if (dupeSet.has(key)) err(file, `${where}: duplicate question key "${key}"`);
+    dupeSet.add(key);
     questionKeys.add(key);
     if (typeof q.type !== "string" || !(QUESTION_TYPES as readonly string[]).includes(q.type)) {
       err(file, `${where}: question "${key}" has invalid type "${String(q.type)}"`);
@@ -245,7 +290,7 @@ function validate(file: string, script: Record<string, unknown>) {
   // --- app_values ---
   if (!isObject(script.app_values)) err(file, "app_values is missing");
 
-  // --- hooks (v5) ---
+  // --- hooks (v5 and v6) ---
   const hookIds = new Set<string>();
   for (const [i, hook] of ((script.hooks as unknown[]) ?? []).entries()) {
     const where = `hooks[${i}]`;
@@ -253,7 +298,7 @@ function validate(file: string, script: Record<string, unknown>) {
       err(file, `${where}: must be an object`);
       continue;
     }
-    if (version !== 5) err(file, `${where}: hooks require version 5`);
+    if (version !== 5 && version !== 6) err(file, `${where}: hooks require version 5 or 6`);
     const id = hook.id;
     if (typeof id !== "string" || !id.trim()) {
       err(file, `${where}: id is missing`);
@@ -261,10 +306,79 @@ function validate(file: string, script: Record<string, unknown>) {
       if (hookIds.has(id)) err(file, `${where}: duplicate hook id "${id}"`);
       hookIds.add(id);
     }
-    if (typeof hook.event !== "string" || !(HOOK_EVENTS as readonly string[]).includes(hook.event)) {
-      err(file, `${where}: event "${String(hook.event)}" is not a known hook event`);
+
+    if (version === 6) {
+      if (typeof hook.title !== "string" || !hook.title.trim()) {
+        err(file, `${where}: title is missing`);
+      }
+      if (hook.kind !== undefined) {
+        if (typeof hook.kind !== "string" || !(HOOK_KINDS as readonly string[]).includes(hook.kind)) {
+          err(file, `${where}: kind "${String(hook.kind)}" is not a known hook kind`);
+        }
+      }
+      if (hook.events !== undefined) {
+        if (!Array.isArray(hook.events)) {
+          err(file, `${where}: events must be an array`);
+        } else {
+          for (const [j, ev] of hook.events.entries()) {
+            if (typeof ev === "string") {
+              if (!(HOOK_EVENT_SPECS as readonly string[]).includes(ev)) {
+                err(file, `${where}.events[${j}]: "${ev}" is not a known event spec`);
+              }
+            } else if (!isObject(ev)) {
+              err(file, `${where}.events[${j}]: must be a string or event object`);
+            }
+          }
+        }
+      }
+      if (hook.rerun !== undefined) {
+        if (typeof hook.rerun !== "string" || !(HOOK_RERUNS as readonly string[]).includes(hook.rerun)) {
+          err(file, `${where}: rerun "${String(hook.rerun)}" is not a known rerun mode`);
+        }
+      }
+      if (hook.surfaces !== undefined) {
+        if (!Array.isArray(hook.surfaces)) {
+          err(file, `${where}: surfaces must be an array`);
+        } else {
+          for (const s of hook.surfaces) {
+            if (typeof s !== "string" || !(HOOK_SURFACES as readonly string[]).includes(s)) {
+              err(file, `${where}: surface "${String(s)}" is not known`);
+            }
+          }
+        }
+      }
+      if (hook.conditions !== undefined) {
+        if (!Array.isArray(hook.conditions)) {
+          err(file, `${where}: conditions must be an array`);
+        } else {
+          for (const [j, cond] of hook.conditions.entries()) {
+            checkCondition(file, `${where}.conditions[${j}]`, cond);
+          }
+        }
+      }
+      if (hook.target !== undefined) {
+        if (!isObject(hook.target)) {
+          err(file, `${where}: target must be an object`);
+        } else {
+          if (typeof hook.target.type !== "string" || !(HOOK_TARGET_TYPES as readonly string[]).includes(hook.target.type)) {
+            err(file, `${where}: target.type "${String(hook.target.type)}" is not known`);
+          }
+          if (hook.target.type === "files") {
+            if (!Array.isArray(hook.target.accepts) || hook.target.accepts.length === 0) {
+              err(file, `${where}: target.accepts must be a non-empty array of extensions`);
+            }
+          }
+        }
+      }
+      if (hook.retries !== undefined && (typeof hook.retries !== "number" || hook.retries < 0)) {
+        err(file, `${where}: retries must be a non-negative number`);
+      }
+    } else {
+      if (typeof hook.event !== "string" || !(HOOK_EVENTS as readonly string[]).includes(hook.event)) {
+        err(file, `${where}: event "${String(hook.event)}" is not a known hook event`);
+      }
     }
-    // A hook body is either a file reference or inlined scriptContent.
+
     const hasFile = typeof hook.script === "string" && hook.script.trim().length > 0;
     const hasInline = typeof hook.scriptContent === "string" && hook.scriptContent.trim().length > 0;
     if (!hasFile && !hasInline) {
@@ -280,9 +394,116 @@ function validate(file: string, script: Record<string, unknown>) {
     if (hook.timeout !== undefined && (typeof hook.timeout !== "number" || hook.timeout <= 0)) {
       err(file, `${where}: timeout must be a positive number`);
     }
+    const hookQuestionScope = version === 6 ? new Set<string>() : undefined;
     for (const [j, input] of ((hook.inputs as unknown[]) ?? []).entries()) {
       if (!isObject(input)) continue;
-      if (input.type === "question") collectQuestion(input.question, `${where}.inputs[${j}]`);
+      if (input.type === "question") collectQuestion(input.question, `${where}.inputs[${j}]`, hookQuestionScope);
+    }
+  }
+
+  // --- widgets (v6) ---
+  if (script.widgets !== undefined) {
+    if (version !== 6) err(file, "widgets require version 6");
+    if (script.widgetsSchema !== undefined && script.widgetsSchema !== SUPPORTED_WIDGETS_SCHEMA) {
+      err(file, `widgetsSchema ${script.widgetsSchema} is not supported (expected ${SUPPORTED_WIDGETS_SCHEMA})`);
+    }
+    if (!Array.isArray(script.widgets)) {
+      err(file, "widgets must be an array");
+    } else {
+      const widgetIds = new Set<string>();
+      for (const [i, widget] of script.widgets.entries()) {
+        const where = `widgets[${i}]`;
+        if (!isObject(widget)) {
+          err(file, `${where}: must be an object`);
+          continue;
+        }
+        const wid = widget.id;
+        if (typeof wid !== "string" || !wid.trim()) {
+          err(file, `${where}: id is missing`);
+        } else {
+          if (!/^[a-z0-9_-]+$/.test(wid)) {
+            err(file, `${where}: id "${wid}" must be lowercase alphanumeric with hyphens/underscores`);
+          }
+          if (widgetIds.has(wid)) err(file, `${where}: duplicate widget id "${wid}"`);
+          widgetIds.add(wid);
+        }
+        if (typeof widget.title !== "string" || !widget.title.trim()) {
+          err(file, `${where}: title is missing`);
+        }
+        if (widget.refresh !== undefined && (typeof widget.refresh !== "number" || widget.refresh < 10)) {
+          err(file, `${where}: refresh must be a number >= 10`);
+        }
+        const hasFile = typeof widget.script === "string" && widget.script.trim().length > 0;
+        const hasInline = typeof widget.scriptContent === "string" && widget.scriptContent.trim().length > 0;
+        if (!hasFile && !hasInline) {
+          err(file, `${where}: needs either script or scriptContent`);
+        } else if (hasFile && hasInline) {
+          err(file, `${where}: declares both script and scriptContent`);
+        } else if (hasFile) {
+          checkAssetPath(file, `${where}.script`, widget.script as string);
+        }
+        if (typeof widget.entrypoint !== "string" || !widget.entrypoint.trim()) {
+          err(file, `${where}: entrypoint is missing`);
+        }
+        if (widget.timeout !== undefined && (typeof widget.timeout !== "number" || widget.timeout <= 0)) {
+          err(file, `${where}: timeout must be a positive number`);
+        }
+        if (widget.conditions !== undefined) {
+          if (!Array.isArray(widget.conditions)) {
+            err(file, `${where}: conditions must be an array`);
+          } else {
+            for (const [j, cond] of widget.conditions.entries()) {
+              checkCondition(file, `${where}.conditions[${j}]`, cond);
+            }
+          }
+        }
+        if (widget.sizes !== undefined) {
+          if (!isObject(widget.sizes)) {
+            err(file, `${where}: sizes must be an object`);
+          } else {
+            for (const sizeKey of ["small", "large"] as const) {
+              const size = widget.sizes[sizeKey];
+              if (size === undefined) continue;
+              if (!isObject(size)) {
+                err(file, `${where}.sizes.${sizeKey}: must be an object`);
+                continue;
+              }
+              const slots = size.slots;
+              if (!Array.isArray(slots) || slots.length === 0) {
+                err(file, `${where}.sizes.${sizeKey}: slots must be a non-empty array`);
+              } else {
+                const maxSlots = sizeKey === "small" ? 3 : 4;
+                if (slots.length > maxSlots) {
+                  err(file, `${where}.sizes.${sizeKey}: max ${maxSlots} slots`);
+                }
+                for (const [k, slot] of slots.entries()) {
+                  if (!isObject(slot)) continue;
+                  if (typeof slot.type !== "string" || !(WIDGET_SLOT_TYPES as readonly string[]).includes(slot.type)) {
+                    err(file, `${where}.sizes.${sizeKey}.slots[${k}]: type "${String(slot.type)}" is not known`);
+                  }
+                  if (typeof slot.field !== "string" || !slot.field.trim()) {
+                    err(file, `${where}.sizes.${sizeKey}.slots[${k}]: field is missing`);
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (widget.buttons !== undefined) {
+          if (!Array.isArray(widget.buttons)) {
+            err(file, `${where}: buttons must be an array`);
+          } else {
+            if (widget.buttons.length > 4) err(file, `${where}: max 4 buttons`);
+            const seen = new Set<string>();
+            for (const btn of widget.buttons) {
+              if (typeof btn !== "string") continue;
+              if (seen.has(btn)) err(file, `${where}: duplicate button "${btn}"`);
+              seen.add(btn);
+              if (!hookIds.has(btn)) err(file, `${where}: button "${btn}" references unknown hook id`);
+            }
+          }
+        }
+      }
     }
   }
 
