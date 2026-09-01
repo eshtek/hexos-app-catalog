@@ -94,9 +94,16 @@ function checkCondition(file: string, where: string, cond: unknown) {
         err(file, `${where}: appVersion condition requires a range`);
       }
     }
+    if (cond.type === "capabilityPresent") {
+      if (typeof cond.capability !== "string" || !cond.capability.trim()) {
+        err(file, `${where}: capabilityPresent condition requires a capability name`);
+      }
+    }
     if (cond.type === "script") {
       if (typeof cond.script !== "string" || !cond.script.trim()) {
         err(file, `${where}: script condition requires a script path`);
+      } else {
+        checkAssetPath(file, `${where}.script`, cond.script);
       }
     }
   }
@@ -316,29 +323,112 @@ function validate(file: string, script: Record<string, unknown>) {
           err(file, `${where}: kind "${String(hook.kind)}" is not a known hook kind`);
         }
       }
+      // V5's singular field in a V6 entry is rejected by the backend — it
+      // would otherwise silently turn a lifecycle hook into a user verb.
+      if (hook.event !== undefined) {
+        err(file, `${where}: v6 uses events (array) — found v5-style singular event`);
+      }
+
+      // Trigger analysis mirrors the backend's superRefine: absent events
+      // defaults to ["userAction"], and several fields are legal only for
+      // one firing class.
+      const upgradeEvents = new Set(["onBeforeUpgrade", "onAfterUpgrade"]);
+      const installEvents = new Set(["onBeforeInstall", "onAfterInstall"]);
+      const eventKeys: string[] = [];
+      let hasVersionGate = false;
+      let eventsValid = true;
       if (hook.events !== undefined) {
-        if (!Array.isArray(hook.events)) {
-          err(file, `${where}: events must be an array`);
+        if (!Array.isArray(hook.events) || hook.events.length === 0) {
+          err(file, `${where}: events must be a non-empty array`);
+          eventsValid = false;
         } else {
           for (const [j, ev] of hook.events.entries()) {
             if (typeof ev === "string") {
               if (!(HOOK_EVENT_SPECS as readonly string[]).includes(ev)) {
                 err(file, `${where}.events[${j}]: "${ev}" is not a known event spec`);
+                eventsValid = false;
+              } else {
+                eventKeys.push(ev);
               }
-            } else if (!isObject(ev)) {
+            } else if (isObject(ev)) {
+              const evName = ev.event;
+              if (typeof evName !== "string" || !(HOOK_EVENT_SPECS as readonly string[]).includes(evName) || evName === "userAction") {
+                err(file, `${where}.events[${j}]: event object must name a lifecycle event`);
+                eventsValid = false;
+                continue;
+              }
+              const extraKeys = Object.keys(ev).filter((k) => !["event", "from", "to"].includes(k));
+              if (extraKeys.length > 0) {
+                err(file, `${where}.events[${j}]: unknown keys ${extraKeys.join(", ")}`);
+              }
+              if ((ev.from !== undefined || ev.to !== undefined) && !upgradeEvents.has(evName)) {
+                err(file, `${where}.events[${j}]: from/to gate upgrade transitions — legal on upgrade events only`);
+              }
+              if (ev.from !== undefined || ev.to !== undefined) hasVersionGate = true;
+              eventKeys.push(evName);
+            } else {
               err(file, `${where}.events[${j}]: must be a string or event object`);
+              eventsValid = false;
             }
           }
         }
+      } else {
+        eventKeys.push("userAction");
       }
-      if (hook.rerun !== undefined) {
-        if (typeof hook.rerun !== "string" || !(HOOK_RERUNS as readonly string[]).includes(hook.rerun)) {
-          err(file, `${where}: rerun "${String(hook.rerun)}" is not a known rerun mode`);
+      const userTriggerable = eventKeys.includes("userAction");
+      const lifecycleCount = eventKeys.filter((k) => k !== "userAction").length;
+      const hasInstall = eventKeys.some((k) => installEvents.has(k));
+
+      if (eventsValid) {
+        const seen = new Map<string, number>();
+        for (const k of eventKeys) seen.set(k, (seen.get(k) ?? 0) + 1);
+        for (const [k, count] of seen) {
+          if (count > 1) err(file, `${where}: duplicate trigger entries for "${k}"`);
+        }
+        const keys = [...seen.keys()];
+        if (keys.filter((k) => installEvents.has(k)).length > 1) {
+          err(file, `${where}: onBeforeInstall and onAfterInstall cannot share a declaration`);
+        }
+        if (keys.filter((k) => upgradeEvents.has(k)).length > 1) {
+          err(file, `${where}: onBeforeUpgrade and onAfterUpgrade cannot share a declaration`);
+        }
+        if (hasVersionGate && userTriggerable) {
+          err(file, `${where}: version-gated triggers cannot share a declaration with "userAction"`);
+        }
+
+        // rerun: required iff user-triggerable.
+        if (hook.rerun === undefined) {
+          if (userTriggerable) err(file, `${where}: rerun is required on user-triggerable hooks`);
+        } else {
+          if (typeof hook.rerun !== "string" || !(HOOK_RERUNS as readonly string[]).includes(hook.rerun)) {
+            err(file, `${where}: rerun "${String(hook.rerun)}" is not a known rerun mode`);
+          }
+          if (!userTriggerable) err(file, `${where}: rerun applies to user firings only`);
+        }
+        if (hook.optional !== undefined && lifecycleCount === 0) {
+          err(file, `${where}: optional requires a lifecycle trigger`);
+        }
+        if (hook.userOptional !== undefined) {
+          if (!hasInstall) {
+            err(file, `${where}: userOptional requires an install trigger (onBeforeInstall/onAfterInstall)`);
+          }
+          if (!isObject(hook.userOptional)) {
+            err(file, `${where}: userOptional must be an object`);
+          } else if (hook.userOptional.link !== undefined) {
+            const link = hook.userOptional.link;
+            if (!isObject(link) || typeof link.url !== "string" || !/^https?:\/\//.test(link.url) || typeof link.label !== "string" || !link.label.trim()) {
+              err(file, `${where}: userOptional.link needs a valid url and a label`);
+            }
+          }
+        }
+        if (hook.target !== undefined && lifecycleCount > 0) {
+          err(file, `${where}: file-targeted hooks are user-fired only`);
         }
       }
+
       if (hook.surfaces !== undefined) {
-        if (!Array.isArray(hook.surfaces)) {
-          err(file, `${where}: surfaces must be an array`);
+        if (!Array.isArray(hook.surfaces) || hook.surfaces.length === 0) {
+          err(file, `${where}: surfaces must be a non-empty array`);
         } else {
           for (const s of hook.surfaces) {
             if (typeof s !== "string" || !(HOOK_SURFACES as readonly string[]).includes(s)) {
@@ -366,12 +456,29 @@ function validate(file: string, script: Record<string, unknown>) {
           if (hook.target.type === "files") {
             if (!Array.isArray(hook.target.accepts) || hook.target.accepts.length === 0) {
               err(file, `${where}: target.accepts must be a non-empty array of extensions`);
+            } else {
+              for (const ext of hook.target.accepts) {
+                if (typeof ext !== "string" || !/^\.[a-z0-9]+$/i.test(ext)) {
+                  err(file, `${where}: target.accepts "${String(ext)}" — extensions are dot-prefixed (e.g. ".mkv")`);
+                }
+              }
+            }
+            if (hook.target.maxFiles !== undefined && (typeof hook.target.maxFiles !== "number" || !Number.isInteger(hook.target.maxFiles) || hook.target.maxFiles <= 0)) {
+              err(file, `${where}: target.maxFiles must be a positive integer`);
+            }
+            if (hook.target.requiresTargetMount !== undefined && typeof hook.target.requiresTargetMount !== "boolean") {
+              err(file, `${where}: target.requiresTargetMount must be a boolean`);
             }
           }
         }
       }
-      if (hook.retries !== undefined && (typeof hook.retries !== "number" || hook.retries < 0)) {
-        err(file, `${where}: retries must be a non-negative number`);
+      if (hook.requiresHooks !== undefined) {
+        if (!Array.isArray(hook.requiresHooks) || hook.requiresHooks.length > 8) {
+          err(file, `${where}: requiresHooks must be an array of at most 8 hook ids`);
+        }
+      }
+      if (hook.retries !== undefined && (typeof hook.retries !== "number" || !Number.isInteger(hook.retries) || hook.retries < 0)) {
+        err(file, `${where}: retries must be a non-negative integer`);
       }
     } else {
       if (typeof hook.event !== "string" || !(HOOK_EVENTS as readonly string[]).includes(hook.event)) {
@@ -398,6 +505,16 @@ function validate(file: string, script: Record<string, unknown>) {
     for (const [j, input] of ((hook.inputs as unknown[]) ?? []).entries()) {
       if (!isObject(input)) continue;
       if (input.type === "question") collectQuestion(input.question, `${where}.inputs[${j}]`, hookQuestionScope);
+    }
+  }
+
+  // requiresHooks may forward-reference, so resolve after all ids are known.
+  for (const [i, hook] of ((script.hooks as unknown[]) ?? []).entries()) {
+    if (!isObject(hook) || !Array.isArray(hook.requiresHooks)) continue;
+    for (const ref of hook.requiresHooks) {
+      if (typeof ref === "string" && !hookIds.has(ref)) {
+        err(file, `hooks[${i}]: requiresHooks references unknown hook id "${ref}"`);
+      }
     }
   }
 
@@ -430,8 +547,12 @@ function validate(file: string, script: Record<string, unknown>) {
         if (typeof widget.title !== "string" || !widget.title.trim()) {
           err(file, `${where}: title is missing`);
         }
-        if (widget.refresh !== undefined && (typeof widget.refresh !== "number" || widget.refresh < 10)) {
-          err(file, `${where}: refresh must be a number >= 10`);
+        if (widget.refresh !== undefined) {
+          if (typeof widget.refresh !== "number" || !Number.isInteger(widget.refresh) || widget.refresh <= 0) {
+            err(file, `${where}: refresh must be a positive integer`);
+          } else if (widget.refresh < 10) {
+            warn(file, `${where}: refresh ${widget.refresh} is below the 10s floor — the platform clamps it to 10`);
+          }
         }
         const hasFile = typeof widget.script === "string" && widget.script.trim().length > 0;
         const hasInline = typeof widget.scriptContent === "string" && widget.scriptContent.trim().length > 0;
@@ -467,6 +588,14 @@ function validate(file: string, script: Record<string, unknown>) {
               if (!isObject(size)) {
                 err(file, `${where}.sizes.${sizeKey}: must be an object`);
                 continue;
+              }
+              if (size.media !== undefined) {
+                const placements = sizeKey === "small" ? ["top", "bottom"] : ["left", "right", "both"];
+                if (!isObject(size.media) || typeof size.media.placement !== "string" || !placements.includes(size.media.placement)) {
+                  err(file, `${where}.sizes.${sizeKey}.media: placement must be one of ${placements.join("/")}`);
+                } else if (typeof size.media.field !== "string" || !size.media.field.trim()) {
+                  err(file, `${where}.sizes.${sizeKey}.media: field is missing`);
+                }
               }
               const slots = size.slots;
               if (!Array.isArray(slots) || slots.length === 0) {
