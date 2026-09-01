@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "1.2.0",
+    "changeLog": "Added the disk-health widget and moved to the v6 install script format"
   },
   "requirements": {
     "locations": [
@@ -58,5 +58,46 @@
         "memory": 2048
       }
     }
-  }
+  },
+  "widgetsSchema": 2,
+  "widgets": [
+    {
+      "id": "disk-health",
+      "title": "Disk health",
+      "description": "S.M.A.R.T. status and temperatures from Scrutiny.",
+      "refresh": 900,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "scrutiny"
+        }
+      ],
+      "sizes": {
+        "small": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "passing"
+            }
+          ]
+        },
+        "large": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "passing"
+            },
+            {
+              "type": "list",
+              "field": "disks"
+            }
+          ]
+        }
+      },
+      "script": "scrutiny/widget_disk_health.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
+  ]
 }
