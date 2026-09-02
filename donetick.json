@@ -6,7 +6,7 @@
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
-    "specifications": ["2CORE", "2048MB"],
+    "specifications": ["2CORE", "1GBRAM"],
     "permissions": ["READ_WRITE_LOCATIONS"],
     "ports": [30353]
   },
@@ -35,7 +35,7 @@
     "resources": {
       "limits": {
         "cpus": 2,
-        "memory": "$MEMORY(10%, 2048)"
+        "memory": "$MEMORY(5%, 1024)"
       }
     }
   }
