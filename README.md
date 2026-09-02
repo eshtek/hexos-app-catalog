@@ -13,6 +13,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
+| [Donetick](dozzle.json) | Smart task manager |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
@@ -44,6 +45,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Rackula](rackula.json) | A drag and drop rack visualizer |
 | [Radarr](radarr.json) | Movie collection manager |
 | [Ratelog](radarr.json) | App for rating movies and TV shows |
+| [RomM](romm.json) | Game ROM collection manager and player |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |

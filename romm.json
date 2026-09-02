@@ -1,0 +1,156 @@
+{
+  "version": 4,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "installation_questions": [
+    {
+      "question": "Input your IGDB Client ID",
+      "description": "Generate an ID and secret for IGDB (https://api-docs.igdb.com/#account-creation). IGDB provides titles, descriptions, cover art and related games.",
+      "type": "text",
+      "key": "igdb_client_id",
+      "required": false
+    },
+    {
+      "question": "Input your IGDB Client Secret",
+      "description": "The client secret from your IGDB application.",
+      "type": "password",
+      "key": "igdb_client_secret",
+      "required": false
+    },
+    {
+      "question": "Input your MobyGames API Key",
+      "description": "Instructions for how to generate an API key for MobyGames can be found here: https://www.mobygames.com/info/api",
+      "type": "text",
+      "key": "mobygames_api_key",
+      "required": false
+    },
+    {
+      "question": "Input your ScreenScraper username",
+      "description": "Username for ScreenScraper.fr (https://www.screenscraper.fr). A free provider of titles, descriptions, cover art, screenshots and manuals.",
+      "type": "text",
+      "key": "screenscraper_user",
+      "required": false
+    },
+    {
+      "question": "Input your ScreenScraper password",
+      "description": "Password for your ScreenScraper.fr account.",
+      "type": "password",
+      "key": "screenscraper_password",
+      "required": false
+    },
+    {
+      "question": "Input your RetroAchievements API key",
+      "description": "Generate an API key from your RetroAchievements account settings (https://retroachievements.org/settings). Adds achievement progress tracking.",
+      "type": "text",
+      "key": "retroachievements_api_key",
+      "required": false
+    },
+    {
+      "question": "Input your SteamGridDB API key",
+      "description": "Generate an API key from your SteamGridDB profile preferences (https://www.steamgriddb.com/profile/preferences/api). Provides additional high-quality cover art.",
+      "type": "text",
+      "key": "steamgriddb_api_key",
+      "required": false
+    },
+    {
+      "question": "Enable Flashpoint metadata",
+      "description": "Metadata for 180,000+ flash and browser-based games.",
+      "type": "select",
+      "key": "flashpoint_api_enabled",
+      "required": false,
+      "default": "false",
+      "options": [
+        { "text": "Yes", "value": "true" },
+        { "text": "No", "value": "false" }
+      ]
+    },
+    {
+      "question": "Enable LaunchBox metadata",
+      "description": "Community-driven metadata database. Requires running a LaunchBox metadata update (manual or scheduled) inside RomM before it can match games.",
+      "type": "select",
+      "key": "launchbox_api_enabled",
+      "required": false,
+      "default": "false",
+      "options": [
+        { "text": "Yes", "value": "true" },
+        { "text": "No", "value": "false" }
+      ]
+    },
+    {
+      "question": "Disable download endpoint authentication",
+      "description": "Only required for Tinfoil/WebRcade integration. Lowers security, leave off unless you need it.",
+      "type": "select",
+      "key": "disable_download_endpoint_auth",
+      "required": false,
+      "default": "true",
+      "options": [
+        { "text": "Yes", "value": "true" },
+        { "text": "No", "value": "false" }
+      ]
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30446]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    { "path": "$LOCATION(ApplicationsCapacity)/romm/library", "owner": { "user": "apps" }, "snapshot": { "id": "library" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/romm/resources", "owner": { "user": "apps" }, "snapshot": { "id": "resources" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/romm/assets", "owner": { "user": "apps" }, "snapshot": { "id": "assets" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/romm/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/romm/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
+  ],
+  "app_values": {
+    "romm": {
+      "db_password": "$RANDOM_STRING(16)",
+      "redis_password": "$RANDOM_STRING(16)",
+      "auth_secret_key": "$RANDOM_STRING(32)",
+      "postgres_image_selector": "postgres_18_image",
+      "hasheous_api_enabled": true,
+      "playmatch_api_enabled": true,
+      "flashpoint_api_enabled": "$QUESTION(flashpoint_api_enabled)",
+      "hltb_api_enabled": true,
+      "launchbox_api_enabled": "$QUESTION(launchbox_api_enabled)",
+      "enable_rescan_on_filesystem_change": true,
+      "enable_scheduled_rescan": true,
+      "disable_download_endpoint_auth": "$QUESTION(disable_download_endpoint_auth)",
+      "igdb_client_id": "$IF($QUESTION(igdb_client_id), $QUESTION(igdb_client_id), \"\")",
+      "igdb_client_secret": "$IF($QUESTION(igdb_client_secret), $QUESTION(igdb_client_secret), \"\")",
+      "mobygames_api_key": "$IF($QUESTION(mobygames_api_key), $QUESTION(mobygames_api_key), \"\")",
+      "screenscraper_user": "$IF($QUESTION(screenscraper_user), $QUESTION(screenscraper_user), \"\")",
+      "screenscraper_password": "$IF($QUESTION(screenscraper_password), $QUESTION(screenscraper_password), \"\")",
+      "retroachievements_api_key": "$IF($QUESTION(retroachievements_api_key), $QUESTION(retroachievements_api_key), \"\")",
+      "steamgriddb_api_key": "$IF($QUESTION(steamgriddb_api_key), $QUESTION(steamgriddb_api_key), \"\")",
+      "additional_envs": []
+    },
+    "storage": {
+      "library": "$HOST_PATH($LOCATION(ApplicationsCapacity)/romm/library)",
+      "resources": "$HOST_PATH($LOCATION(ApplicationsPerformance)/romm/resources)",
+      "assets": "$HOST_PATH($LOCATION(ApplicationsPerformance)/romm/assets)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/romm/config)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/romm/postgres_data)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30446
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}
