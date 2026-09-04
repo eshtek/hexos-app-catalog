@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 5,
   "script": {
     "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "changeLog": "Upgraded to V5 install script format\n Added support for pre-configuring radarr with jellyfin credentials\n Added support for configuring hardlinks between radarr and qBittorrent"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Downloads", "Movies"],
@@ -41,11 +41,73 @@
         "$MOUNTED_HOST_PATH($LOCATION(Movies), /movies)"
       ]
     },
+    "network": {
+      "host_network": false,
+      "web_port": {
+        "bind_mode": "published",
+        "host_ips": [],
+        "port_number": 7878
+    }
+  },
     "resources": {
       "limits": {
         "cpus": 2,
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+        {
+      "id": "configure-radarr",
+      "event": "onAfterInstall",
+      "description": "Configure Radarr after installation",
+      "script": "radarr/onAfterInstallRadarr.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "optional": false,
+       "userOptional": {
+        "label": "Pre-configure radarr",
+        "description": "Requires Qbitorrent and Jellyfin to be running.\n\r Automatically apply some preferences and set the root folder, downloader and default paths to the Movies location.<br /> This is a one-time configuration that will be applied after installation.\n To pre-configure radarr, provide the Jellyfin username and password. THis will also double as the admin username and password of radarr.",
+        "default": true
+      },
+      "inputs": [
+        {
+          "type": "question",
+          "id": "admin_username",
+          "question": {
+            "question": "Jellyfin username",
+            "description": "To connect to the Jellyfin server, Will also double as the admin username of radarr.",
+            "type": "text",
+            "key": "admin_username",
+            "required": true
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_password",
+          "question": {
+            "question": "Jellyfin password",
+            "description": "Jellyfin password, Will also double as the admin password. Will also double as the admin password of radarr.",
+            "type": "password",
+            "key": "admin_password",
+            "required": true
+          }
+        }]
+    },
+    {
+      "id": "configure-hardlinks-between-radarr-and-qbittorrent",
+      "event": "onAfterInstall",
+      "description": "Configure hardlinks between Radarr and qBittorrent",
+      "script": "radarr/onAfterInstallqBittorrent.ts",
+      "entrypoint": "afterInstall",
+      "timeout": 300,
+      "optional": false,
+      "userOptional": {
+        "label": "Configure hardlinks between Radarr and qBittorrent",
+        "description": "Hardlinks between Radarr and qBittorrent avoid duplicate files.\n This is a one-time configuration that will be applied after installation.\n By enabling this, the hook will try to modify qBittorrent's configuration file to set the download location for the 'radarr' category to the same location as Radarr's movie storage path.\n A the moment this assumes no password on local access.",
+        "default": true
+      }
+    }
+
+  ]
 }
