@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 5,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial"
+    "version": "1.0.1",
+    "changeLog": "Changed default for a question"
   },
   "installation_questions": [
     {
@@ -84,7 +84,7 @@
       "type": "select",
       "key": "disable_download_endpoint_auth",
       "required": false,
-      "default": "true",
+      "default": "false",
       "options": [
         { "text": "Yes", "value": "true" },
         { "text": "No", "value": "false" }
