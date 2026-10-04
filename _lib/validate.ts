@@ -24,6 +24,7 @@ import {
   SUPPORTED_VERSIONS,
   SUPPORTED_WIDGETS_SCHEMA,
   WIDGET_SLOT_TYPES,
+  WIDGET_SLOT_TYPES_SINCE_CARD,
 } from "./contract";
 
 type Problem = { file: string; message: string };
@@ -582,14 +583,27 @@ function validate(file: string, script: Record<string, unknown>) {
           if (!isObject(widget.sizes)) {
             err(file, `${where}: sizes must be an object`);
           } else {
-            for (const sizeKey of ["small", "large"] as const) {
+            for (const sizeKey of ["small", "large", "card"] as const) {
               const size = widget.sizes[sizeKey];
               if (size === undefined) continue;
               if (!isObject(size)) {
                 err(file, `${where}.sizes.${sizeKey}: must be an object`);
                 continue;
               }
-              if (size.media !== undefined) {
+              // The card has artwork behind it, not a media slot beside its text.
+              if (sizeKey === "card") {
+                if (size.media !== undefined) {
+                  err(file, `${where}.sizes.card: has no media slot; name an image field in background instead`);
+                }
+                if (
+                  size.background !== undefined &&
+                  (!isObject(size.background) ||
+                    typeof size.background.field !== "string" ||
+                    !size.background.field.trim())
+                ) {
+                  err(file, `${where}.sizes.card.background: field is missing`);
+                }
+              } else if (size.media !== undefined) {
                 const placements = sizeKey === "small" ? ["top", "bottom"] : ["left", "right", "both"];
                 if (!isObject(size.media) || typeof size.media.placement !== "string" || !placements.includes(size.media.placement)) {
                   err(file, `${where}.sizes.${sizeKey}.media: placement must be one of ${placements.join("/")}`);
@@ -601,7 +615,7 @@ function validate(file: string, script: Record<string, unknown>) {
               if (!Array.isArray(slots) || slots.length === 0) {
                 err(file, `${where}.sizes.${sizeKey}: slots must be a non-empty array`);
               } else {
-                const maxSlots = sizeKey === "small" ? 3 : 4;
+                const maxSlots = sizeKey === "large" ? 4 : 3;
                 if (slots.length > maxSlots) {
                   err(file, `${where}.sizes.${sizeKey}: max ${maxSlots} slots`);
                 }
@@ -609,9 +623,26 @@ function validate(file: string, script: Record<string, unknown>) {
                   if (!isObject(slot)) continue;
                   if (typeof slot.type !== "string" || !(WIDGET_SLOT_TYPES as readonly string[]).includes(slot.type)) {
                     err(file, `${where}.sizes.${sizeKey}.slots[${k}]: type "${String(slot.type)}" is not known`);
+                  } else if (
+                    sizeKey !== "card" &&
+                    (WIDGET_SLOT_TYPES_SINCE_CARD as readonly string[]).includes(slot.type)
+                  ) {
+                    warn(
+                      file,
+                      `${where}.sizes.${sizeKey}.slots[${k}]: a "${slot.type}" slot hides this whole widget on servers that have not updated yet; keep it to the card size until they have`,
+                    );
                   }
                   if (typeof slot.field !== "string" || !slot.field.trim()) {
                     err(file, `${where}.sizes.${sizeKey}.slots[${k}]: field is missing`);
+                  }
+                  if (slot.rows !== undefined) {
+                    if (sizeKey !== "card") {
+                      err(file, `${where}.sizes.${sizeKey}.slots[${k}]: rows is a card-size setting`);
+                    } else if (slot.type !== "list") {
+                      err(file, `${where}.sizes.card.slots[${k}]: rows applies to a list slot only`);
+                    } else if (typeof slot.rows !== "number" || ![1, 2, 3].includes(slot.rows)) {
+                      err(file, `${where}.sizes.card.slots[${k}]: rows must be 1, 2 or 3`);
+                    }
                   }
                 }
               }

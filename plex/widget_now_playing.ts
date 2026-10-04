@@ -40,6 +40,31 @@ async function fetchThumb(
   }
 }
 
+/**
+ * The item's wide artwork as a size-capped data URI, for the app card's
+ * background. A card is about 330x130, so the transcoder is asked for a
+ * landscape crop near that, not the full backdrop.
+ */
+async function fetchBackdrop(
+  base: string,
+  token: string,
+  art: string | undefined,
+): Promise<string | undefined> {
+  if (!art) return undefined;
+  try {
+    const response = await fetch(
+      `${base}/photo/:/transcode?width=480&height=190&minSize=1&format=jpeg&url=${encodeURIComponent(art)}&X-Plex-Token=${token}`,
+    );
+    if (!response.ok) return undefined;
+    const type = response.headers.get("content-type") ?? "";
+    if (!type.startsWith("image/")) return undefined;
+    const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
+    return uri.length <= 60_000 ? uri : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface PlexSession {
   title: string;
   type?: string;
@@ -50,6 +75,8 @@ interface PlexSession {
   duration?: number;
   thumb?: string;
   grandparentThumb?: string;
+  art?: string;
+  grandparentArt?: string;
   User?: { title?: string };
   Player?: { title?: string; product?: string; state?: string };
   // The TranscodeSession is the authoritative decision signal; absent means
@@ -192,6 +219,15 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   // labels the art.
   const art = images.find((image) => image !== undefined);
   if (art) fields.art = { type: "image", image: art, alt: sessionTitle(sessions[images.indexOf(art)]) };
+
+  // The app card's background: the first session's wide artwork, since the
+  // card features that session. Its poster stands in when it has none, or
+  // when the backdrop is over the size cap.
+  const first = sessions[0];
+  if (first) {
+    const backdrop = (await fetchBackdrop(base, token, first.art || first.grandparentArt)) ?? images[0];
+    if (backdrop) fields.backdrop = { type: "image", image: backdrop, alt: sessionTitle(first) };
+  }
 
   return { fields };
 }

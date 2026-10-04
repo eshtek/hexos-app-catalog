@@ -172,6 +172,19 @@
               "field": "files"
             }
           ]
+        },
+        "card": {
+          "slots": [
+            {
+              "type": "stat",
+              "field": "active"
+            },
+            {
+              "type": "list",
+              "field": "files",
+              "rows": 1
+            }
+          ]
         }
       },
       "script": "fileflows/widget_conversions.ts",

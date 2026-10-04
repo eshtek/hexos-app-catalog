@@ -36,6 +36,12 @@ export interface WidgetListEntry {
    */
   elapsed?: { ms: number; ofMs?: number; state?: "running" | "paused" };
   /**
+   * How far along this entry is, 0 to 100, for a quantity that is not time
+   * in motion (a download, a conversion). Capable renderers draw a bar; the
+   * text floor (meta) must still carry the figure.
+   */
+  progress?: number;
+  /**
    * Optional thumbnail as a size-capped (60KB) data URI. Data URIs ONLY —
    * fetch and inline server-side; never emit app URLs (key leak,
    * mixed-content, off-LAN breakage).
@@ -46,14 +52,17 @@ export interface WidgetListEntry {
 /**
  * One named field of the result document (widgetsSchema 2). The
  * declaration's `sizes` slots reference these fields by name; a standalone
- * image field is the media slot's source. Max 16 fields; images are
+ * image field is the source of a media slot or of the card's background.
+ * Max 16 fields; images are
  * size-capped (60KB) data URIs, text is capped at 500 chars.
  */
 export type WidgetFieldValue =
   | { type: "text"; text: string }
   | { type: "stat"; label: string; value: string }
   | { type: "list"; entries: WidgetListEntry[] }
-  | { type: "image"; image: string; alt?: string };
+  | { type: "image"; image: string; alt?: string }
+  /** A bounded quantity: `value` is 0 to 100, `text` the caption beside the label ("3.2 GB of 5 GB", max 60 chars). */
+  | { type: "progress"; label: string; value: number; text?: string };
 
 /**
  * What a widget script returns: named fields the platform's size templates

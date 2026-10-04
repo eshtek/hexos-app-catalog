@@ -197,6 +197,18 @@
               "field": "sessions"
             }
           ]
+        },
+        "card": {
+          "background": {
+            "field": "backdrop"
+          },
+          "slots": [
+            {
+              "type": "list",
+              "field": "sessions",
+              "rows": 1
+            }
+          ]
         }
       },
       "script": "plex/widget_now_playing.ts",

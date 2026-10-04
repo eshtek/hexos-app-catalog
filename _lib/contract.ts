@@ -102,4 +102,12 @@ export const HOOK_TARGET_TYPES = ["files"] as const;
 export const SUPPORTED_WIDGETS_SCHEMA = 2;
 
 /** Widget slot types. */
-export const WIDGET_SLOT_TYPES = ["text", "stat", "list", "image"] as const;
+export const WIDGET_SLOT_TYPES = ["text", "stat", "list", "image", "progress"] as const;
+
+/**
+ * Slot types that joined widgetsSchema 2 after it shipped. A platform that
+ * predates one drops a whole widget for using it in `small` or `large`, so the
+ * validator warns there. The `card` size is newer than all of them and is
+ * simply ignored by such a platform, so any slot type is safe in it.
+ */
+export const WIDGET_SLOT_TYPES_SINCE_CARD = ["progress"] as const;
