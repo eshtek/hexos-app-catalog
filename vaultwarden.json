@@ -21,7 +21,7 @@
     },
     {
       "question": "Set a password for the admin panel",
-      "description": "Leaving this blank disables the admin panel",
+      "description": "Leaving this blank disables the admin panel. We reccomend disabling the admin panel when it no longer needs modifications",
       "type": "password",
       "key": "admin_token",
       "required": false,
