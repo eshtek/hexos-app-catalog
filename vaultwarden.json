@@ -1,78 +1,74 @@
 {
-  "version": 4,
+  "version": 5,
   "script": {
     "version": "1.0.0",
     "changeLog": "initial"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
-    "specifications": ["2CORE", "1GB"],
+    "specifications": ["2CORE", "1GBRAM"],
     "permissions": ["READ_WRITE_LOCATIONS"],
     "ports": [30032]
   },
   "installation_questions": [
     {
-      "question": "Timezone",
-      "description": "Used for logs and scheduled tasks (e.g. Europe/Brussels).",
-      "type": "text",
-      "key": "timezone",
-      "required": false,
-      "default": "Etc/UTC"
-    },
-    {
-      "question": "WebUI Port",
-      "description": "Port Vaultwarden listens on.",
-      "type": "number",
-      "key": "web_port",
-      "required": true,
-      "default": 30032
-    },
-    {
-      "question": "Public Domain",
-      "description": "The full external URL clients will use, including the https:// scheme and no trailing slash - e.g. https://vault.yourdomain.tld (not just vault.yourdomain.tld).",
+      "question": "Input your external access address for VaultWarden",
+      "description": "Do not modify this unless you have setup VaultWarden for external use. Input the full external URL clients will use, including the https:// scheme and no trailing slash - e.g. https://vault.yourdomain.tld (not just vault.yourdomain.tld).",
       "type": "text",
       "key": "domain",
       "required": true,
-      "placeholder": "https://vault.yourdomain.tld"
+      "default": "https://$SERVER_LAN_IP:30032"
     },
     {
-      "question": "Admin Token",
-      "description": "Custom token to log into /admin. Should be at least 64 random characters - HexOS cannot enforce a minimum length here, so paste a long random value yourself if you want a specific one. Leave blank to auto-generate a secure 64-character token. You can blank this out later in TrueNAS to disable the admin portal entirely.",
-      "type": "text",
+      "question": "Set a password for the admin panel",
+      "description": "Leaving this blank disables the admin panel",
+      "type": "password",
       "key": "admin_token",
       "required": false,
       "default": "$RANDOM_STRING(64)"
+    },
+    {
+      "question": "Enable new user registration",
+      "description": "It is recommended to disable user registration after creating all the users needed.",
+      "type": "select",
+      "key": "SIGNUPS_ALLOWED",
+      "required": true,
+      "options": [
+          {
+              "text": "Yes",
+              "value": "True"
+          },
+          {
+              "text": "No",
+              "value": "False"
+          }
+      ],
+      "default": "True"
     }
   ],
   "ensure_directories_exists": [
     { "path": "$LOCATION(ApplicationsPerformance)" },
-    { "path": "$LOCATION(ApplicationsPerformance)/vaultwarden/data", "snapshot": { "id": "data" } },
-    { "path": "$LOCATION(ApplicationsPerformance)/vaultwarden/postgres", "snapshot": { "id": "postgres_data" } }
+    { "path": "$LOCATION(ApplicationsPerformance)/vaultwarden/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/vaultwarden/postgres", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
   ],
   "app_values": {
-    "TZ": "$QUESTION(timezone)",
     "vaultwarden": {
-      "postgres_image_selector": "postgres_18_image",
       "db_password": "$RANDOM_STRING(32)",
       "admin_token": "$QUESTION(admin_token)",
       "enable_websocket": true,
       "additional_envs": [
         {
           "name": "SIGNUPS_ALLOWED",
-          "value": "true"
+          "value": "$QUESTION(SIGNUPS_ALLOWED)"
         }
       ]
-    },
-    "run_as": {
-      "user": 568,
-      "group": 568
     },
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": "$QUESTION(web_port)"
+        "port_number": "30032"
       },
-      "certificate_id": null,
+      "certificate_id": 1,
       "domain": "$QUESTION(domain)",
       "networks": []
     },
