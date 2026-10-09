@@ -200,7 +200,10 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
           return {
             title: basename(file.name ?? "Unknown file"),
             subtitle: conversion || undefined,
+            // Text floor: the figure any renderer can show as-is.
             meta: meta || undefined,
+            // Enrichment: capable renderers draw this as a bar.
+            progress: percent !== undefined ? Math.min(Math.max(percent, 0), 100) : undefined,
           };
         }),
       },

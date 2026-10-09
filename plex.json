@@ -159,13 +159,13 @@
       "retries": 0
     }
   ],
-  "widgetsSchema": 2,
+  "widgetsSchema": 3,
   "widgets": [
     {
       "id": "now-playing",
       "title": "Now playing",
       "description": "Active Plex streams right now.",
-      "refresh": 10,
+      "refresh": 5,
       "conditions": [
         {
           "role": "availability",
@@ -173,32 +173,16 @@
           "app": "plex"
         }
       ],
-      "sizes": {
-        "small": {
-          "slots": [
-            {
-              "type": "stat",
-              "field": "streams"
-            }
-          ]
-        },
-        "large": {
-          "media": {
-            "placement": "left",
-            "field": "art"
-          },
-          "slots": [
-            {
-              "type": "stat",
-              "field": "streams"
-            },
-            {
-              "type": "list",
-              "field": "sessions"
-            }
-          ]
-        }
+      "background": {
+        "field": "sessions"
       },
+      "slots": [
+        {
+          "type": "list",
+          "field": "sessions",
+          "rows": 1
+        }
+      ],
       "script": "plex/widget_now_playing.ts",
       "entrypoint": "run",
       "timeout": 10

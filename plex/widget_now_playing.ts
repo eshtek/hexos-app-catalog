@@ -1,4 +1,4 @@
-// Type imports only — each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
+// Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 
@@ -19,22 +19,57 @@ function harvestPlexToken(ctx: WidgetContext): string | null {
   }
 }
 
-/** Poster as a size-capped data URI via Plex's photo transcoder. */
-async function fetchThumb(
+/** A Plex photo-transcoder crop of `path` as a data URI, or undefined when it is over the size cap. */
+async function transcodeImage(
   base: string,
   token: string,
-  thumb: string | undefined,
+  path: string,
+  width: number,
+  height: number,
 ): Promise<string | undefined> {
-  if (!thumb) return undefined;
+  const response = await fetch(
+    `${base}/photo/:/transcode?width=${width}&height=${height}&minSize=1&format=jpeg&url=${encodeURIComponent(path)}&X-Plex-Token=${token}`,
+  );
+  if (!response.ok) return undefined;
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.startsWith("image/")) return undefined;
+  const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
+  return uri.length <= 60_000 ? uri : undefined;
+}
+
+/**
+ * The session's wide artwork as a size-capped data URI, for the app card's background while the
+ * card shows this session. A card is about 330x130, so the transcoder is asked for a landscape
+ * crop near twice that for a sharp picture, then near the card's own size when the sharp one is
+ * over the cap. An item with no wide artwork falls back to its poster, cropped the same way.
+ */
+// A stream's artwork does not change while it plays, and the card asks every few seconds, so each
+// picture is fetched once and kept: the box reuses this module between runs until the script
+// changes. Only pictures that arrived are kept, so a failed one is tried again on the next run.
+const ARTWORK_CACHE_SIZE = 20;
+
+/** Streams the last run saw, kept like the artwork: an empty answer is retried only after a busy one. */
+let lastActiveCount = 0;
+const artworkCache = new Map<string, string>();
+
+function rememberArtwork(key: string, image: string): void {
+  artworkCache.delete(key);
+  artworkCache.set(key, image);
+  const oldest = artworkCache.keys().next().value;
+  if (artworkCache.size > ARTWORK_CACHE_SIZE && oldest !== undefined) artworkCache.delete(oldest);
+}
+
+async function fetchArtwork(base: string, token: string, session: PlexSession): Promise<string | undefined> {
+  const path = session.art || session.grandparentArt || session.grandparentThumb || session.thumb;
+  if (!path) return undefined;
+  const key = `${base}${path}`;
+  const kept = artworkCache.get(key);
+  if (kept) return kept;
   try {
-    const response = await fetch(
-      `${base}/photo/:/transcode?width=120&height=180&minSize=1&url=${encodeURIComponent(thumb)}&X-Plex-Token=${token}`,
-    );
-    if (!response.ok) return undefined;
-    const type = response.headers.get("content-type") ?? "";
-    if (!type.startsWith("image/")) return undefined;
-    const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
-    return uri.length <= 60_000 ? uri : undefined;
+    const image =
+      (await transcodeImage(base, token, path, 660, 260)) ?? (await transcodeImage(base, token, path, 480, 190));
+    if (image) rememberArtwork(key, image);
+    return image;
   } catch {
     return undefined;
   }
@@ -50,6 +85,8 @@ interface PlexSession {
   duration?: number;
   thumb?: string;
   grandparentThumb?: string;
+  art?: string;
+  grandparentArt?: string;
   User?: { title?: string };
   Player?: { title?: string; product?: string; state?: string };
   // The TranscodeSession is the authoritative decision signal; absent means
@@ -64,28 +101,25 @@ function episodeCode(season: number | undefined, episode: number | undefined): s
   return `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
 }
 
+/** A movie's title; an episode's show and code ("The Pitt · S01E12"), which is what fits a line. */
 function sessionTitle(session: PlexSession): string {
   if (session.type === "episode" && session.grandparentTitle) {
     const code = episodeCode(session.parentIndex, session.index);
-    return code
-      ? `${session.grandparentTitle} — ${code} · ${session.title}`
-      : `${session.grandparentTitle} — ${session.title}`;
+    return `${session.grandparentTitle} · ${code ?? session.title}`;
   }
   return session.title;
 }
 
 /**
- * Direct Play / Direct Stream (remux) / Transcode. No TranscodeSession =
- * direct play; one whose streams all "copy" = remux (Direct Stream); any
- * stream re-encoding = Transcode. (Part.decision only ever says
- * directplay/transcode — it cannot express remux — and reading Media[0]
- * misreports multi-version items, so neither is used.)
+ * What the server does to the picture, the one thing about serving a stream an
+ * owner weighs: Transcode when the video is re-encoded, DirectPlay otherwise
+ * (no TranscodeSession, or one that copies the video, remuxing or converting
+ * only the audio, which costs little). Decided by videoDecision, the per-stream
+ * decision; Part.decision cannot tell a remux from a transcode, and reading
+ * Media[0] misreports multi-version items.
  */
-function streamLabel(session: PlexSession): string {
-  const transcode = session.TranscodeSession;
-  if (!transcode) return "Direct Play";
-  if (transcode.videoDecision === "transcode" || transcode.audioDecision === "transcode") return "Transcode";
-  return "Direct Stream";
+function videoMethod(session: PlexSession): string {
+  return session.TranscodeSession?.videoDecision === "transcode" ? "Transcode" : "DirectPlay";
 }
 
 /** kbps → human bitrate; drops non-positive/unknown. */
@@ -95,14 +129,15 @@ function bandwidthLabel(kbps: number | undefined): string | undefined {
   return n >= 1000 ? `${(n / 1000).toFixed(1)} Mbps` : `${Math.round(n)} kbps`;
 }
 
-function sessionSubtitle(session: PlexSession): string | undefined {
-  const who = session.User?.title;
-  const where = session.Player?.product || session.Player?.title;
-  const method = streamLabel(session);
-  // Identity for a plain direct play; the load story (method · bitrate) when
-  // it isn't — the tight subtitle only fits two short facts.
-  if (method === "Direct Play") return [who, where].filter(Boolean).join(" · ") || undefined;
-  return [method, bandwidthLabel(session.Session?.bandwidth)].filter(Boolean).join(" · ") || undefined;
+/**
+ * The lines that take turns under the stream: who is watching where, then how
+ * the picture is served and at what bitrate. Either is left out when Plex says
+ * nothing for it.
+ */
+function sessionLines(session: PlexSession): string[] {
+  const who = [session.User?.title, session.Player?.product || session.Player?.title].filter(Boolean).join(" · ");
+  const how = [videoMethod(session), bandwidthLabel(session.Session?.bandwidth)].filter(Boolean).join(" · ");
+  return [who, how].filter(Boolean);
 }
 
 function timecode(ms: number): string {
@@ -138,11 +173,14 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
     return body.MediaContainer?.Metadata ?? [];
   };
   // /status/sessions has brief empty windows mid-playback (a missed client
-  // timeline ping) — retry before believing a 0, or a blip gets cached for a
-  // whole refresh cycle. Retries are bounded (a slow app can't eat the 10s
-  // budget) and a retry failure keeps the confirmed-good empty answer.
+  // timeline ping): retry before believing a 0, or a blip gets cached for a
+  // whole refresh cycle. Only when the last run saw streams, though: with
+  // nothing playing before, an empty answer is simply true, and retrying it
+  // would hold every poll of an idle server for 1.4 s. Retries are bounded (a
+  // slow app can't eat the timeout) and a retry failure keeps the
+  // confirmed-good empty answer.
   let active = await fetchActive();
-  for (let i = 0; active.length === 0 && i < 2; i++) {
+  for (let i = 0; active.length === 0 && lastActiveCount > 0 && i < 2; i++) {
     await new Promise((resolve) => setTimeout(resolve, 700));
     try {
       active = await fetchActive(AbortSignal.timeout(2000));
@@ -150,48 +188,46 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
       break;
     }
   }
-  // The count reflects every active stream; the list shows the first few.
+  lastActiveCount = active.length;
+  // The count reflects every active stream; the card steps through the first few, one dot each.
   const total = active.length;
   const sessions = active.slice(0, 5);
 
-  const images = await Promise.all(
-    sessions.map((session) => fetchThumb(base, token, session.grandparentThumb || session.thumb)),
-  );
+  const artwork = await Promise.all(sessions.map((session) => fetchArtwork(base, token, session)));
 
-  const fields: NonNullable<WidgetQueryResult["fields"]> = {
-    streams: { type: "stat", label: total === 1 ? "Stream" : "Streams", value: String(total) },
-    sessions: {
-      type: "list",
-      entries: sessions.map((session, i) => ({
-        title: sessionTitle(session),
-        subtitle: sessionSubtitle(session),
-        // Text floor: a static timecode any renderer can show as-is.
-        meta: sessionMeta(session),
-        // Enrichment: capable renderers tick this between polls.
-        elapsed:
-          session.viewOffset !== undefined && session.duration
-            ? {
-                ms: session.viewOffset,
-                ofMs: session.duration,
-                state: session.Player?.state === "paused" ? ("paused" as const) : ("running" as const),
-              }
-            : undefined,
-        image: images[i],
-      })),
-    },
-    summary: {
-      type: "text",
-      text:
-        total === 0
-          ? "Nothing playing"
-          : `${total} stream${total === 1 ? "" : "s"} · ${sessionTitle(sessions[0])}`,
+  return {
+    fields: {
+      streams: { type: "stat", label: total === 1 ? "Stream" : "Streams", value: String(total) },
+      // Each entry carries its own artwork: the card's background names this list, so the
+      // picture behind the card is the one for the stream on screen.
+      sessions: {
+        type: "list",
+        entries: sessions.map((session, i) => ({
+          title: sessionTitle(session),
+          // The floor shows the first line; the card takes turns with all of them.
+          subtitle: sessionLines(session)[0],
+          subtitles: sessionLines(session),
+          // Text floor: a static timecode any renderer can show as-is.
+          meta: sessionMeta(session),
+          // Enrichment: capable renderers tick this between polls.
+          elapsed:
+            session.viewOffset !== undefined && session.duration
+              ? {
+                  ms: session.viewOffset,
+                  ofMs: session.duration,
+                  state: session.Player?.state === "paused" ? ("paused" as const) : ("running" as const),
+                }
+              : undefined,
+          image: artwork[i],
+        })),
+      },
+      summary: {
+        type: "text",
+        text:
+          total === 0
+            ? "Nothing playing"
+            : `${total} stream${total === 1 ? "" : "s"} · ${sessionTitle(sessions[0])}`,
+      },
     },
   };
-
-  // The media slot's source: the first session with a poster — its own title
-  // labels the art.
-  const art = images.find((image) => image !== undefined);
-  if (art) fields.art = { type: "image", image: art, alt: sessionTitle(sessions[images.indexOf(art)]) };
-
-  return { fields };
 }

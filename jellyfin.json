@@ -1,8 +1,8 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "2.0.0",
-    "changeLog": "V5 with post-install hook for automated Jellyfin configuration"
+    "version": "2.1.0",
+    "changeLog": "Added the now-playing widget and moved to the v6 install script format"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Media", "Photos", "Music", "Movies", "Shows", "Videos"],
@@ -49,7 +49,10 @@
   "hooks": [
     {
       "id": "configure-jellyfin",
-      "event": "onAfterInstall",
+      "title": "Pre-configure Jellyfin",
+      "events": [
+        "onAfterInstall"
+      ],
       "script": "jellyfin/jellyfin_hook.ts",
       "entrypoint": "afterInstall",
       "timeout": 300,
@@ -57,7 +60,6 @@
       "optional": false,
       "retries": 0,
       "userOptional": {
-        "label": "Pre-configure Jellyfin",
         "description": "Automatically set up your server, apply preferences, and create media libraries. By enabling this, you acknowledge Jellyfin's media server policy.",
         "default": true,
         "link": {
@@ -102,6 +104,35 @@
           }
         }
       ]
+    }
+  ],
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "now-playing",
+      "title": "Now playing",
+      "description": "Active Jellyfin streams right now.",
+      "refresh": 5,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "background": {
+        "field": "sessions"
+      },
+      "slots": [
+        {
+          "type": "list",
+          "field": "sessions",
+          "rows": 1
+        }
+      ],
+      "script": "jellyfin/widget_now_playing.ts",
+      "entrypoint": "run",
+      "timeout": 10
     }
   ]
 }
