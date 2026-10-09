@@ -32,6 +32,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Memos](memos.json) | Note taking tool |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
+| [Nevu](nevu.json) | Front-end interface for Plex |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
