@@ -98,16 +98,18 @@ export const HOOK_TARGET_TYPES = ["files"] as const;
 
 // --- v6 widget contract ---
 
-/** Supported widgetsSchema version. */
-export const SUPPORTED_WIDGETS_SCHEMA = 2;
-
-/** Widget slot types. */
-export const WIDGET_SLOT_TYPES = ["text", "stat", "list", "image", "progress"] as const;
-
 /**
- * Slot types that joined widgetsSchema 2 after it shipped. A platform that
- * predates one drops a whole widget for using it in `small` or `large`, so the
- * validator warns there. The `card` size is newer than all of them and is
- * simply ignored by such a platform, so any slot type is safe in it.
+ * Supported widgetsSchema version. In 3 a widget is the app's dashboard card,
+ * so its `slots` and `background` sit on the declaration itself; the `sizes`
+ * of 2 are gone.
  */
-export const WIDGET_SLOT_TYPES_SINCE_CARD = ["progress"] as const;
+export const SUPPORTED_WIDGETS_SCHEMA = 3;
+
+/** Widget slot types. An image is never a slot: the card's artwork is its background. */
+export const WIDGET_SLOT_TYPES = ["text", "stat", "list", "progress"] as const;
+
+/** The shortest widget `refresh` the platform honours, in seconds: one deck poll (MIN_REFRESH_S). */
+export const WIDGET_MIN_REFRESH_S = 5;
+
+/** Most slots a widget declares. */
+export const WIDGET_MAX_SLOTS = 3;

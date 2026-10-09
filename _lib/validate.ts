@@ -23,8 +23,9 @@ import {
   SPEC_REGEX,
   SUPPORTED_VERSIONS,
   SUPPORTED_WIDGETS_SCHEMA,
+  WIDGET_MAX_SLOTS,
+  WIDGET_MIN_REFRESH_S,
   WIDGET_SLOT_TYPES,
-  WIDGET_SLOT_TYPES_SINCE_CARD,
 } from "./contract";
 
 type Problem = { file: string; message: string };
@@ -551,8 +552,11 @@ function validate(file: string, script: Record<string, unknown>) {
         if (widget.refresh !== undefined) {
           if (typeof widget.refresh !== "number" || !Number.isInteger(widget.refresh) || widget.refresh <= 0) {
             err(file, `${where}: refresh must be a positive integer`);
-          } else if (widget.refresh < 10) {
-            warn(file, `${where}: refresh ${widget.refresh} is below the 10s floor — the platform clamps it to 10`);
+          } else if (widget.refresh < WIDGET_MIN_REFRESH_S) {
+            warn(
+              file,
+              `${where}: refresh ${widget.refresh} is below the ${WIDGET_MIN_REFRESH_S}s floor; the platform clamps it to ${WIDGET_MIN_REFRESH_S}`,
+            );
           }
         }
         const hasFile = typeof widget.script === "string" && widget.script.trim().length > 0;
@@ -579,72 +583,46 @@ function validate(file: string, script: Record<string, unknown>) {
             }
           }
         }
+        // widgetsSchema 3 made the widget the app's card: no sizes, one layout.
         if (widget.sizes !== undefined) {
-          if (!isObject(widget.sizes)) {
-            err(file, `${where}: sizes must be an object`);
-          } else {
-            for (const sizeKey of ["small", "large", "card"] as const) {
-              const size = widget.sizes[sizeKey];
-              if (size === undefined) continue;
-              if (!isObject(size)) {
-                err(file, `${where}.sizes.${sizeKey}: must be an object`);
-                continue;
-              }
-              // The card has artwork behind it, not a media slot beside its text.
-              if (sizeKey === "card") {
-                if (size.media !== undefined) {
-                  err(file, `${where}.sizes.card: has no media slot; name an image field in background instead`);
-                }
-                if (
-                  size.background !== undefined &&
-                  (!isObject(size.background) ||
-                    typeof size.background.field !== "string" ||
-                    !size.background.field.trim())
-                ) {
-                  err(file, `${where}.sizes.card.background: field is missing`);
-                }
-              } else if (size.media !== undefined) {
-                const placements = sizeKey === "small" ? ["top", "bottom"] : ["left", "right", "both"];
-                if (!isObject(size.media) || typeof size.media.placement !== "string" || !placements.includes(size.media.placement)) {
-                  err(file, `${where}.sizes.${sizeKey}.media: placement must be one of ${placements.join("/")}`);
-                } else if (typeof size.media.field !== "string" || !size.media.field.trim()) {
-                  err(file, `${where}.sizes.${sizeKey}.media: field is missing`);
-                }
-              }
-              const slots = size.slots;
-              if (!Array.isArray(slots) || slots.length === 0) {
-                err(file, `${where}.sizes.${sizeKey}: slots must be a non-empty array`);
-              } else {
-                const maxSlots = sizeKey === "large" ? 4 : 3;
-                if (slots.length > maxSlots) {
-                  err(file, `${where}.sizes.${sizeKey}: max ${maxSlots} slots`);
-                }
-                for (const [k, slot] of slots.entries()) {
-                  if (!isObject(slot)) continue;
-                  if (typeof slot.type !== "string" || !(WIDGET_SLOT_TYPES as readonly string[]).includes(slot.type)) {
-                    err(file, `${where}.sizes.${sizeKey}.slots[${k}]: type "${String(slot.type)}" is not known`);
-                  } else if (
-                    sizeKey !== "card" &&
-                    (WIDGET_SLOT_TYPES_SINCE_CARD as readonly string[]).includes(slot.type)
-                  ) {
-                    warn(
-                      file,
-                      `${where}.sizes.${sizeKey}.slots[${k}]: a "${slot.type}" slot hides this whole widget on servers that have not updated yet; keep it to the card size until they have`,
-                    );
-                  }
-                  if (typeof slot.field !== "string" || !slot.field.trim()) {
-                    err(file, `${where}.sizes.${sizeKey}.slots[${k}]: field is missing`);
-                  }
-                  if (slot.rows !== undefined) {
-                    if (sizeKey !== "card") {
-                      err(file, `${where}.sizes.${sizeKey}.slots[${k}]: rows is a card-size setting`);
-                    } else if (slot.type !== "list") {
-                      err(file, `${where}.sizes.card.slots[${k}]: rows applies to a list slot only`);
-                    } else if (typeof slot.rows !== "number" || ![1, 2, 3].includes(slot.rows)) {
-                      err(file, `${where}.sizes.card.slots[${k}]: rows must be 1, 2 or 3`);
-                    }
-                  }
-                }
+          err(file, `${where}: sizes is gone in widgetsSchema 3; put slots and background on the widget itself`);
+        }
+        if (widget.media !== undefined) {
+          err(file, `${where}: has no media slot; name an image field in background instead`);
+        }
+        if (
+          widget.background !== undefined &&
+          (!isObject(widget.background) ||
+            typeof widget.background.field !== "string" ||
+            !widget.background.field.trim())
+        ) {
+          err(file, `${where}.background: field is missing`);
+        }
+        const slots = widget.slots;
+        if (!Array.isArray(slots) || slots.length === 0) {
+          err(file, `${where}: slots must be a non-empty array`);
+        } else {
+          if (slots.length > WIDGET_MAX_SLOTS) {
+            err(file, `${where}: max ${WIDGET_MAX_SLOTS} slots`);
+          }
+          for (const [k, slot] of slots.entries()) {
+            if (!isObject(slot)) {
+              err(file, `${where}.slots[${k}]: must be an object`);
+              continue;
+            }
+            if (slot.type === "image") {
+              err(file, `${where}.slots[${k}]: an image is not a slot; name the image field in background instead`);
+            } else if (typeof slot.type !== "string" || !(WIDGET_SLOT_TYPES as readonly string[]).includes(slot.type)) {
+              err(file, `${where}.slots[${k}]: type "${String(slot.type)}" is not known`);
+            }
+            if (typeof slot.field !== "string" || !slot.field.trim()) {
+              err(file, `${where}.slots[${k}]: field is missing`);
+            }
+            if (slot.rows !== undefined) {
+              if (slot.type !== "list") {
+                err(file, `${where}.slots[${k}]: rows applies to a list slot only`);
+              } else if (typeof slot.rows !== "number" || ![1, 2, 3].includes(slot.rows)) {
+                err(file, `${where}.slots[${k}]: rows must be 1, 2 or 3`);
               }
             }
           }
