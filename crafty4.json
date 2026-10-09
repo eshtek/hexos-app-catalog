@@ -1,0 +1,46 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance, ApplicationsCapacity"],
+    "specifications": ["2CORE", "4GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [8443]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)",
+      "network_share": true
+    },
+    { "path": "$LOCATION(ApplicationsCapacity)/crafty-4/backups", "owner": { "user": "apps" }, "snapshot": { "id": "backups" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/crafty-4/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/crafty-4/import", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/crafty-4/logs", "owner": { "user": "apps" }, "snapshot": { "id": "logs" } },
+    { "path": "$LOCATION(ApplicationsCapacity)/crafty-4/servers", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
+  ],
+  "app_values": {
+    "crafty": {
+      "additional_envs": []
+    },
+    "labels": [],
+    "network": {
+      "host_network": true
+    },
+    "storage": {
+      "backups": "$HOST_PATH($LOCATION(ApplicationsCapacity)/crafty-4/data)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/crafty-4/config)",
+      "import": "$HOST_PATH($LOCATION(ApplicationsPerformance)/crafty-4/import)",
+      "logs": "$HOST_PATH($LOCATION(ApplicationsPerformance)/crafty-4/logs)",
+      "servers": "$HOST_PATH($LOCATION(ApplicationsCapacity/crafty-4/servers)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 4096
+      }
+    }
+  }
+}
