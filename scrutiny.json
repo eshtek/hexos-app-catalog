@@ -59,7 +59,7 @@
       }
     }
   },
-  "widgetsSchema": 2,
+  "widgetsSchema": 3,
   "widgets": [
     {
       "id": "disk-health",
@@ -73,28 +73,17 @@
           "app": "scrutiny"
         }
       ],
-      "sizes": {
-        "small": {
-          "slots": [
-            {
-              "type": "stat",
-              "field": "passing"
-            }
-          ]
+      "slots": [
+        {
+          "type": "stat",
+          "field": "passing"
         },
-        "large": {
-          "slots": [
-            {
-              "type": "stat",
-              "field": "passing"
-            },
-            {
-              "type": "list",
-              "field": "disks"
-            }
-          ]
+        {
+          "type": "list",
+          "field": "disks",
+          "rows": 2
         }
-      },
+      ],
       "script": "scrutiny/widget_disk_health.ts",
       "entrypoint": "run",
       "timeout": 10

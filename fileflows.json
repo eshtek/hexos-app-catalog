@@ -138,7 +138,7 @@
       "retries": 0
     }
   ],
-  "widgetsSchema": 2,
+  "widgetsSchema": 3,
   "widgets": [
     {
       "id": "conversions",
@@ -152,41 +152,17 @@
           "app": "fileflows"
         }
       ],
-      "sizes": {
-        "small": {
-          "slots": [
-            {
-              "type": "stat",
-              "field": "active"
-            }
-          ]
+      "slots": [
+        {
+          "type": "stat",
+          "field": "active"
         },
-        "large": {
-          "slots": [
-            {
-              "type": "stat",
-              "field": "active"
-            },
-            {
-              "type": "list",
-              "field": "files"
-            }
-          ]
-        },
-        "card": {
-          "slots": [
-            {
-              "type": "stat",
-              "field": "active"
-            },
-            {
-              "type": "list",
-              "field": "files",
-              "rows": 1
-            }
-          ]
+        {
+          "type": "list",
+          "field": "files",
+          "rows": 1
         }
-      },
+      ],
       "script": "fileflows/widget_conversions.ts",
       "entrypoint": "run",
       "timeout": 10
