@@ -33,10 +33,11 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
-| [PairDrop](pairdrop.json) | Transfer files cross-clatform |
+| [PairDrop](pairdrop.json) | Transfer files cross-platform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
+| [Planka](planka.json) | A Kanban tool for those who want their work visible and organized |
 | [Plex](plex.json) | Media server with Plex Pass support |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
@@ -54,6 +55,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Vikunja](vikunja.json) | Task manager with lists |
 | [Warracker](warracker.json) | warranty tracker |
 | [Wiki.js](wiki-js.json) | Open source Wiki software |
 

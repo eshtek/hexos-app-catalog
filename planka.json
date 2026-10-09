@@ -1,0 +1,87 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "installation_questions": [
+    {
+        "question": "Input the email address for the admin account",
+        "type": "text",
+        "key": "default_admin_email",
+        "required": true,
+        "placeholder": "Example@example.com",
+        "installonly": true
+    },
+    {
+        "question": "Input the name of the admin user",
+        "type": "text",
+        "key": "default_admin_name",
+        "required": true,
+        "installonly": true
+    },
+    {
+        "question": "Choose the Username of the admin user",
+        "type": "text",
+        "key": "default_admin_username",
+        "required": true,
+        "installonly": true
+    },
+    {
+        "question": "Choose a password for the admin user",
+        "type": "password",
+        "key": "default_admin_password",
+        "required": true,
+        "installonly": true
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
+    "specifications": ["2CORE", "1gbram"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30024]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    { "path": "$LOCATION(ApplicationsCapacity)/planka/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsCapacity)/planka/logs", "owner": { "user": "apps" }, "snapshot": { "id": "logs" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/planka/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
+  ],
+  "app_values": {
+    "planka": {
+      "base_url": "http://$SERVER_LAN_IP:30024",
+      "default_admin_email": "$QUESTION(default_admin_email)",
+      "default_admin_name": "$QUESTION(default_admin_name)",
+      "default_admin_username": "$QUESTION(default_admin_username)",
+      "default_admin_password": "$QUESTION(default_admin_password)",
+      "db_password": "$RANDOM_STRING(16)",
+      "secret_key": "$RANDOM_STRING(16)",
+      "trust_proxy": true
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30024
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsCapacity)/planka/data)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/planka/postgres_data)",
+      "tmp": {
+        "type": "tmpfs"
+      },
+      "logs": "$HOST_PATH($LOCATION(ApplicationsCapacity)/planka/logs)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}

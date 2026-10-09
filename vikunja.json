@@ -1,0 +1,57 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "installation_questions": [
+    {
+        "question": "Choose the max file size for attachments in Megabytes",
+        "type": "text",
+        "key": "max_file_size",
+        "required": true,
+        "default": "20"
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
+    "specifications": ["2CORE", "1gbram"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30107]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    { "path": "$LOCATION(ApplicationsCapacity)/vikunja/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/vikunja/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
+  ],
+  "app_values": {
+    "vikunja": {
+      "url": "http://$SERVER_LAN_IP:30107",
+      "max_file_size": "$QUESTION(max_file_size)",
+      "db_password": "$RANDOM_STRING(16)",
+      "redis_password": "$RANDOM_STRING(16)",
+      "jwt_secret": "$RANDOM_STRING(16)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30107
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsCapacity)/vikunja/data)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/vikunja/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 1024)"
+      }
+    }
+  }
+}
