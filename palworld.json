@@ -1,8 +1,8 @@
 {
     "version": 5,
     "script": {
-        "version": "1.0.1",
-        "changeLog": "Updated requirements"
+        "version": "1.0.2",
+        "changeLog": "Question Groups"
     },
     "installation_questions": [
         {
@@ -11,6 +11,7 @@
             "type": "select",
             "key": "cpus",
             "required": true,
+            "group": "General / Performance",
             "options": [
                 {
                     "text": "4 (minimum recommendation)",
@@ -105,6 +106,7 @@
             "type": "select",
             "key": "ram",
             "required": true,
+            "group": "General / Performance",
             "options": [
                 {
                     "text": "8 GB (minimum recommendation)",
@@ -206,6 +208,7 @@
             "type": "text",
             "key": "server_name",
             "required": true,
+            "group": "General / Administration",
             "default": "HexOS Palworld Server"
         },
         {
@@ -213,6 +216,7 @@
             "type": "text",
             "key": "server_description",
             "required": true,
+            "group": "General / Administration",
             "default": "Palworld Server running on HexOS"
         },
         {
@@ -220,6 +224,7 @@
             "type": "password",
             "key": "server_password",
             "required": false,
+            "group": "General / Administration",
             "default": "",
             "placeholder": "Leave blank for no password"
         },
@@ -229,6 +234,7 @@
             "type": "password",
             "key": "admin_password",
             "required": true,
+            "group": "General / Administration",
             "default": "$RANDOM_STRING(16)"
         },
         {
@@ -236,6 +242,7 @@
             "type": "select",
             "key": "RandomizerType",
             "required": true,
+            "group": "World / Randomizer",
             "options": [
                 {
                     "text": "No randomization",
@@ -258,6 +265,7 @@
             "type": "text",
             "key": "RandomizerSeed",
             "required": true,
+            "group": "World / Randomizer",
             "default": "$RANDOM_STRING(16)"
         },
         {
@@ -266,6 +274,7 @@
             "type": "select",
             "key": "bIsRandomizerPalLevelRandom",
             "required": true,
+            "group": "World / Randomizer",
             "options": [
                 {
                     "text": "Yes",
@@ -284,6 +293,7 @@
             "type": "text",
             "key": "DayTimeSpeedRate",
             "required": true,
+            "group": "World / Time",
             "default": "1"
         },
         {
@@ -292,6 +302,7 @@
             "type": "text",
             "key": "NightTimeSpeedRate",
             "required": true,
+            "group": "World / Time",
             "default": "1"
         },
         {
@@ -300,6 +311,7 @@
             "type": "text",
             "key": "ExpRate",
             "required": true,
+            "group": "Player / Progression",
             "default": "1"
         },
         {
@@ -308,6 +320,7 @@
             "type": "text",
             "key": "PalCaptureRate",
             "required": true,
+            "group": "Pal / General",
             "default": "1"
         },
         {
@@ -316,6 +329,7 @@
             "type": "text",
             "key": "PalSpawnNumRate",
             "required": true,
+            "group": "Pal / General",
             "default": "1"
         },
         {
@@ -324,6 +338,7 @@
             "type": "text",
             "key": "PalDamageRateAttack",
             "required": true,
+            "group": "Pal / Progression",
             "default": "1"
         },
         {
@@ -332,6 +347,7 @@
             "type": "text",
             "key": "PalDamageRateDefense",
             "required": true,
+            "group": "Pal / Combat",
             "default": "1"
         },
         {
@@ -340,6 +356,7 @@
             "type": "text",
             "key": "PalStomachDecreaceRate",
             "required": true,
+            "group": "Pal / Survival",
             "default": "1"
         },
         {
@@ -348,6 +365,7 @@
             "type": "text",
             "key": "PalStaminaDecreaceRate",
             "required": true,
+            "group": "Pal / Survival",
             "default": "1"
         },
         {
@@ -356,6 +374,7 @@
             "type": "text",
             "key": "PalAutoHPRegeneRate",
             "required": true,
+            "group": "Pal / Survival",
             "default": "1"
         },
         {
@@ -364,6 +383,7 @@
             "type": "text",
             "key": "PalAutoHPRegeneRateInSleep",
             "required": true,
+            "group": "Pal / Survival",
             "default": "1"
         },
         {
@@ -372,6 +392,7 @@
             "type": "text",
             "key": "PlayerDamageRateAttack",
             "required": true,
+            "group": "Player / Combat",
             "default": "1"
         },
         {
@@ -380,6 +401,7 @@
             "type": "text",
             "key": "PlayerDamageRateDefense",
             "required": true,
+            "group": "Player / Combat",
             "default": "1"
         },
         {
@@ -388,6 +410,7 @@
             "type": "text",
             "key": "PlayerStomachDecreaceRate",
             "required": true,
+            "group": "Player / Survival",
             "default": "1"
         },
         {
@@ -396,6 +419,7 @@
             "type": "text",
             "key": "PlayerStaminaDecreaceRate",
             "required": true,
+            "group": "Player / Survival",
             "default": "1"
         },
         {
@@ -404,6 +428,7 @@
             "type": "text",
             "key": "PlayerAutoHPRegeneRate",
             "required": true,
+            "group": "Player / Survival",
             "default": "1"
         },
         {
@@ -412,6 +437,7 @@
             "type": "text",
             "key": "PlayerAutoHpRegeneRateInSleep",
             "required": true,
+            "group": "Player / Survival",
             "default": "1"
         },
         {
@@ -420,6 +446,7 @@
             "type": "text",
             "key": "BuildObjectHpRate",
             "required": true,
+            "group": "Items, Structures & Resources / Structures",
             "default": "1"
         },
         {
@@ -428,6 +455,7 @@
             "type": "text",
             "key": "BuildObjectDamageRate",
             "required": true,
+            "group": "Items, Structures & Resources / Structures",
             "default": "1"
         },
         {
@@ -436,6 +464,7 @@
             "type": "text",
             "key": "BuildObjectDeteriorationDamageRate",
             "required": true,
+            "group": "Items, Structures & Resources / Structures",
             "default": "1"
         },
         {
@@ -443,6 +472,7 @@
             "type": "text",
             "key": "CollectionDropRate",
             "required": true,
+            "group": "Items, Structures & Resources / Items",
             "default": "1"
         },
         {
@@ -451,6 +481,7 @@
             "type": "text",
             "key": "CollectionObjectHpRate",
             "required": true,
+            "group": "Items, Structures & Resources / Resources",
             "default": "1"
         },
         {
@@ -459,6 +490,7 @@
             "type": "text",
             "key": "CollectionObjectRespawnSpeedRate",
             "required": true,
+            "group": "Items, Structures & Resources / Resources",
             "default": "1"
         },
         {
@@ -467,6 +499,7 @@
             "type": "text",
             "key": "EnemyDropItemRate",
             "required": true,
+            "group": "Items, Structures & Resources / Items",
             "default": "1"
         },
         {
@@ -475,6 +508,7 @@
             "type": "text",
             "key": "WorkSpeedRate",
             "required": true,
+            "group": "Pal / Production",
             "default": "1"
         },
         {
@@ -482,13 +516,14 @@
             "type": "select",
             "key": "bIsMultiplay",
             "required": true,
+            "group": "Multiplayer / General",
             "options": [
                 {
-                    "text": "yes",
+                    "text": "Yes",
                     "value": "True"
                 },
                 {
-                    "text": "no",
+                    "text": "No",
                     "value": "False"
                 }
             ],
@@ -496,9 +531,11 @@
         },
         {
             "question": "Enable pvp mode",
+            "description": "This setting requires `Multiplayer mode` to be enabled",
             "type": "select",
             "key": "bIsPvP",
             "required": true,
+            "group": "Multiplayer / PVP",
             "options": [
                 {
                     "text": "yes",
@@ -517,6 +554,7 @@
             "type": "select",
             "key": "bEnablePlayerToPlayerDamage",
             "required": true,
+            "group": "Multiplayer / PVP",
             "options": [
                 {
                     "text": "Yes",
@@ -534,6 +572,7 @@
             "type": "select",
             "key": "bEnableFriendlyFire",
             "required": true,
+            "group": "Multiplayer / General",
             "options": [
                 {
                     "text": "Yes",
@@ -551,6 +590,7 @@
             "type": "select",
             "key": "bDisplayPvPItemNumOnWorldMap_BaseCamp",
             "required": true,
+            "group": "Multiplayer / PVP",
             "options": [
                 {
                     "text": "Yes",
@@ -568,6 +608,7 @@
             "type": "select",
             "key": "bDisplayPvPItemNumOnWorldMap_Player",
             "required": true,
+            "group": "Multiplayer / PVP",
             "options": [
                 {
                     "text": "Yes",
@@ -585,6 +626,7 @@
             "type": "select",
             "key": "bAdditionalDropItemWhenPlayerKillingInPvPMode",
             "required": true,
+            "group": "Multiplayer / PVP",
             "options": [
                 {
                     "text": "Yes",
@@ -603,6 +645,7 @@
             "type": "text",
             "key": "AdditionalDropItemNumWhenPlayerKillingInPvPMode",
             "required": true,
+            "group": "Multiplayer / PVP",
             "default": "1"
         },
         {
@@ -610,6 +653,7 @@
             "type": "select",
             "key": "bEnableInvaderEnemy",
             "required": true,
+            "group": "World / Enemy",
             "options": [
                 {
                     "text": "Yes",
@@ -627,6 +671,7 @@
             "type": "select",
             "key": "EnablePredatorBossPal",
             "required": true,
+            "group": "World / Enemy",
             "options": [
                 {
                     "text": "Yes",
@@ -644,6 +689,7 @@
             "type": "select",
             "key": "bAllowEnemyCampSpawnNearBaseCamp",
             "required": true,
+            "group": "World / Enemy",
             "options": [
                 {
                     "text": "Yes",
@@ -661,6 +707,7 @@
             "description": "The lower this number is, the faster eggs will hatch. The Normal Range is 0 - 240",
             "type": "text",
             "key": "PalEggDefaultHatchingTime",
+            "group": "Pal / General",
             "required": true,
             "default": "1"
         },
@@ -670,6 +717,7 @@
             "type": "select",
             "key": "DeathPenalty",
             "required": true,
+            "group": "World / Penalty",
             "options": [
                 {
                     "text": "No drops",
@@ -696,6 +744,7 @@
             "type": "text",
             "key": "DropItemMaxNum",
             "required": true,
+            "group": "World / Items",
             "default": "3000"
         },
         {
@@ -704,6 +753,7 @@
             "type": "text",
             "key": "DropItemAliveMaxHours",
             "required": true,
+            "group": "World / Items",
             "default": "1"
         },
         {
@@ -711,6 +761,7 @@
             "type": "text",
             "key": "BaseCampMaxNum",
             "required": true,
+            "group": "World / Basecamp",
             "default": "128"
         },
         {
@@ -719,6 +770,7 @@
             "type": "text",
             "key": "BaseCampWorkerMaxNum",
             "required": true,
+            "group": "World / Basecamp",
             "default": "15"
         },
         {
@@ -727,6 +779,7 @@
             "type": "text",
             "key": "BaseCampMaxNumInGuild",
             "required": true,
+            "group": "Multiplayer / Guild",
             "default": "4"
         },
         {
@@ -735,6 +788,7 @@
             "type": "text",
             "key": "GuildPlayerMaxNum",
             "required": true,
+            "group": "Multiplayer / Guild",
             "default": "20"
         },
         {
@@ -743,6 +797,7 @@
             "type": "select",
             "key": "bAutoResetGuildNoOnlinePlayers",
             "required": true,
+            "group": "Multiplayer / Guild",
             "options": [
                 {
                     "text": "Yes",
@@ -761,6 +816,7 @@
             "type": "text",
             "key": "AutoResetGuildTimeNoOnlinePlayers",
             "required": true,
+            "group": "Multiplayer / Guild",
             "default": "168"
         },
         {
@@ -769,6 +825,7 @@
             "type": "select",
             "key": "bEnableDefenseOtherGuildPlayer",
             "required": true,
+            "group": "Multiplayer / Guild",
             "options": [
                 {
                     "text": "Yes",
@@ -786,6 +843,7 @@
             "type": "select",
             "key": "bCanPickupOtherGuildDeathPenaltyDrop",
             "required": true,
+            "group": "Multiplayer / Guild",
             "options": [
                 {
                     "text": "Yes",
@@ -803,6 +861,7 @@
             "type": "select",
             "key": "bEnableFastTravel",
             "required": true,
+            "group": "World / Travel",
             "options": [
                 {
                     "text": "Yes",
@@ -821,6 +880,7 @@
             "type": "select",
             "key": "bEnableFastTravelOnlyBaseCamp",
             "required": true,
+            "group": "World / Travel",
             "options": [
                 {
                     "text": "Yes",
@@ -838,6 +898,7 @@
             "type": "select",
             "key": "bIsStartLocationSelectByMap",
             "required": true,
+            "group": "World / Travel",
             "options": [
                 {
                     "text": "Yes",
@@ -855,6 +916,7 @@
             "description": "Limits how densely structures can be built",
             "type": "select",
             "key": "bBuildAreaLimit",
+            "group": "Items, Structures & Resources / Structures",
             "required": true,
             "options": [
                 {
@@ -873,6 +935,7 @@
             "type": "select",
             "key": "bHardcore",
             "required": true,
+            "group": "Hardcore / General",
             "options": [
                 {
                     "text": "Yes",
@@ -891,6 +954,7 @@
             "type": "select",
             "key": "bCharacterRecreateInHardcore",
             "required": true,
+            "group": "Hardcore / Player",
             "options": [
                 {
                     "text": "Yes",
@@ -909,6 +973,7 @@
             "type": "text",
             "key": "DenyTechnologyList",
             "required": false,
+            "group": "Hardcore / Restrictions",
             "default": "",
             "placeholder": "technology1,technology2,technology3"
         },
@@ -917,6 +982,7 @@
             "type": "select",
             "key": "bPalLost",
             "required": true,
+            "group": "Hardcore / Penalty",
             "options": [
                 {
                     "text": "Yes",
@@ -934,6 +1000,7 @@
             "type": "select",
             "key": "bAllowEnhanceStat_Health",
             "required": true,
+            "group": "Hardcore / Stats",
             "options": [
                 {
                     "text": "Yes",
@@ -951,6 +1018,7 @@
             "type": "select",
             "key": "bAllowEnhanceStat_Attack",
             "required": true,
+            "group": "Hardcore / Stats",
             "options": [
                 {
                     "text": "Yes",
@@ -968,6 +1036,7 @@
             "type": "select",
             "key": "bAllowEnhanceStat_Stamina",
             "required": true,
+            "group": "Hardcore / Stats",
             "options": [
                 {
                     "text": "Yes",
@@ -985,6 +1054,7 @@
             "type": "select",
             "key": "bAllowEnhanceStat_Weight",
             "required": true,
+            "group": "Hardcore / Stats",
             "options": [
                 {
                     "text": "Yes",
@@ -1002,6 +1072,7 @@
             "type": "select",
             "key": "bAllowEnhanceStat_WorkSpeed",
             "required": true,
+            "group": "Hardcore / Stats",
             "options": [
                 {
                     "text": "Yes",
@@ -1019,6 +1090,7 @@
             "type": "text",
             "key": "ServerPlayerMaxNum",
             "required": true,
+            "group": "World / Limits",
             "default": "32"
         },
         {
@@ -1026,6 +1098,7 @@
             "type": "text",
             "key": "CoopPlayerMaxNum",
             "required": true,
+            "group": "World / Limits",
             "default": "4"
         },
         {
@@ -1034,6 +1107,7 @@
             "type": "text",
             "key": "ItemWeightRate",
             "required": true,
+            "group": "Items, Structures & Resources / Items",
             "default": "1"
         },
         {
@@ -1042,6 +1116,7 @@
             "type": "text",
             "key": "EquipmentDurabilityDamageRate",
             "required": true,
+            "group": "Items, Structures & Resources / Items",
             "default": "1"
         },
         {
@@ -1050,6 +1125,7 @@
             "type": "text",
             "key": "MaxBuildingLimitNum",
             "required": true,
+            "group": "Items, Structures & Resources / Structures",
             "default": "0"
         },
         {
@@ -1058,6 +1134,7 @@
             "type": "text",
             "key": "SupplyDropSpan",
             "required": true,
+            "group": "Items, Structures & Resources / Resources",
             "default": "180"
         },
         {
@@ -1066,6 +1143,7 @@
             "type": "text",
             "key": "ChatPostLimitPerMinute",
             "required": true,
+            "group": "Multiplayer / Communication",
             "default": "30"
         },
         {
@@ -1074,6 +1152,7 @@
             "type": "text",
             "key": "ItemCorruptionMultiplier",
             "required": true,
+            "group": "Items, Structures & Resources / Items",
             "default": "1"
         },
         {
@@ -1082,6 +1161,7 @@
             "type": "text",
             "key": "MonsterFarmActionSpeedRate",
             "required": true,
+            "group": "Pal / Production",
             "default": "1"
         },
         {
@@ -1089,6 +1169,7 @@
             "type": "select",
             "key": "bExistPlayerAfterLogout",
             "required": true,
+            "group": "Multiplayer / General",
             "options": [
                 {
                     "text": "Yes",
@@ -1106,6 +1187,7 @@
             "type": "select",
             "key": "bEnableNonLoginPenalty",
             "required": true,
+            "group": "Multiplayer / Penalty",
             "options": [
                 {
                     "text": "Yes",
@@ -1123,6 +1205,7 @@
             "type": "select",
             "key": "bEnableAimAssistPad",
             "required": true,
+            "group": "World / Aim Assist",
             "options": [
                 {
                     "text": "Yes",
@@ -1140,6 +1223,7 @@
             "type": "select",
             "key": "bEnableAimAssistKeyboard",
             "required": true,
+            "group": "World / Aim Assist",
             "options": [
                 {
                     "text": "Yes",
@@ -1157,6 +1241,7 @@
             "type": "select",
             "key": "bInvisibleOtherGuildBaseCampAreaFX",
             "required": true,
+            "group": "Multiplayer / Guild",
             "options": [
                 {
                     "text": "Yes",
@@ -1174,6 +1259,7 @@
             "type": "text",
             "key": "AutoTransferMasterThresholdDays",
             "required": true,
+            "group": "Multiplayer / Guild",
             "default": "14"
         },
         {
@@ -1182,6 +1268,7 @@
             "type": "text",
             "key": "GuildRejoinCooldownMinutes",
             "required": true,
+            "group": "Multiplayer / Guild",
             "default": "0"
         },
         {
@@ -1189,6 +1276,7 @@
             "type": "select",
             "key": "bAllowGlobalPalboxExport",
             "required": true,
+            "group": "World / Global Palbox",
             "options": [
                 {
                     "text": "Yes",
@@ -1206,6 +1294,7 @@
             "type": "select",
             "key": "bAllowGlobalPalboxImport",
             "required": true,
+            "group": "World / Global Palbox",
             "options": [
                 {
                     "text": "Yes",
@@ -1223,6 +1312,7 @@
             "type": "select",
             "key": "bEnableVoiceChat",
             "required": true,
+            "group": "Multiplayer / Communication",
             "options": [
                 {
                     "text": "Yes",
@@ -1241,6 +1331,7 @@
             "type": "text",
             "key": "VoiceChatMaxVolumeDistance",
             "required": true,
+            "group": "Multiplayer / Communication",
             "default": "3000"
         },
         {
@@ -1249,6 +1340,7 @@
             "type": "text",
             "key": "VoiceChatZeroVolumeDistance",
             "required": true,
+            "group": "Multiplayer / Communication",
             "default": "15000"
         },
         {
@@ -1256,6 +1348,7 @@
             "type": "select",
             "key": "bEnableBuildingPlayerUIdDisplay",
             "required": true,
+            "group": "Multiplayer / General",
             "options": [
                 {
                     "text": "Yes",
@@ -1273,6 +1366,7 @@
             "type": "select",
             "key": "bShowPlayerList",
             "required": true,
+            "group": "Multiplayer / General",
             "options": [
                 {
                     "text": "Yes",
@@ -1290,6 +1384,7 @@
             "type": "select",
             "key": "bIsShowJoinLeftMessage",
             "required": true,
+            "group": "Multiplayer / General",
             "options": [
                 {
                     "text": "Yes",
@@ -1307,6 +1402,7 @@
             "type": "select",
             "key": "bAllowClientMod",
             "required": true,
+            "group": "World / Mods",
             "options": [
                 {
                     "text": "Yes",
@@ -1325,6 +1421,7 @@
             "type": "text",
             "key": "BlockRespawnTime",
             "required": true,
+            "group": "Player / Respawn",
             "default": "0"
         },
         {
@@ -1332,6 +1429,7 @@
             "type": "text",
             "key": "RespawnPenaltyDurationThreshold",
             "required": true,
+            "group": "Player / Respawn",
             "default": "0"
         },
         {
@@ -1340,6 +1438,7 @@
             "type": "text",
             "key": "RespawnPenaltyTimeScale",
             "required": true,
+            "group": "Player / Respawn",
             "default": "2"
         }
     ],
