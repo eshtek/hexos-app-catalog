@@ -1,0 +1,276 @@
+[
+    {
+        "id": "media-management-general",
+        "urlpath": "/config/mediamanagement",
+        "requestInit": {
+            "method": "PUT",
+            "body": {
+                "autoUnmonitorPreviouslyDownloadedMovies": false,
+                "recycleBin": "",
+                "recycleBinCleanupDays": 7,
+                "downloadPropersAndRepacks": "preferAndUpgrade",
+                "createEmptyMovieFolders": false,
+                "deleteEmptyFolders": false,
+                "fileDate": "none",
+                "rescanAfterRefresh": "always",
+                "autoRenameFolders": false,
+                "pathsDefaultStatic": false,
+                "setPermissionsLinux": false,
+                "chmodFolder": "755",
+                "chownGroup": "",
+                "skipFreeSpaceCheckWhenImporting": false,
+                "minimumFreeSpaceWhenImporting": 100,
+                "copyUsingHardlinks": true,
+                "useScriptImport": false,
+                "scriptImportPath": "",
+                "importExtraFiles": false,
+                "extraFileExtensions": "srt",
+                "enableMediaInfo": true,
+                "id": 1
+            }
+        }
+    },
+    {
+        "id": "media-management-format",
+        "urlpath": "/config/mediamanagement",
+        "requestInit": {
+            "method": "PUT",
+            "body": {
+                "renameMovies": true,
+                "replaceIllegalCharacters": true,
+                "colonReplacementFormat": "smart",
+                // From trash guides using the movie database je;;yfin preset
+                "standardMovieFormat": "{Movie CleanTitle} {(Release Year)} [tmdbid-{TmdbId}] - {{Edition Tags}} {[MediaInfo 3D]}{[Custom Formats]}{[Quality Full]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo VideoCodec]}{-Release Group}",
+                "movieFolderFormat": "{Movie Title} ({Release Year})",
+                "id": 1
+            }
+        }
+    },
+    {
+        "id": "host-config",
+        "urlpath": "/config/host",
+        "requestInit": {
+            "method": "PUT",
+            "body": {
+                "bindAddress": "*",
+                "port": 7878,
+                "sslPort": 9898,
+                "enableSsl": false,
+                "launchBrowser": true,
+                "authenticationMethod": "forms",
+                "authenticationRequired": "disabledForLocalAddresses",
+                "analyticsEnabled": false,
+                "username": "",
+                "password": "",
+                "passwordConfirmation": "",
+                "logLevel": "debug",
+                "logSizeLimit": 1,
+                "consoleLogLevel": "",
+                "branch": "develop",
+                "apiKey": "",
+                "sslCertPath": "",
+                "sslCertPassword": "",
+                "urlBase": "",
+                "instanceName": "Radarr",
+                "applicationUrl": "",
+                "updateAutomatically": false,
+                "updateMechanism": "docker",
+                "updateScriptPath": "",
+                "proxyEnabled": false,
+                "proxyType": "http",
+                "proxyHostname": "",
+                "proxyPort": 8080,
+                "proxyUsername": "",
+                "proxyPassword": "",
+                "proxyBypassFilter": "",
+                "proxyBypassLocalAddresses": true,
+                "certificateValidation": "enabled",
+                "backupFolder": "Backups",
+                "backupInterval": 7,
+                "backupRetention": 28,
+                "trustCgnatIpAddresses": false,
+                "id": 1
+            }
+        }
+    },
+    {
+        "id": "root-folder",
+        "urlpath": "/rootFolder",
+        "requestInit": {
+            "method": "POST",
+            "body": {
+                "path": "/movies"
+            }
+        }
+    },
+    {
+        "id": "indexer-config",
+        "urlpath": "/config/indexer",
+        "requestInit": {
+            "method": "PUT",
+            "body": {
+                "minimumAge": 0,
+                "maximumSize": 0,
+                "retention": 0,
+                "rssSyncInterval": 30,
+                "preferIndexerFlags": false,
+                "availabilityDelay": 0,
+                "allowHardcodedSubs": true,
+                "whitelistedHardcodedSubs": "",
+                "id": 1
+            }
+        }
+    },
+    {
+        "id": "download-client-qbittorrent",
+        "urlpath": "/downloadclient",
+        "requestInit": {
+            "method": "POST",
+            "body": {
+                "enable": true,
+                "protocol": "torrent",
+                "priority": 1,
+                "removeCompletedDownloads": true,
+                "removeFailedDownloads": true,
+                "name": "qBittorrent",
+                "fields": [
+                    {
+                        "name": "host",
+                        "value": ""
+                    },
+                    {
+                        "name": "port",
+                        "value": "31189"
+                    },
+                    {
+                        "name": "useSsl",
+                        "value": false
+                    },
+                    {
+                        "name": "urlBase"
+                    },
+                    {
+                        "name": "apiKey"
+                    },
+                    {
+                        "name": "username"
+                    },
+                    {
+                        "name": "password"
+                    },
+                    {
+                        "name": "movieCategory",
+                        "value": "radarr"
+                    },
+                    {
+                        "name": "movieImportedCategory"
+                    },
+                    {
+                        "name": "recentMoviePriority",
+                        "value": 0
+                    },
+                    {
+                        "name": "olderMoviePriority",
+                        "value": 0
+                    },
+                    {
+                        "name": "initialState",
+                        "value": 0
+                    },
+                    {
+                        "name": "sequentialOrder",
+                        "value": false
+                    },
+                    {
+                        "name": "firstAndLast",
+                        "value": false
+                    },
+                    {
+                        "name": "contentLayout",
+                        "value": 0
+                    }
+                ],
+                "implementationName": "qBittorrent",
+                "implementation": "QBittorrent",
+                "configContract": "QBittorrentSettings",
+                "infoLink": "https://wiki.servarr.com/radarr/supported#qbittorrent",
+                "tags": []
+            }
+        }
+    },
+    {
+        "id": "jellyfin-connection",
+        "urlpath": "/notification",
+        "requestInit": {
+            "method": "POST",
+            "body": {
+                "onGrab": true,
+                "onDownload": true,
+                "onUpgrade": true,
+                "onRename": true,
+                "onMovieAdded": false,
+                "onMovieDelete": true,
+                "onMovieFileDelete": true,
+                "onMovieFileDeleteForUpgrade": true,
+                "onHealthIssue": false,
+                "includeHealthWarnings": false,
+                "onHealthRestored": false,
+                "onApplicationUpdate": true,
+                "onManualInteractionRequired": false,
+                "supportsOnGrab": true,
+                "supportsOnDownload": true,
+                "supportsOnUpgrade": true,
+                "supportsOnRename": true,
+                "supportsOnMovieAdded": false,
+                "supportsOnMovieDelete": true,
+                "supportsOnMovieFileDelete": true,
+                "supportsOnMovieFileDeleteForUpgrade": true,
+                "supportsOnHealthIssue": true,
+                "supportsOnHealthRestored": true,
+                "supportsOnApplicationUpdate": true,
+                "supportsOnManualInteractionRequired": false,
+                "name": "Emby / Jellyfin",
+                "fields": [
+                    {
+                        "name": "host",
+                        "value": "template-host" // This is a placeholder value that will be replaced with the actual host value from the user input. 
+                    },
+                    {
+                        "name": "port",
+                        "value": 8096
+                    },
+                    {
+                        "name": "useSsl",
+                        "value": false
+                    },
+                    {
+                        "name": "urlBase"
+                    },
+                    {
+                        "name": "apiKey",
+                        "value": "template-api-key" // This is a placeholder value that will be replaced with the actual API key value from the user input.
+                    },
+                    {
+                        "name": "notify",
+                        "value": false
+                    },
+                    {
+                        "name": "updateLibrary",
+                        "value": true
+                    },
+                    {
+                        "name": "mapFrom"
+                    },
+                    {
+                        "name": "mapTo"
+                    }
+                ],
+                "implementationName": "Emby / Jellyfin",
+                "implementation": "MediaBrowser",
+                "configContract": "MediaBrowserSettings",
+                "infoLink": "https://wiki.servarr.com/radarr/supported#mediabrowser",
+                "tags": []
+                }
+            }
+        }
+    ]
