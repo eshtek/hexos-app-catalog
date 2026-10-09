@@ -54,6 +54,8 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Uptime Kuma](uptime-kuma.json) | Self-hosted uptime monitoring |
+| [Vaultwarden](vaultwarden.json) | Bitwarden-compatible password manager |
 | [Warracker](warracker.json) | warranty tracker |
 | [Wiki.js](wiki-js.json) | Open source Wiki software |
 
