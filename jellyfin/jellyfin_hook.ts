@@ -3,6 +3,9 @@ import type { HookContext } from "../_lib/hook_context";
 const DEVICE_ID = "hexos-jellyfin-setup";
 const CLIENT_HEADER = `MediaBrowser Client="HexOS", Device="Setup", DeviceId="${DEVICE_ID}", Version="1.0.0"`;
 
+/** The name of the API key the now-playing widget reads sessions with. */
+const WIDGET_KEY_NAME = "HexOS";
+
 const AUTO_RETRIES = 5;
 const AUTO_RETRY_DELAY_MS = 5000;
 const LIBRARY_PACE_MS = 5000;
@@ -51,6 +54,36 @@ export async function afterInstall(ctx: HookContext) {
   }
   await setServerName(ctx, token, serverName);
   await createLibraries(ctx, token);
+  await ensureWidgetKey(ctx, token);
+}
+
+/**
+ * The API key the now-playing widget reads sessions with (jellyfin/widget_now_playing.ts finds it
+ * by name in Jellyfin's database). Made once: a rerun finds it and leaves it. A failure here costs
+ * only the widget, which then asks for a key, so it never fails the setup.
+ */
+async function ensureWidgetKey(ctx: HookContext, token: string): Promise<void> {
+  const headers = { "Authorization": `MediaBrowser Token="${token}"` };
+  try {
+    const listResp = await fetch(`${ctx.baseUrl}/Auth/Keys`, { headers, signal: AbortSignal.timeout(10000) });
+    if (!listResp.ok) {
+      ctx.log(`Auth/Keys returned ${listResp.status}; the widget will ask for an API key.`);
+      return;
+    }
+    const keys = await listResp.json() as { Items?: Array<{ AppName?: string }> };
+    if (keys.Items?.some((key) => key.AppName === WIDGET_KEY_NAME)) {
+      ctx.log("Widget API key already exists.");
+      return;
+    }
+    const createResp = await fetch(`${ctx.baseUrl}/Auth/Keys?app=${WIDGET_KEY_NAME}`, {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(10000),
+    });
+    ctx.log(createResp.ok ? "Created the widget API key." : `Creating the widget API key returned ${createResp.status}.`);
+  } catch (e) {
+    ctx.log(`Could not create the widget API key: ${e}`);
+  }
 }
 
 function getServerName(ctx: HookContext): string {
@@ -144,9 +177,9 @@ async function authenticate(ctx: HookContext, username: string, password: string
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      // Jellyfin 12 dropped X-Emby-Authorization; 10.8+ reads Authorization
-      Authorization: CLIENT_HEADER,
-      "X-Emby-Authorization": CLIENT_HEADER,
+      // Jellyfin dropped the legacy X-Emby-Authorization header (EnableLegacyAuthorization is off
+      // since its 2026-05-31 migration); without client details in Authorization the sign-in is a 400.
+      "Authorization": CLIENT_HEADER,
     },
     body: JSON.stringify({ Username: username, Pw: password }),
     signal: AbortSignal.timeout(10000),

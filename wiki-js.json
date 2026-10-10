@@ -22,7 +22,7 @@
   ],
   "app_values": {
     "wiki_js": {
-      "db_password": "$RANDOM_STRING(7)",
+      "db_password": "$RANDOM_STRING(16)",
       "additional_envs": []
     },
     "network": {

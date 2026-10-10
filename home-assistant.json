@@ -24,7 +24,7 @@
   ],
   "app_values": {
     "home_assistant": {
-      "db_password": "$RANDOM_STRING(7)"
+      "db_password": "$RANDOM_STRING(16)"
     },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/home-assistant/config)",

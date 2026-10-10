@@ -10,7 +10,7 @@
     ],
     "specifications": [
       "2CORE",
-      "1024MB"
+      "1GB"
     ],
     "permissions": [
       "READ_WRITE_LOCATIONS"
@@ -31,7 +31,7 @@
     "mealie": {
       "allow_signup": true,
       "base_url": "http://$SERVER_LAN_IP:30111/",
-      "db_password": "$RANDOM_STRING(7)",
+      "db_password": "$RANDOM_STRING(16)",
       "default_group": "Home"
     },
     "network": {

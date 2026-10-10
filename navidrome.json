@@ -175,7 +175,7 @@
       "Music"
     ],
     "specifications": [
-      "2CORE", "1024MB"],
+      "2CORE", "1GB"],
     "permissions": [
       "READ_WRITE_LOCATIONS"
     ],

@@ -22,8 +22,8 @@
   ],
   "app_values": {
     "blinko": {
-      "db_password": "$RANDOM_STRING(7)",
-      "nextauth_secret": "$RANDOM_STRING(7)",
+      "db_password": "$RANDOM_STRING(16)",
+      "nextauth_secret": "$RANDOM_STRING(32)",
       "additional_envs": []
     },
     "network": {
