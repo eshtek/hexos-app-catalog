@@ -1,0 +1,59 @@
+{
+  "version": 4,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "1GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [31050]
+  },
+  "installation_questions": [
+    {
+      "question": "WebUI Port",
+      "description": "Port Uptime Kuma listens on.",
+      "type": "number",
+      "key": "web_port",
+      "required": true,
+      "default": 31050
+    },
+    {
+      "question": "Enable Docker Container Monitoring",
+      "description": "Mounts the Docker socket so Uptime Kuma can monitor container status directly. Grants the container visibility into your host's Docker daemon - only enable this if you actually plan to use that monitor type.",
+      "type": "boolean",
+      "key": "mount_docker_socket",
+      "required": false,
+      "default": true
+    }
+  ],
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(ApplicationsPerformance)/uptime-kuma/data", "snapshot": { "id": "data" } }
+  ],
+  "app_values": {
+    "uptime_kuma": {
+      "mount_docker_socket": "$QUESTION(mount_docker_socket)",
+      "additional_envs": []
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$QUESTION(web_port)"
+      },
+      "networks": [],
+      "host_network": false
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/uptime-kuma/data)"
+    },
+    "labels": [],
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  }
+}

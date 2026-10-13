@@ -1,0 +1,113 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "1GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30032]
+  },
+  "installation_questions": [
+    {
+      "question": "Input your external access address for VaultWarden",
+      "description": "Do not modify this unless you have setup VaultWarden for external use. Input the full external URL clients will use, including the https:// scheme and no trailing slash - e.g. https://vault.yourdomain.tld (not just vault.yourdomain.tld).",
+      "type": "text",
+      "key": "domain",
+      "required": true,
+      "default": "https://$SERVER_LAN_IP:30032"
+    },
+    {
+      "question": "Set a password for the admin panel",
+      "description": "Leaving this blank disables the admin panel. We reccomend disabling the admin panel when it no longer needs modifications",
+      "type": "password",
+      "key": "admin_token",
+      "required": false,
+      "default": "$RANDOM_STRING(64)"
+    },
+    {
+      "question": "Enable new user registration",
+      "description": "It is recommended to disable user registration after creating all the users needed.",
+      "type": "select",
+      "key": "SIGNUPS_ALLOWED",
+      "required": true,
+      "options": [
+          {
+              "text": "Yes",
+              "value": "True"
+          },
+          {
+              "text": "No",
+              "value": "False"
+          }
+      ],
+      "default": "True"
+    }
+  ],
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(ApplicationsPerformance)/vaultwarden/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/vaultwarden/postgres", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
+  ],
+  "app_values": {
+    "vaultwarden": {
+      "db_password": "$RANDOM_STRING(32)",
+      "admin_token": "$QUESTION(admin_token)",
+      "enable_websocket": true,
+      "additional_envs": [
+        {
+          "name": "SIGNUPS_ALLOWED",
+          "value": "$QUESTION(SIGNUPS_ALLOWED)"
+        }
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "30032"
+      },
+      "certificate_id": 1,
+      "domain": "$QUESTION(domain)",
+      "networks": []
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/vaultwarden/data)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/vaultwarden/postgres)"
+    },
+    "labels": [
+      {
+        "key": "homepage.group",
+        "value": "Infrastructure",
+        "containers": ["vaultwarden"]
+      },
+      {
+        "key": "homepage.name",
+        "value": "Vaultwarden",
+        "containers": ["vaultwarden"]
+      },
+      {
+        "key": "homepage.icon",
+        "value": "vaultwarden.png",
+        "containers": ["vaultwarden"]
+      },
+      {
+        "key": "homepage.href",
+        "value": "$QUESTION(domain)",
+        "containers": ["vaultwarden"]
+      },
+      {
+        "key": "homepage.description",
+        "value": "Password Manager",
+        "containers": ["vaultwarden"]
+      }
+    ],
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  }
+}
