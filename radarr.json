@@ -1,14 +1,26 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "1.2.0",
+    "changeLog": "Pinned the web port, mounted the qBittorrent downloads at /downloads, added the Connect to qBittorrent link, and moved to the v6 install script format."
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Downloads", "Movies"],
-    "specifications": ["2CORE", "200MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [7878]
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Downloads",
+      "Movies"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30025
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -30,14 +42,22 @@
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/radarr/config",
-      "snapshot": { "id": "config" }
+      "snapshot": {
+        "id": "config"
+      }
     }
   ],
   "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30025
+      }
+    },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/radarr/config)",
       "additional_storage": [
-        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /downloads)",
         "$MOUNTED_HOST_PATH($LOCATION(Movies), /movies)"
       ]
     },
@@ -47,5 +67,34 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "connect-qbittorrent",
+      "title": "Connect to qBittorrent",
+      "description": "Use qBittorrent on this server to download movies",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        }
+      ],
+      "rerun": "converge",
+      "entrypoint": "connectQbittorrent",
+      "timeout": 600,
+      "script": "arr/connect_qbittorrent.ts"
+    }
+  ]
 }

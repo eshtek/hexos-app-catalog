@@ -1,14 +1,23 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "1.2.0",
+    "changeLog": "Pinned the web port, added the Connect to Radarr, Sonarr, and Lidarr links, and moved to the v6 install script format"
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance"],
-    "specifications": ["2CORE", "200MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [9696]
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30050
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -16,10 +25,18 @@
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/prowlarr/config",
-      "snapshot": { "id": "config" }
+      "snapshot": {
+        "id": "config"
+      }
     }
   ],
   "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30050
+      }
+    },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/prowlarr/config)"
     },
@@ -29,5 +46,88 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Send Prowlarr's indexers to Radarr",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "entrypoint": "connectRadarr",
+      "timeout": 600,
+      "script": "prowlarr/connect_arrs.ts"
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Send Prowlarr's indexers to Sonarr",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "entrypoint": "connectSonarr",
+      "timeout": 600,
+      "script": "prowlarr/connect_arrs.ts"
+    },
+    {
+      "id": "connect-lidarr",
+      "title": "Connect to Lidarr",
+      "description": "Send Prowlarr's indexers to Lidarr",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "lidarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "lidarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "entrypoint": "connectLidarr",
+      "timeout": 600,
+      "script": "prowlarr/connect_arrs.ts"
+    }
+  ]
 }

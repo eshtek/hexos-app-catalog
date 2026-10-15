@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "1.2.0",
+    "changeLog": "Mounted Shows at /shows to match Sonarr (the old /tv mount stays so an existing install's path mapping keeps working), added the Connect to Radarr and Sonarr links, and moved to the v6 install script format"
   },
   "requirements": {
     "locations": [
@@ -18,7 +18,9 @@
     "permissions": [
       "READ_WRITE_LOCATIONS"
     ],
-    "ports": [30046]
+    "ports": [
+      30046
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -38,7 +40,9 @@
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/bazarr/config",
-      "snapshot": { "id": "config" }
+      "snapshot": {
+        "id": "config"
+      }
     }
   ],
   "app_values": {
@@ -47,6 +51,7 @@
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)",
         "$MOUNTED_HOST_PATH($LOCATION(Movies), /movies)",
+        "$MOUNTED_HOST_PATH($LOCATION(Shows), /shows)",
         "$MOUNTED_HOST_PATH($LOCATION(Shows), /tv)"
       ]
     },
@@ -62,5 +67,61 @@
         "memory": "$MEMORY(5%, 1024)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Let Bazarr fetch subtitles for the movies Radarr manages",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "bazarr"
+        }
+      ],
+      "rerun": "converge",
+      "entrypoint": "connectRadarr",
+      "timeout": 600,
+      "script": "bazarr/connect_arrs.ts"
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Let Bazarr fetch subtitles for the shows Sonarr manages",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "bazarr"
+        }
+      ],
+      "rerun": "converge",
+      "entrypoint": "connectSonarr",
+      "timeout": 600,
+      "script": "bazarr/connect_arrs.ts"
+    }
+  ]
 }
