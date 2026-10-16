@@ -1,0 +1,47 @@
+{
+  "version": 4,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial release"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "Downloads"
+    ],
+    "specifications": [
+      "1CORE",
+      "100MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      6789
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/nzbget/config",
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nzbget/config)",
+      "downloads": "$HOST_PATH($LOCATION(Downloads)/nzbget)"
+    }
+  }
+}
