@@ -9,7 +9,8 @@
 // holds queued refuses a run before anything is written. FileFlows copies its result into a hidden
 // staging folder beside the media, never next to the user's files, and the hook gives the copy its
 // final name with a hard link the kernel refuses when a file of that name exists. Nothing beside
-// the user's media is ever replaced or deleted; the only file the hook removes is its own staging copy.
+// the user's media is ever replaced or deleted, and the only thing the hook removes is the staging
+// name of a copy that already carries its final name.
 import { existsSync, linkSync, lstatSync, mkdirSync, rmSync, statSync } from "node:fs";
 
 import type { HookContext } from "../_lib/hook_context";
@@ -297,16 +298,14 @@ async function listByStatus(ctx: HookContext, base: string, status: number): Pro
 }
 
 /**
- * Whether a record is one of the selected files: its name is the file's container path, or, for a
- * name with no leading slash (a library's own record names the file relative to the library), the
- * tail of one. An absolute name is matched whole, so a like-named file under another mount is not
- * taken for this one; a relative name that matches two mounts refuses the run, the safe way round.
+ * Whether a record is one of the selected files: its name is the file's container path, which is
+ * how manually-add records a file. A library's own record names the file relative to the library
+ * and is not matched: a like-named file elsewhere must not refuse this one, and a library
+ * converting the same file at the same time writes its own output where the library says, never
+ * where this flow does.
  */
 function recordMatches(paths: Set<string>, record: LibraryFileRecord): boolean {
-  if (paths.has(record.dn)) return true;
-  if (record.dn.startsWith("/") || record.dn === "") return false;
-  for (const path of paths) if (path.endsWith(`/${record.dn}`)) return true;
-  return false;
+  return paths.has(record.dn);
 }
 
 /** FileFlows answers a refused request with the reason as text ("Unauthorized: Invalid signature"). */
@@ -397,22 +396,38 @@ function ensureStagingDir(ctx: HookContext, staging: string): void {
 }
 
 /**
- * Removes a staging copy, and only that: a regular file of the expected name inside the hidden
- * staging folder (checked above to be a plain directory), written there by this flow. Anything else
- * at that path is left where it is and the run fails naming it.
+ * Nothing at a staging path is ever removed on the strength of its name: a copy an earlier run left
+ * there, or anything else, refuses the run naming it, since this run cannot tell its own flow's
+ * output from a file someone put there.
  */
-function removeStagingCopy(ctx: HookContext, staging: string): void {
-  let kind: ReturnType<typeof lstatSync>;
+function refuseIfStaged(ctx: HookContext, staging: string): void {
+  if (!existsSync(staging) && !isLink(staging)) return;
+  ctx.fail("A file already sits where HexOS would stage this conversion", [
+    { label: "Path", value: `${STAGING_DIR}/${staging.split("/").pop()}` },
+    { label: "Fix", value: "Move or remove it (an earlier conversion may have left it), then try again" },
+  ]);
+}
+
+function isLink(path: string): boolean {
   try {
-    kind = lstatSync(staging);
+    return lstatSync(path).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The one removal this script makes: the staging name of a copy that now also carries its final
+ * name, the same inode under both, checked right before the unlink. The data stays under the final
+ * name; only the extra name goes.
+ */
+function dropStagingName(staging: string, final: string): void {
+  try {
+    const a = lstatSync(staging);
+    const b = lstatSync(final);
+    if (!a.isFile() || a.ino !== b.ino || a.dev !== b.dev) return;
   } catch {
     return;
-  }
-  if (!kind.isFile()) {
-    ctx.fail("Something other than a converted copy sits where HexOS stages conversions", [
-      { label: "Path", value: `${STAGING_DIR}/${staging.split("/").pop()}` },
-      { label: "Fix", value: "Move or remove it, then try again" },
-    ]);
   }
   rmSync(staging, { force: true });
 }
@@ -542,13 +557,12 @@ export async function run(ctx: HookContext) {
     });
   }
 
-  // 3. Make the staging folder and clear a copy an earlier run left there for this same source (a
-  // run abandoned at its deadline whose conversion FileFlows then finished): FileFlows is not busy
-  // with these files, so nothing is writing it, and it is this flow's own output, not the user's.
+  // 3. Make the staging folder, and refuse a staging path something already sits at (a copy a run
+  // abandoned at its deadline left there, or anything else): nothing is removed to make room.
   assertInTime();
   for (const out of outputs.values()) {
     ensureStagingDir(ctx, out.staging);
-    removeStagingCopy(ctx, out.staging);
+    refuseIfStaged(ctx, out.staging);
   }
 
   // 4. Enqueue
@@ -576,9 +590,10 @@ export async function run(ctx: HookContext) {
   const missing: string[] = [];
   /**
    * The finished copy takes its final name once, through a link the kernel refuses if the name is
-   * taken (the same copy already linked there, by an overlapping run, counts as done). The staging
-   * copy goes once it is linked or refused; it is this run's own file. A staging copy that is not
-   * there when FileFlows says the file is done is a failure, never a silent success.
+   * taken (the same copy already linked there, by an overlapping run, counts as done). Once the
+   * copy carries its final name, its staging name goes. A copy refused its final name stays in the
+   * staging folder and is named to the user, never removed. A staging copy that is not there when
+   * FileFlows says the file is done is a failure, never a silent success.
    */
   const handOver = (containerPath: string): void => {
     if (handedOver.has(containerPath)) return;
@@ -600,10 +615,14 @@ export async function run(ctx: HookContext) {
           return false;
         }
       })();
-      if (!sameFile && !blocked.includes(name)) blocked.push(name);
+      if (!sameFile) {
+        if (!blocked.includes(name)) blocked.push(name);
+        handedOver.add(containerPath);
+        return;
+      }
     }
     handedOver.add(containerPath);
-    removeStagingCopy(ctx, out.staging);
+    dropStagingName(out.staging, out.final);
   };
 
   for (;;) {
@@ -662,9 +681,9 @@ export async function run(ctx: HookContext) {
         ]);
       }
       if (blocked.length > 0) {
-        ctx.fail("A file of the converted copy's name appeared while converting; the copy was discarded", [
+        ctx.fail("A file of the converted copy's name appeared while converting; the copy is waiting in the staging folder", [
           { label: "Files", value: blocked.join(", ") },
-          { label: "Fix", value: "Rename or move that file and run the conversion again" },
+          { label: "Fix", value: `Find the copy in ${STAGING_DIR} beside the original and move it to the name you want` },
         ]);
       }
       if (failed.length > 0) {

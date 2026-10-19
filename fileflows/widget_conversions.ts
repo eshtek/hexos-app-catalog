@@ -5,8 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import type { WidgetContext, WidgetListEntry, WidgetQueryResult } from "../_lib/widget_context";
 
 // What FileFlows is converting now, and what it finished last, from FileFlows' own database,
-// read-only. Its REST API answers only on a licensed install with the API switched on, so a free
-// install, the usual one here, has no API to ask.
+// read-only. The install's partner token opens the REST API too (convert_to_mp4.ts uses it), and
+// reading the card from the API instead of the database is a follow-up.
 //
 // The database says which files are converting and when each finished; how far along one is lives
 // only in its runner log, which FileFlows names after the file and adds to every few seconds.
