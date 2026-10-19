@@ -40,6 +40,8 @@ const STATUS_FAILED = 4;
 const BUSY_STATUSES = [STATUS_ON_HOLD, STATUS_DISABLED, STATUS_OUT_OF_SCHEDULE, STATUS_UNPROCESSED, STATUS_PROCESSING];
 /** A list-all page is 500 records unless the server's setting says otherwise; pages are read until one brings nothing new. */
 const MAX_PAGES = 200;
+/** The longest file name the usual dataset accepts, in bytes; the staging copy's name is the source's plus `.mp4`. */
+const MAX_NAME_BYTES = 255;
 
 const POLL_INTERVAL_MS = 15000;
 /** Under the declared timeout (24 h) by a margin, so this run stops itself before the platform gives up on it. */
@@ -285,17 +287,25 @@ async function listByStatus(ctx: HookContext, base: string, status: number): Pro
       seen.set(record.u, record);
       fresh++;
     }
-    if (fresh === 0) break;
+    if (fresh === 0) return [...seen.values()];
   }
-  return [...seen.values()];
+  // Past the cap the list is not known whole, and an unseen record could be one of these files
+  ctx.fail("FileFlows holds more records than this action can check", [
+    { label: "Details", value: `More than ${MAX_PAGES} pages of files with one status` },
+    { label: "Fix", value: "Clear finished files from FileFlows' library, then try again" },
+  ]);
 }
 
-/** Whether a record is one of the selected files: its name is the file's container path, or that path's tail (a library's own record names the file relative to the library). */
+/**
+ * Whether a record is one of the selected files: its name is the file's container path, or, for a
+ * name with no leading slash (a library's own record names the file relative to the library), the
+ * tail of one. An absolute name is matched whole, so a like-named file under another mount is not
+ * taken for this one; a relative name that matches two mounts refuses the run, the safe way round.
+ */
 function recordMatches(paths: Set<string>, record: LibraryFileRecord): boolean {
   if (paths.has(record.dn)) return true;
-  const tail = record.dn.replace(/^\/+/, "");
-  if (!tail) return false;
-  for (const path of paths) if (path.endsWith(`/${tail}`)) return true;
+  if (record.dn.startsWith("/") || record.dn === "") return false;
+  for (const path of paths) if (path.endsWith(`/${record.dn}`)) return true;
   return false;
 }
 
@@ -450,6 +460,12 @@ export async function run(ctx: HookContext) {
       ]);
     }
     if (existsSync(local)) collisions.push(`${file.name}: ${target.split("/").pop()} already exists next to it`);
+    if (Buffer.byteLength(`${file.name}.mp4`) > MAX_NAME_BYTES) {
+      ctx.fail("A file's name is too long for its converted copy to be staged", [
+        { label: "File", value: file.name },
+        { label: "Fix", value: "Shorten the file's name, then try again" },
+      ]);
+    }
     outputs.set(file.containerPath as string, { final: local, staging: stagingPathFor(localPathFor(ctx, file.path) as string) });
   }
   if (collisions.length > 0) {
