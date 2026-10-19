@@ -18,17 +18,28 @@ const FLOW_NAME = "HexOS Convert to MP4";
 /** The hidden folder beside the media where FileFlows puts the copy before it takes its final name. */
 const STAGING_DIR = ".hexos-converting";
 
-/** The staging copy for a converted file, as this script sees it: the final name, inside the staging folder. */
-function stagingPathFor(localFinalPath: string): string {
-  const slash = localFinalPath.lastIndexOf("/");
-  return `${localFinalPath.slice(0, slash)}/${STAGING_DIR}/${localFinalPath.slice(slash + 1)}`;
+/**
+ * The staging copy for a source file, as this script sees it: the source's whole name plus `.mp4`,
+ * inside the staging folder, so two sources that would share one final name (film.mkv and
+ * film.avi) never share a staging copy.
+ */
+function stagingPathFor(localSourcePath: string): string {
+  const slash = localSourcePath.lastIndexOf("/");
+  return `${localSourcePath.slice(0, slash)}/${STAGING_DIR}/${localSourcePath.slice(slash + 1)}.mp4`;
 }
 
-// Library-file statuses (from /api/library-file/status)
+// Library-file statuses (from /api/library-file/status); the negative ones are queue entries
+// FileFlows is holding back, which are work in progress all the same
+const STATUS_ON_HOLD = -3;
+const STATUS_DISABLED = -2;
+const STATUS_OUT_OF_SCHEDULE = -1;
 const STATUS_UNPROCESSED = 0;
 const STATUS_PROCESSED = 1;
 const STATUS_PROCESSING = 2;
 const STATUS_FAILED = 4;
+const BUSY_STATUSES = [STATUS_ON_HOLD, STATUS_DISABLED, STATUS_OUT_OF_SCHEDULE, STATUS_UNPROCESSED, STATUS_PROCESSING];
+/** A list-all page is 500 records unless the server's setting says otherwise; pages are read until one brings nothing new. */
+const MAX_PAGES = 200;
 
 const POLL_INTERVAL_MS = 15000;
 /** Under the declared timeout (24 h) by a margin, so this run stops itself before the platform gives up on it. */
@@ -226,7 +237,7 @@ function flowDefinition(): Record<string, unknown> {
         Model: {
           InputFile: "",
           DestinationPath: `{folder.Orig.FullName}/${STAGING_DIR}`,
-          DestinationFile: "{file.Orig.FileNameNoExtension}.mp4",
+          DestinationFile: "{file.Orig.FileName}.mp4",
           CopyFolder: false,
           AdditionalFiles: [],
           AdditionalFilesFromOriginal: false,
@@ -258,10 +269,34 @@ function localPathFor(ctx: HookContext, hostPath: string): string | undefined {
   return mount ? `${mount.localPath}${hostPath.slice(mount.hostPath.length)}` : undefined;
 }
 
+/** Every record of a status, page by page: list-all answers one page (500 by default), and a busy library has more. */
 async function listByStatus(ctx: HookContext, base: string, status: number): Promise<LibraryFileRecord[]> {
-  return ctx.partnerRequestJson<LibraryFileRecord[]>("fileflows", `${base}/api/library-file/list-all?status=${status}`, {
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
+  const seen = new Map<string, LibraryFileRecord>();
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const records = await ctx.partnerRequestJson<LibraryFileRecord[]>(
+      "fileflows",
+      `${base}/api/library-file/list-all?status=${status}&page=${page}`,
+      { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) },
+    );
+    if (!Array.isArray(records)) break;
+    let fresh = 0;
+    for (const record of records) {
+      if (seen.has(record.u)) continue;
+      seen.set(record.u, record);
+      fresh++;
+    }
+    if (fresh === 0) break;
+  }
+  return [...seen.values()];
+}
+
+/** Whether a record is one of the selected files: its name is the file's container path, or that path's tail (a library's own record names the file relative to the library). */
+function recordMatches(paths: Set<string>, record: LibraryFileRecord): boolean {
+  if (paths.has(record.dn)) return true;
+  const tail = record.dn.replace(/^\/+/, "");
+  if (!tail) return false;
+  for (const path of paths) if (path.endsWith(`/${tail}`)) return true;
+  return false;
 }
 
 /** FileFlows answers a refused request with the reason as text ("Unauthorized: Invalid signature"). */
@@ -272,9 +307,9 @@ async function reason(response: Response): Promise<string> {
 
 async function recordsFor(ctx: HookContext, base: string, paths: Set<string>): Promise<LibraryFileRecord[]> {
   const all: LibraryFileRecord[] = [];
-  for (const status of [STATUS_UNPROCESSED, STATUS_PROCESSING, STATUS_PROCESSED, STATUS_FAILED]) {
+  for (const status of [...BUSY_STATUSES, STATUS_PROCESSED, STATUS_FAILED]) {
     for (const record of await listByStatus(ctx, base, status)) {
-      if (paths.has(record.dn)) all.push(record);
+      if (recordMatches(paths, record)) all.push(record);
     }
   }
   return all;
@@ -331,9 +366,30 @@ interface Output {
 }
 
 /**
+ * The staging folder beside a file's folder, made if absent. It must be a plain directory this
+ * script can trust: a symlink or a file of that name would send FileFlows' copy, and the removal
+ * below, somewhere else, so either fails the run naming it.
+ */
+function ensureStagingDir(ctx: HookContext, staging: string): void {
+  const dir = staging.slice(0, staging.lastIndexOf("/"));
+  let kind: ReturnType<typeof lstatSync> | undefined;
+  try {
+    kind = lstatSync(dir);
+  } catch {
+    mkdirSync(dir);
+    return;
+  }
+  if (kind.isDirectory() && !kind.isSymbolicLink()) return;
+  ctx.fail("Something other than a folder sits where HexOS stages conversions", [
+    { label: "Path", value: `${dir.split("/").slice(-2).join("/")}` },
+    { label: "Fix", value: "Move or remove it, then try again" },
+  ]);
+}
+
+/**
  * Removes a staging copy, and only that: a regular file of the expected name inside the hidden
- * staging folder, written there by this flow. Anything else at that path is left where it is and
- * the run fails naming it.
+ * staging folder (checked above to be a plain directory), written there by this flow. Anything else
+ * at that path is left where it is and the run fails naming it.
  */
 function removeStagingCopy(ctx: HookContext, staging: string): void {
   let kind: ReturnType<typeof lstatSync>;
@@ -394,7 +450,7 @@ export async function run(ctx: HookContext) {
       ]);
     }
     if (existsSync(local)) collisions.push(`${file.name}: ${target.split("/").pop()} already exists next to it`);
-    outputs.set(file.containerPath as string, { final: local, staging: stagingPathFor(local) });
+    outputs.set(file.containerPath as string, { final: local, staging: stagingPathFor(localPathFor(ctx, file.path) as string) });
   }
   if (collisions.length > 0) {
     ctx.fail("A converted copy would overwrite an existing file", [
@@ -417,7 +473,7 @@ export async function run(ctx: HookContext) {
   const containerPaths = files.map((f) => f.containerPath as string);
   const pathSet = new Set(containerPaths);
   const existingRecords = await recordsFor(ctx, base, pathSet);
-  const busy = existingRecords.filter((r) => r.s === STATUS_PROCESSING || r.s === STATUS_UNPROCESSED);
+  const busy = existingRecords.filter((r) => BUSY_STATUSES.includes(r.s));
   if (busy.length > 0) {
     ctx.fail("FileFlows is already working on some of these files", [
       { label: "Files", value: busy.map((r) => r.dn.split("/").pop() ?? r.dn).join(", ") },
@@ -470,12 +526,12 @@ export async function run(ctx: HookContext) {
     });
   }
 
-  // 3. Make the staging folder and clear a copy an earlier run left there (a run abandoned at its
-  // deadline whose conversion FileFlows then finished): FileFlows is not busy with these files, so
-  // nothing is writing it, and it is this flow's own output, not the user's.
+  // 3. Make the staging folder and clear a copy an earlier run left there for this same source (a
+  // run abandoned at its deadline whose conversion FileFlows then finished): FileFlows is not busy
+  // with these files, so nothing is writing it, and it is this flow's own output, not the user's.
   assertInTime();
   for (const out of outputs.values()) {
-    mkdirSync(out.staging.slice(0, out.staging.lastIndexOf("/")), { recursive: true });
+    ensureStagingDir(ctx, out.staging);
     removeStagingCopy(ctx, out.staging);
   }
 
