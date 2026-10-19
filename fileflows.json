@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial script"
+    "version": "1.1.0",
+    "changeLog": "Convert to MP4 is back on the partner API (HexOS writes a signed PARTNER_API_KEY, FileFlows 26.10.3+ serves its API to it), and the card that shows what FileFlows is converting is back with it"
   },
   "requirements": {
     "locations": [
@@ -72,7 +72,12 @@
   ],
   "app_values": {
     "fileflows": {
-      "additional_envs": []
+      "additional_envs": [
+        {
+          "name": "PARTNER_API_KEY",
+          "value": "$PARTNER_TOKEN()"
+        }
+      ]
     },
     "network": {
       "server_port": {
@@ -100,5 +105,84 @@
       },
       "gpus": "$GPU_CONFIG()"
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "convert-to-mp4",
+      "title": "Convert to MP4",
+      "description": "Convert this video to an MP4 file using FileFlows. The converted copy appears next to the original; the original file is not changed.",
+      "kind": "custom",
+      "target": {
+        "type": "files",
+        "accepts": [
+          ".mkv",
+          ".avi",
+          ".mov",
+          ".wmv",
+          ".flv",
+          ".webm",
+          ".mpg",
+          ".mpeg",
+          ".m4v",
+          ".ts"
+        ],
+        "maxFiles": 5,
+        "requiresTargetMount": true
+      },
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "fileflows"
+        }
+      ],
+      "rerun": "converge",
+      "script": "fileflows/convert_to_mp4.ts",
+      "entrypoint": "run",
+      "timeout": 86400,
+      "retries": 0
+    }
+  ],
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "conversions",
+      "title": "Converting",
+      "description": "What FileFlows is converting now, and what it finished last.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "fileflows"
+        }
+      ],
+      "slots": [
+        {
+          "type": "list",
+          "field": "converting",
+          "rows": 2
+        },
+        {
+          "type": "text",
+          "field": "idle"
+        }
+      ],
+      "slides": [
+        {
+          "title": "Recently finished",
+          "slots": [
+            {
+              "type": "list",
+              "field": "finished",
+              "rows": 3
+            }
+          ]
+        }
+      ],
+      "script": "fileflows/widget_conversions.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
+  ]
 }

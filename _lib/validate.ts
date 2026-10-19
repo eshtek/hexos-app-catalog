@@ -166,6 +166,33 @@ function checkMacros(file: string, script: unknown, questionKeys: Set<string>) {
     }
   }
 
+  // A partner credential is substituted inside app_values only; anywhere else (a hook
+  // description, a question) the platform refuses the whole install rather than let a
+  // credential land in task data or a label.
+  // The platform substitutes `$PARTNER_TOKEN()` or `$PARTNER_TOKEN(<partner id>)`, one lower-case
+  // id or nothing; any other spelling survives processing as text and the install is refused.
+  const walkStrings = (value: unknown, visit: (s: string) => void): void => {
+    if (typeof value === "string") visit(value);
+    else if (Array.isArray(value)) for (const v of value) walkStrings(v, visit);
+    else if (value && typeof value === "object") for (const v of Object.values(value)) walkStrings(v, visit);
+  };
+  walkStrings(script, (s) => {
+    // Every invocation must be complete within its own string value: "$PARTNER_TOKEN(" with no
+    // closing parenthesis in the same value survives processing as text and is refused at install.
+    const opened = (s.match(/\$PARTNER_TOKEN\(/g) ?? []).length;
+    const complete = [...s.matchAll(/\$PARTNER_TOKEN\(([^)]*)\)/g)];
+    if (opened !== complete.length) err(file, `$PARTNER_TOKEN( is not closed within its own value: ${JSON.stringify(s)}`);
+    for (const match of complete) {
+      if (!/^\s*[a-z0-9-]*\s*$/.test(match[1])) {
+        err(file, `$PARTNER_TOKEN(${match[1]}) is not a partner id (lower-case letters, digits and dashes, or nothing)`);
+      }
+    }
+  });
+  const { app_values: _appValues, ...outsideAppValues } = script as Record<string, unknown>;
+  if (JSON.stringify(outsideAppValues).includes("$PARTNER_TOKEN")) {
+    err(file, "$PARTNER_TOKEN() may only appear inside app_values");
+  }
+
   // replaceLocation() throws PROCESS_INSTALL_SCRIPT_UNKNOWN_LOCATION on any
   // name outside LocationPreferenceId, which aborts the whole install.
   for (const match of raw.matchAll(/\$LOCATION\(([^)]+)\)/g)) {

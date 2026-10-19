@@ -124,6 +124,42 @@ export interface HookContext {
    */
   getInstalledAppUrl(appId: string): Promise<string | null>;
 
+  /**
+   * A request to a partner app's API, authenticated with the credential HexOS
+   * issued to this install (the `$PARTNER_TOKEN()` value in the app's
+   * env). The platform reads that credential from the install, checks it, and
+   * adds whatever the partner's API expects on the request (signed headers, a
+   * token header, or query parameters). The script never sees the credential.
+   * Rejects when the app has no valid credential for that partner, when the
+   * request is not to this app on this server, or when the body is not text.
+   *
+   * @example
+   * ```ts
+   * const res = await ctx.partnerRequest("<partner>", `${ctx.baseUrl}/api/status`);
+   * ```
+   */
+  partnerRequest(partnerId: string, url: string, init?: RequestInit): Promise<Response>;
+
+  /**
+   * partnerRequest for the common case: a JSON body in (any value, serialised for
+   * you), a JSON answer out, typed by the caller. A refused or failed request
+   * becomes an Error carrying the status and the partner's own reason text, so
+   * a script can simply let it propagate. Use partnerRequest itself when a
+   * status needs handling (a 404 that means "not set up yet", a stream, a
+   * non-JSON body).
+   *
+   * @example
+   * ```ts
+   * const flows = await ctx.partnerRequestJson<Array<{ Uid: string; Name: string }>>("<partner>", `${ctx.baseUrl}/api/flow`);
+   * await ctx.partnerRequestJson("<partner>", `${ctx.baseUrl}/api/items`, { method: "POST", body: { name: "x" } });
+   * ```
+   */
+  partnerRequestJson<T>(
+    partnerId: string,
+    url: string,
+    init?: Omit<RequestInit, "body"> & { body?: unknown },
+  ): Promise<T>;
+
   registerCheckpoints(checkpoints: Array<{ id: string; message: string }>): Promise<void>;
 
   /**
