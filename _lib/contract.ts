@@ -112,6 +112,12 @@ export const HOOK_TARGET_TYPES = ["files"] as const;
  */
 export const SUPPORTED_WIDGETS_SCHEMA = 3;
 
+/** The previews schema the backend parses (packages/shared/eshtek/filePreviews.ts). */
+export const SUPPORTED_PREVIEWS_SCHEMA = 1;
+
+/** The raster types a preview may come back as; nothing that can carry a script or a reference. */
+export const PREVIEW_OUTPUT_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/bmp"] as const;
+
 /** Widget slot types. An image is never a slot: the card's artwork is its background. */
 export const WIDGET_SLOT_TYPES = ["text", "stat", "list", "progress", "chart"] as const;
 

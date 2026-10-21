@@ -40,6 +40,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
 | [PhotoStructure](photostructure.json) | Photo and video library organizer |
+| [PiGallery2](pigallery2.json) | A photo gallery that reads the Photos folder in place; HexOS can use it for file browser thumbnails |
 | [Plex](plex.json) | Media server with Plex Pass support |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
