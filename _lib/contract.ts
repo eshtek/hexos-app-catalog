@@ -57,6 +57,9 @@ export const CALL_MACROS = [
   "LOCATION",
   "APP_INSTALLED",
   "GPU_CONFIG",
+  // A partner app's per-install credential, issued by the platform at install time. The argument
+  // is the partner id; empty means the app being installed.
+  "PARTNER_TOKEN",
   // A display app's devices (its card's DRM and HDMI audio nodes, plus input), its card's slot, its
   // TrueNAS GPU selection (an NVIDIA card by UUID), and the port it shows on ("HDMI-A:1").
   "DISPLAY_DEVICES",
