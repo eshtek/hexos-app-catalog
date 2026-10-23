@@ -1,0 +1,171 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script: config, database, and thumbnails in app storage, all of Photos served as the gallery, CPU limit sized to the server"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "Photos"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30099
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Photos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pigallery2/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pigallery2/db",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "db"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pigallery2/thumbnails",
+      "owner": {
+        "user": "apps"
+      }
+    }
+  ],
+  "app_values": {
+    "pigallery": {
+      "application_title": "PiGallery 2",
+      "additional_envs": [
+        {
+          "name": "Users-enforcedUsers",
+          "value": "[{\"name\":\"$QUESTION(admin_username)\",\"password\":\"$QUESTION(admin_password)\",\"role\":\"Admin\"}]"
+        }
+      ]
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/pigallery2/config)",
+      "db": "$HOST_PATH($LOCATION(ApplicationsPerformance)/pigallery2/db)",
+      "thumbnails": "$HOST_PATH($LOCATION(ApplicationsPerformance)/pigallery2/thumbnails)",
+      "media": "$HOST_PATH($LOCATION(Photos))"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30099
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "installation_questions": [
+    {
+      "question": "Admin user name",
+      "description": "The account you and HexOS sign in to PiGallery2 with.",
+      "type": "text",
+      "key": "admin_username",
+      "required": true,
+      "installonly": true,
+      "default": "admin"
+    },
+    {
+      "question": "Admin password",
+      "description": "For the admin account above. HexOS uses it to draw thumbnails in the file browser.",
+      "type": "password",
+      "key": "admin_password",
+      "required": true,
+      "installonly": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "previewsSchema": 1,
+  "previews": [
+    {
+      "id": "pictures",
+      "title": "Photo and video thumbnails",
+      "kind": "file.preview",
+      "surfaces": [
+        "fileBrowser"
+      ],
+      "inputs": {
+        "image": [
+          "jpg",
+          "jpeg",
+          "png",
+          "gif",
+          "webp",
+          "bmp",
+          "tif",
+          "tiff",
+          "heic",
+          "heif",
+          "avif",
+          "svg"
+        ],
+        "video": [
+          "mp4",
+          "m4v",
+          "mov",
+          "mkv",
+          "webm",
+          "avi",
+          "mpg",
+          "mpeg",
+          "wmv",
+          "ts",
+          "3gp"
+        ]
+      },
+      "outputs": [
+        "image/jpeg",
+        "image/webp",
+        "image/png",
+        "image/gif"
+      ],
+      "mounts": {
+        "storage": "media",
+        "containerRoot": "/app/data/media",
+        "descendants": false
+      },
+      "credentials": [
+        {
+          "id": "enforcedUsers",
+          "env": "Users-enforcedUsers"
+        }
+      ],
+      "script": "pigallery2/previews.ts",
+      "entrypoints": {
+        "signIn": "signIn",
+        "picture": "picture"
+      },
+      "timeouts": {
+        "signIn": 10,
+        "picture": 2
+      }
+    }
+  ]
+}

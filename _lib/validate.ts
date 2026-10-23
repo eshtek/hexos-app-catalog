@@ -5,7 +5,7 @@
 //
 // Run: bun run validate
 
-import { readdirSync, existsSync, statSync } from "node:fs";
+import { readdirSync, existsSync, readFileSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
   CALL_MACROS,
@@ -22,6 +22,8 @@ import {
   QUESTION_TYPES,
   SPEC_REGEX,
   SUPPORTED_VERSIONS,
+  PREVIEW_OUTPUT_TYPES,
+  SUPPORTED_PREVIEWS_SCHEMA,
   SUPPORTED_WIDGETS_SCHEMA,
   WIDGET_MAX_SLIDES,
   WIDGET_MAX_SLOTS,
@@ -68,6 +70,28 @@ function checkAssetPath(file: string, field: string, value: string) {
   }
   if (!existsSync(value) || !statSync(value).isFile()) {
     err(file, `${field}: "${value}" does not exist in the repository`);
+  }
+}
+
+/**
+ * A previews script is protocol only: it must export the two entry points and may import nothing but
+ * the contract types. The platform's scoped client is meant to be its only way to the app, and reading
+ * files or opening connections of its own is against the authoring rules; this check catches the
+ * imports, not a runtime that does it another way, since the loader is not a sandbox.
+ */
+function checkPreviewScript(file: string, field: string, scriptPath: string, entrypoints: string[]) {
+  const source = readFileSync(scriptPath, "utf8");
+  for (const name of entrypoints) {
+    const exported = new RegExp(`export\\s+(?:async\\s+)?(?:function\\s+${name}\\b|const\\s+${name}\\b)`);
+    if (!exported.test(source)) err(file, `${field}: ${scriptPath} does not export "${name}"`);
+  }
+  for (const match of source.matchAll(/^\s*import\s[^;]*?from\s+["']([^"']+)["']/gm)) {
+    const from = match[1] ?? "";
+    if (/^(node:|bun:|fs$|child_process$|net$|http$|https$|dgram$|tls$)/.test(from)) {
+      err(file, `${field}: a previews script may not import "${from}"`);
+    } else if (from.startsWith(".") && !/^\.\.\/_lib\//.test(from)) {
+      err(file, `${field}: a previews script imports only ../_lib/ types, not "${from}"`);
+    }
   }
 }
 
@@ -549,6 +573,108 @@ function validate(file: string, script: Record<string, unknown>) {
     for (const ref of hook.requiresHooks) {
       if (typeof ref === "string" && !hookIds.has(ref)) {
         err(file, `hooks[${i}]: requiresHooks references unknown hook id "${ref}"`);
+      }
+    }
+  }
+
+  // --- previews (v6): a picture of a file for the file browser, drawn by the app through one script ---
+  if (script.previews !== undefined) {
+    if (version !== 6) err(file, "previews require version 6");
+    if (script.previewsSchema !== SUPPORTED_PREVIEWS_SCHEMA) {
+      err(file, `previewsSchema must be ${SUPPORTED_PREVIEWS_SCHEMA}; a previews list without it is refused`);
+    }
+    if (!Array.isArray(script.previews)) {
+      err(file, "previews must be an array");
+    } else {
+      const previewIds = new Set<string>();
+      for (const [i, preview] of script.previews.entries()) {
+        const where = `previews[${i}]`;
+        if (!isObject(preview)) {
+          err(file, `${where}: must be an object`);
+          continue;
+        }
+        const pid = preview.id;
+        if (typeof pid !== "string" || !/^[a-z0-9_-]+$/.test(pid)) {
+          err(file, `${where}: id must be lowercase alphanumeric with hyphens/underscores`);
+        } else {
+          if (previewIds.has(pid)) err(file, `${where}: duplicate preview id "${pid}"`);
+          previewIds.add(pid);
+        }
+        if (typeof preview.title !== "string" || !preview.title.trim()) err(file, `${where}: title is missing`);
+        if (preview.kind !== "file.preview") err(file, `${where}: kind must be "file.preview"`);
+        if (!Array.isArray(preview.surfaces) || preview.surfaces.length === 0 || preview.surfaces.some((s) => s !== "fileBrowser")) {
+          err(file, `${where}: surfaces must be a non-empty array of "fileBrowser"`);
+        }
+        const inputs = preview.inputs;
+        if (!isObject(inputs)) {
+          err(file, `${where}: inputs must be an object with image and/or video extension lists`);
+        } else {
+          let kinds = 0;
+          for (const [kind, list] of Object.entries(inputs)) {
+            if (kind !== "image" && kind !== "video") {
+              err(file, `${where}.inputs: kind "${kind}" is not known`);
+            } else if (!Array.isArray(list) || list.length === 0 || list.some((e) => typeof e !== "string" || !/^[a-z0-9]+$/.test(e))) {
+              err(file, `${where}.inputs.${kind}: a non-empty list of lower-case extensions without the dot`);
+            } else {
+              kinds += 1;
+            }
+          }
+          if (kinds === 0) err(file, `${where}.inputs: at least one kind with its extensions`);
+        }
+        if (!Array.isArray(preview.outputs) || preview.outputs.length === 0 || preview.outputs.some((o) => !(PREVIEW_OUTPUT_TYPES as readonly string[]).includes(o as string))) {
+          err(file, `${where}: outputs must be a non-empty list from ${PREVIEW_OUTPUT_TYPES.join(", ")}`);
+        }
+        const mounts = preview.mounts;
+        if (!isObject(mounts) || typeof mounts.storage !== "string" || !mounts.storage.trim()) {
+          err(file, `${where}.mounts: storage names the chart's storage entry the app serves`);
+        } else if (typeof mounts.containerRoot !== "string" || !/^\/(?!.*\/\/)(?!.*\/$)/.test(mounts.containerRoot)) {
+          err(file, `${where}.mounts: containerRoot is an absolute path without a trailing slash`);
+        }
+        if (!Array.isArray(preview.credentials)) {
+          err(file, `${where}: credentials must be an array (empty when the app needs none)`);
+        } else {
+          const credentialIds = new Set<string>();
+          for (const [k, cred] of preview.credentials.entries()) {
+            if (!isObject(cred) || typeof cred.id !== "string" || !cred.id.trim() || typeof cred.env !== "string" || !cred.env.trim()) {
+              err(file, `${where}.credentials[${k}]: needs an id and the environment entry's name`);
+              continue;
+            }
+            if (credentialIds.has(cred.id)) err(file, `${where}.credentials[${k}]: duplicate id "${cred.id}"`);
+            credentialIds.add(cred.id);
+          }
+        }
+        const entrypoints = isObject(preview.entrypoints) ? preview.entrypoints : null;
+        const names = ["signIn", "picture"] as const;
+        for (const name of names) {
+          if (!entrypoints || typeof entrypoints[name] !== "string" || !(entrypoints[name] as string).trim()) {
+            err(file, `${where}.entrypoints: ${name} is missing`);
+          }
+        }
+        const hasFile = typeof preview.script === "string" && preview.script.trim().length > 0;
+        const hasInline = typeof preview.scriptContent === "string" && preview.scriptContent.trim().length > 0;
+        if (!hasFile && !hasInline) {
+          err(file, `${where}: needs either script or scriptContent`);
+        } else if (hasFile && hasInline) {
+          err(file, `${where}: declares both script and scriptContent`);
+        } else if (hasFile) {
+          checkAssetPath(file, `${where}.script`, preview.script as string);
+          if (existsSync(preview.script as string) && entrypoints) {
+            checkPreviewScript(file, `${where}.script`, preview.script as string, names.map((n) => String(entrypoints[n] ?? "")));
+          }
+        }
+        if (preview.timeouts !== undefined) {
+          if (!isObject(preview.timeouts)) {
+            err(file, `${where}: timeouts must be an object`);
+          } else {
+            for (const [name, value] of Object.entries(preview.timeouts)) {
+              if (!(names as readonly string[]).includes(name)) err(file, `${where}.timeouts: "${name}" is not an entry point`);
+              else if (typeof value !== "number" || value <= 0) err(file, `${where}.timeouts.${name}: must be a positive number`);
+            }
+          }
+        }
+        if (preview.conditions !== undefined) {
+          err(file, `${where}: conditions are not part of previewsSchema ${SUPPORTED_PREVIEWS_SCHEMA}; the app must be running, which the platform checks itself`);
+        }
       }
     }
   }
