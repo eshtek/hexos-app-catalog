@@ -1,0 +1,70 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30109
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/n8n/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/n8n/postgres_data",
+      "owner": {
+        "user": "netdata",
+        "group": "docker"
+      },
+      "snapshot": {
+        "id": "db"
+      }
+    }
+  ],
+  "app_values": {
+    "n8n": {
+      "web_host": "$SERVER_LAN_IP",
+      "db_password": "$RANDOM_STRING(32)",
+      "redis_password": "$RANDOM_STRING(32)",
+      "encryption_key": "$RANDOM_STRING(32)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30109
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/n8n/data)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/n8n/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}

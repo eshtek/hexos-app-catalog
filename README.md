@@ -33,6 +33,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
+| [n8n](n8n.json) | Workflow automation |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
