@@ -1,0 +1,81 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "installation_questions": [
+    {
+      "question": "Admin password",
+      "description": "You sign in to FreshRSS as admin with this password. Letters and numbers only, because FreshRSS cannot take quotes, $, `, ' or !.",
+      "type": "password",
+      "key": "admin_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)",
+      "installonly": true
+    }
+  ],
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "500MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30108
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/freshrss/postgres_data",
+      "owner": {
+        "user": "netdata",
+        "group": "docker"
+      },
+      "snapshot": {
+        "id": "db"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/freshrss/data",
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/freshrss/extensions"
+    }
+  ],
+  "app_values": {
+    "fresh_rss": {
+      "default_admin_user": "admin",
+      "default_admin_password": "$QUESTION(admin_password)",
+      "db_password": "$RANDOM_STRING(32)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30108
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/freshrss/data)",
+      "extensions": "$HOST_PATH($LOCATION(ApplicationsPerformance)/freshrss/extensions)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/freshrss/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  }
+}
