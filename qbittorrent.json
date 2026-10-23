@@ -1,14 +1,26 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "1.2.0",
+    "changeLog": "Pinned the web and torrent ports, gave the chart's Downloads storage the Downloads folder (mounted at /downloads) and set it as the default download folder through qBittorrent's settings on every install (also a card action for an install from before), and moved to the v6 install script format. Existing installs: a torrent from before this update keeps its old /config/Downloads path and shows as missing files until its location is set to the same path under /downloads (right-click, Set location); the files themselves have not moved."
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Downloads"],
-    "specifications": ["2CORE", "200MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [8080, 6881]
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Downloads"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30024,
+      51413
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -26,15 +38,43 @@
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/qbittorrent/config",
-      "snapshot": { "id": "config" }
+      "snapshot": {
+        "id": "config"
+      }
     }
   ],
   "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30024
+      },
+      "bt_port": {
+        "bind_mode": "published",
+        "port_number": 51413
+      }
+    },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/qbittorrent/config)",
-      "additional_storage": [
-        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)"
-      ]
+      "downloads": "$HOST_PATH($LOCATION(Downloads)/qbittorrent)",
+      "additional_storage": []
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "configure-qbittorrent",
+      "title": "Save downloads to your Downloads folder",
+      "description": "Sets qBittorrent's download folder to the Downloads folder on this server, with a subfolder per app that sends it downloads",
+      "kind": "maintain",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "optional": true,
+      "rerun": "converge",
+      "entrypoint": "configure",
+      "timeout": 300,
+      "script": "qbittorrent/configure.ts"
+    }
+  ]
 }

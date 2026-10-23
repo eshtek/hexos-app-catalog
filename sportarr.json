@@ -1,14 +1,25 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation"
+    "version": "1.1.0",
+    "changeLog": "Mounted the qBittorrent downloads at /downloads, added the Connect to qBittorrent link, and moved to the v6 install script format."
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance", "Downloads", "Media"],
-    "specifications": ["2CORE", "200MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [1867]
+    "locations": [
+      "ApplicationsPerformance",
+      "Downloads",
+      "Media"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      1867
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -30,7 +41,9 @@
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/sportarr/config",
-      "snapshot": { "id": "config" }
+      "snapshot": {
+        "id": "config"
+      }
     }
   ],
   "app_values": {
@@ -43,7 +56,7 @@
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sportarr/config)",
       "additional_storage": [
-        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /downloads)",
         "$MOUNTED_HOST_PATH($LOCATION(Media)/sports, /media/sports)"
       ]
     },
@@ -53,5 +66,34 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "connect-qbittorrent",
+      "title": "Connect to qBittorrent",
+      "description": "Use qBittorrent on this server to download sports events",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "entrypoint": "connectQbittorrent",
+      "timeout": 600,
+      "script": "sportarr/connect_qbittorrent.ts"
+    }
+  ]
 }
