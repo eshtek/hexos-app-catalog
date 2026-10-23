@@ -1,0 +1,151 @@
+{
+  "type": "collection",
+  "version": 1,
+  "name": "Media library",
+  "description": "Get started with all the apps you need for managing your own media collection.",
+  "image": "_collections/media-management.jpg",
+  "requirements": {
+    "specifications": [
+      "GPU"
+    ]
+  },
+  "groups": [
+    {
+      "id": "download",
+      "type": "multiple",
+      "min": 1,
+      "title": "Download clients",
+      "description": "These apps handle downloading media from different sources, such as torrents or Usenet groups.",
+      "options": [
+        {
+          "app": "qbittorrent",
+          "summary": "Torrents",
+          "default": true,
+          "vpnRecommended": true
+        },
+        {
+          "app": "deluge",
+          "summary": "Torrents, lightweight",
+          "vpnRecommended": true
+        },
+        {
+          "app": "sabnzbd",
+          "summary": "Usenet",
+          "vpnRecommended": true
+        },
+        {
+          "app": "nzbget",
+          "summary": "Usenet, lightweight",
+          "vpnRecommended": true
+        }
+      ]
+    },
+    {
+      "id": "managers",
+      "type": "multiple",
+      "min": 1,
+      "title": "Media managers",
+      "description": "These apps monitor and organize your media library, and instruct your download clients to fetch better content when available.",
+      "options": [
+        {
+          "app": "radarr",
+          "summary": "Movies",
+          "default": true
+        },
+        {
+          "app": "sonarr",
+          "summary": "TV shows",
+          "default": true
+        },
+        {
+          "app": "lidarr",
+          "summary": "Music"
+        }
+      ]
+    },
+    {
+      "id": "indexer",
+      "type": "fixed",
+      "title": "Indexer manager",
+      "description": "Finds releases for every media manager you pick.",
+      "options": [
+        {
+          "app": "prowlarr"
+        }
+      ]
+    },
+    {
+      "id": "player",
+      "type": "single",
+      "title": "Media server",
+      "description": "The app you watch your movies and shows in.",
+      "options": [
+        {
+          "app": "jellyfin",
+          "summary": "Free and open source",
+          "default": true
+        },
+        {
+          "app": "plex",
+          "summary": "Needs a free Plex account"
+        },
+        {
+          "app": "emby",
+          "summary": "Some features need Emby Premiere"
+        }
+      ]
+    },
+    {
+      "id": "companions",
+      "type": "multiple",
+      "title": "Companion apps",
+      "description": "Apps designed to enhance the capabilities of the ones you've already selected.",
+      "options": [
+        {
+          "app": "profilarr",
+          "summary": "Quality profiles",
+          "default": true,
+          "requiresAny": [
+            "radarr",
+            "sonarr"
+          ]
+        },
+        {
+          "app": "seerr",
+          "summary": "Media requests",
+          "default": true,
+          "requiresAny": [
+            "radarr",
+            "sonarr"
+          ]
+        },
+        {
+          "app": "bazarr",
+          "summary": "Subtitles",
+          "default": true,
+          "requiresAny": [
+            "radarr",
+            "sonarr"
+          ]
+        },
+        {
+          "app": "tautulli",
+          "summary": "Watch statistics",
+          "requires": [
+            "plex"
+          ]
+        },
+        {
+          "app": "jellystat",
+          "summary": "Watch statistics",
+          "requires": [
+            "jellyfin"
+          ],
+          "answers": {
+            "is_emby_api": "false"
+          }
+        }
+      ]
+    }
+  ]
+}

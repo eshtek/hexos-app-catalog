@@ -1,27 +1,79 @@
 {
   "version": 6,
   "script": {
-    "version": "2.3.0",
-    "changeLog": "Added optional links to Jellystat, Seer, and Fladder; Jellyfin preconfiguration remains optional"
+    "version": "2.4.0",
+    "changeLog": "Uses the sign-in you choose as Jellyfin's administrator, which Seerr and Jellystat sign in with too, and adds a check that Fladder can reach Jellyfin. A Jellyfin you already have gets it as an administrator of its own when you add it to a collection"
+  },
+  "sign_in": {
+    "username": true,
+    "adds_user": true
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Media", "Photos", "Music", "Movies", "Shows", "Videos"],
-    "specifications": ["2CORE", "256MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [30013, 30014]
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Media",
+      "Photos",
+      "Music",
+      "Movies",
+      "Shows",
+      "Videos"
+    ],
+    "specifications": [
+      "2CORE",
+      "256MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30013,
+      30014
+    ]
   },
   "ensure_directories_exists": [
-    { "path": "$LOCATION(ApplicationsPerformance)" },
-    { "path": "$LOCATION(ApplicationsCapacity)" },
-    { "path": "$LOCATION(Media)", "network_share": true },
-    { "path": "$LOCATION(Photos)", "network_share": true },
-    { "path": "$LOCATION(Music)", "network_share": true },
-    { "path": "$LOCATION(Movies)", "network_share": true },
-    { "path": "$LOCATION(Shows)", "network_share": true },
-    { "path": "$LOCATION(Videos)", "network_share": true },
-    { "path": "$LOCATION(ApplicationsPerformance)/jellyfin/config", "snapshot": { "id": "config" } },
-    { "path": "$LOCATION(ApplicationsCapacity)/jellyfin/cache" },
-    { "path": "$LOCATION(ApplicationsPerformance)/jellyfin/transcodes" }
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Photos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Music)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Movies)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Shows)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Videos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/jellyfin/config",
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/jellyfin/cache"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/jellyfin/transcodes"
+    }
   ],
   "app_values": {
     "storage": {
@@ -38,11 +90,20 @@
       ]
     },
     "network": {
-      "web_port": { "bind_mode": "published", "port_number": 30013 },
-      "https_port": { "bind_mode": "published", "port_number": 30014 }
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30013
+      },
+      "https_port": {
+        "bind_mode": "published",
+        "port_number": 30014
+      }
     },
     "resources": {
-      "limits": { "cpus": 2, "memory": "$MEMORY(10%, 4096)" },
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      },
       "gpus": "$GPU_CONFIG()"
     }
   },
@@ -60,7 +121,7 @@
       ],
       "script": "jellyfin/jellyfin_hook.ts",
       "entrypoint": "afterInstall",
-      "timeout": 300,
+      "timeout": 900,
       "description": "Setting up Jellyfin",
       "optional": true,
       "retries": 0,
@@ -71,53 +132,44 @@
           "url": "https://jellyfin.org/docs/general/community-standards/servers/",
           "label": "Jellyfin Server Policy"
         }
-      },
-      "inputs": [
+      }
+    },
+    {
+      "id": "connect-seerr",
+      "title": "Connect to Seerr",
+      "description": "Sets Seerr up with this Jellyfin server, so you sign in to Seerr with your Jellyfin account.",
+      "kind": "connect",
+      "conditions": [
         {
-          "type": "question",
-          "id": "admin_username",
-          "question": {
-            "question": "Jellyfin username",
-            "description": "This will be the admin username for your Jellyfin server once installed.",
-            "type": "text",
-            "key": "admin_username",
-            "required": true
-          }
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "seerr"
         },
         {
-          "type": "question",
-          "id": "admin_password",
-          "question": {
-            "question": "Jellyfin password",
-            "description": "This will be the admin password for your Jellyfin server once installed.",
-            "type": "password",
-            "key": "admin_password",
-            "required": true
-          }
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
         },
         {
-          "type": "question",
-          "id": "server_name",
-          "question": {
-            "question": "Server name",
-            "type": "text",
-            "key": "server_name",
-            "required": false,
-            "default": "HexOS Jellyfin",
-            "description": "The name your Jellyfin server will appear as to you and your friends.",
-            "placeholder": "HexOS Jellyfin"
-          }
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
         }
-      ]
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "rerun": "converge",
+      "script": "jellyfin/connect_seerr.ts",
+      "entrypoint": "run",
+      "timeout": 900,
+      "retries": 0
     },
     {
       "id": "connect-jellystat",
       "title": "Connect to Jellystat",
-      "description": "Link Jellyfin to Jellystat for watch statistics. New Jellystat accounts use your Jellyfin admin sign-in; existing accounts must already use those credentials.",
+      "description": "Lets Jellystat track what's watched on this Jellyfin server. You sign in to Jellystat with your Jellyfin account.",
       "kind": "connect",
-      "requiresHooks": [
-        "configure-jellyfin"
-      ],
       "conditions": [
         {
           "role": "visibility",
@@ -135,87 +187,13 @@
           "app": "jellyfin"
         }
       ],
-      "inputs": [
-        {
-          "type": "question",
-          "id": "admin_username",
-          "question": {
-            "question": "Jellyfin admin username",
-            "type": "text",
-            "key": "admin_username",
-            "required": true,
-            "description": "The administrator account from Jellyfin's setup"
-          }
-        },
-        {
-          "type": "question",
-          "id": "admin_password",
-          "question": {
-            "question": "Jellyfin admin password",
-            "type": "password",
-            "key": "admin_password",
-            "required": true
-          }
-        }
+      "requiresHooks": [
+        "configure-jellyfin"
       ],
       "rerun": "converge",
       "script": "jellyfin/connect_jellystat.ts",
       "entrypoint": "run",
-      "timeout": 300,
-      "retries": 0
-    },
-    {
-      "id": "connect-seer",
-      "title": "Connect to Seer",
-      "description": "Link this Jellyfin server to Seer so requests and discovery use your library. Uses the admin sign-in from Jellyfin preconfiguration - no extra passwords.",
-      "kind": "connect",
-      "requiresHooks": [
-        "configure-jellyfin"
-      ],
-      "conditions": [
-        {
-          "role": "visibility",
-          "type": "appInstalled",
-          "app": "seerr"
-        },
-        {
-          "role": "availability",
-          "type": "appRunning",
-          "app": "seerr"
-        },
-        {
-          "role": "availability",
-          "type": "appRunning",
-          "app": "jellyfin"
-        }
-      ],
-      "inputs": [
-        {
-          "type": "question",
-          "id": "admin_username",
-          "question": {
-            "question": "Jellyfin admin username",
-            "type": "text",
-            "key": "admin_username",
-            "required": true,
-            "description": "The administrator account from Jellyfin's setup"
-          }
-        },
-        {
-          "type": "question",
-          "id": "admin_password",
-          "question": {
-            "question": "Jellyfin admin password",
-            "type": "password",
-            "key": "admin_password",
-            "required": true
-          }
-        }
-      ],
-      "rerun": "converge",
-      "script": "jellyfin/connect_seer.ts",
-      "entrypoint": "run",
-      "timeout": 300,
+      "timeout": 900,
       "retries": 0
     },
     {

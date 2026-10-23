@@ -22,14 +22,15 @@ function readPlex(config: ContextMount): { token: string; machineId: string; nam
   }
 }
 
-/**
- * Tautulli's config.ini as key/value pairs. HexOS installs Tautulli's config beside Plex's, in the
- * same Applications location, so it is found from Plex's own mount.
- */
-function readTautulliIni(plex: ContextMount): Map<string, string> | undefined {
-  if (!plex.localPath.endsWith("/plex/config")) return undefined;
+/** Tautulli's config folder, from its own mounts wherever it is installed. */
+function tautulliConfig(mounts: ContextMount[]): ContextMount | undefined {
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith("/tautulli/config"));
+}
+
+/** Tautulli's config.ini as key/value pairs. */
+function readTautulliIni(tautulli: ContextMount): Map<string, string> | undefined {
   try {
-    const ini = readFileSync(plex.localPath.replace(/\/plex\/config$/, "/tautulli/config/config.ini"), "utf-8");
+    const ini = readFileSync(`${tautulli.localPath}/config.ini`, "utf-8");
     const settings = new Map<string, string>();
     for (const line of ini.split("\n")) {
       const match = line.match(/^(\w+)\s*=\s*(.*)$/);
@@ -39,6 +40,16 @@ function readTautulliIni(plex: ContextMount): Map<string, string> | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Tautulli writes its config.ini at its first start, a little after its container is up. */
+async function waitForTautulliIni(ctx: HookContext, tautulli: ContextMount): Promise<Map<string, string> | undefined> {
+  for (let attempt = 0; attempt < 24; attempt++) {
+    const ini = readTautulliIni(tautulli);
+    if (ini?.get("api_key")) return ini;
+    await ctx.sleep(5_000);
+  }
+  return undefined;
 }
 
 interface TautulliResponse {
@@ -80,12 +91,17 @@ export async function run(ctx: HookContext) {
 
   const config = plexConfig(ctx.mounts);
   const plex = config && readPlex(config);
-  if (!plex) ctx.fail("Plex isn't signed in yet. Run Pre-configure Plex first, then try again.");
-  const ini = config && readTautulliIni(config);
-  const apiKey = ini?.get("api_key");
-  if (!ini || !apiKey) {
-    ctx.fail("HexOS couldn't read Tautulli's settings. Tautulli needs to be installed in the same Applications location as Plex.");
+  // The owner skipped Plex's sign-in, so trying again can't help
+  if (!plex) {
+    const message = "Plex isn't signed in yet. Run Pre-configure Plex, then connect Tautulli from Plex's Connections tab.";
+    if (ctx.skip) ctx.skip(message);
+    ctx.fail(message);
   }
+  const tautulli = tautulliConfig(await ctx.getInstalledAppMounts("tautulli"));
+  if (!tautulli) ctx.fail("HexOS couldn't find Tautulli's settings folder");
+  const ini = await waitForTautulliIni(ctx, tautulli);
+  const apiKey = ini?.get("api_key");
+  if (!ini || !apiKey) ctx.fail("HexOS couldn't read Tautulli's settings yet. Try again once it has started.");
   if (ini.get("http_password") || ini.get("http_username")) {
     ctx.fail("Tautulli has a sign-in set, so HexOS can't change its settings. Add this Plex server in Tautulli's own settings.");
   }
@@ -172,7 +188,7 @@ export async function run(ctx: HookContext) {
     if (after.machineId === plex.machineId && after.connected) break;
     await ctx.sleep(3000);
   }
-  const tokenSaved = readTautulliIni(config)?.get("pms_token") === plex.token;
+  const tokenSaved = readTautulliIni(tautulli)?.get("pms_token") === plex.token;
   if (after.machineId !== plex.machineId || !after.connected || !tokenSaved) {
     ctx.fail("Tautulli saved this Plex server but hasn't connected to it", [
       { label: "Plex server", value: plex.machineId },

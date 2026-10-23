@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial Script"
+    "version": "1.2.0",
+    "changeLog": "Links to Radarr and Sonarr keep the quality profile and folder you chose in Seerr when they run again"
   },
   "requirements": {
     "locations": [
@@ -15,13 +15,23 @@
     "permissions": [
       "READ_WRITE_LOCATIONS"
     ],
-    "ports": [30357]
+    "ports": [
+      30357
+    ]
   },
   "ensure_directories_exists": [
     {
       "path": "$LOCATION(ApplicationsPerformance)"
     },
-    { "path": "$LOCATION(ApplicationsPerformance)/seerr/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } }
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/seerr/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    }
   ],
   "app_values": {
     "storage": {
@@ -39,5 +49,63 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Sends requests made in Seerr to Radarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "seerr/connect_arr.ts",
+      "entrypoint": "radarr",
+      "timeout": 120,
+      "retries": 0
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Sends requests made in Seerr to Sonarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "seerr/connect_arr.ts",
+      "entrypoint": "sonarr",
+      "timeout": 120,
+      "retries": 0
+    }
+  ]
 }

@@ -1,0 +1,96 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.1.0",
+    "changeLog": "Uses the password you choose, and keeps downloads in progress apart from finished ones"
+  },
+  "sign_in": {
+    "username": false
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Downloads"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30038,
+      30039
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/deluge/config",
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30038
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/deluge/config)",
+      "downloads": "$HOST_PATH($LOCATION(Downloads)/deluge)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/deluge, /downloads/deluge)"
+      ]
+    }
+  },
+  "hooks": [
+    {
+      "id": "seed-webui",
+      "title": "Set Deluge's sign-in",
+      "description": "Sets the password you chose for Deluge's web page, which the apps that send it downloads use too",
+      "events": [
+        "onBeforeInstall"
+      ],
+      "optional": true,
+      "script": "deluge/seed_webui.ts",
+      "entrypoint": "seedWebUi",
+      "timeout": 60
+    },
+    {
+      "id": "configure-deluge",
+      "title": "Pre-configure Deluge",
+      "description": "Gives Deluge the password you chose and its download folders",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "deluge/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    }
+  ]
+}

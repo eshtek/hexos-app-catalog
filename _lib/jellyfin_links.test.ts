@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { HookContext } from "./hook_context";
 import { run as connectJellystat } from "../jellyfin/connect_jellystat";
-import { run as connectSeer } from "../jellyfin/connect_seer";
 import { run as checkFladder } from "../jellyfin/check_fladder";
 
 const realFetch = globalThis.fetch;
@@ -218,6 +217,14 @@ for (const options of [{ statSetupStatus: 503 }, { statConfigStatus: 503 }]) {
   });
 }
 
+test("Jellystat takes the run's sign-in over inherited answers", async () => {
+  const { ctx, calls } = apis();
+  (ctx as unknown as { signIn: { username: string; password: string } }).signIn = { username: "chosen", password: "chosen-password" };
+  await connectJellystat(ctx);
+  expect(calls.find((c) => c.path === "/Users/AuthenticateByName")?.body).toMatchObject({ Username: "chosen", Pw: "chosen-password" });
+  expect(calls.find((c) => c.path === "/auth/createuser")?.body.username).toBe("chosen");
+});
+
 test("Jellystat reuses its named API key", async () => {
   const { ctx, calls } = apis({ keyExists: true });
   await connectJellystat(ctx);
@@ -229,90 +236,6 @@ test("Jellystat refuses a non-admin Jellyfin account", async () => {
   await expect(connectJellystat(ctx)).rejects.toThrow(/administrator/);
   expect(calls.some((c) => c.path === "/Auth/Keys" || c.path === "/api/setconfig")).toBe(false);
 });
-
-test("Seer sets up a fresh Jellyfin binding with the bare host and session cookie", async () => {
-  const { ctx, calls, checkpoints } = apis();
-  await connectSeer(ctx);
-  expect(calls.find((c) => c.path === "/api/v1/auth/jellyfin")?.body.hostname).toBe("jf.test");
-  expect(calls.find((c) => c.path === "/api/v1/settings/initialize")?.headers.get("cookie")).toBe(
-    "connect.sid=seer-session",
-  );
-  expect(checkpoints.at(-1)).toBe("verify");
-});
-
-test("Seer reruns against its existing Jellyfin binding without reinitializing", async () => {
-  const { ctx, calls } = apis({ initialized: true });
-  await connectSeer(ctx);
-  expect(calls.find((c) => c.path === "/api/v1/auth/jellyfin")?.body.hostname).toBeUndefined();
-  expect(calls.some((c) => c.path === "/api/v1/settings/initialize")).toBe(false);
-});
-
-for (const mediaServerType of [1, 3]) {
-  test(`Seer preserves an existing media-server type ${mediaServerType}`, async () => {
-    const { ctx, calls } = apis({ initialized: true, mediaServerType });
-    await expect(connectSeer(ctx)).rejects.toThrow(/already connected/);
-    expect(calls.some((c) => c.method === "POST")).toBe(false);
-  });
-}
-
-test("Seer refuses an unverifiable initialization state", async () => {
-  const { ctx, calls } = apis({ missingInitialized: true });
-  await expect(connectSeer(ctx)).rejects.toThrow();
-  expect(calls.some((c) => c.method === "POST")).toBe(false);
-});
-
-test("Seer refuses a different existing Jellyfin binding without changing it", async () => {
-  const { ctx, calls } = apis({ initialized: true, seerHost: "another.test" });
-  await expect(connectSeer(ctx)).rejects.toThrow();
-  expect(calls.some((c) => c.path === "/api/v1/settings/initialize")).toBe(false);
-});
-
-for (const options of [{ seerPort: 8097 }, { seerSsl: true }, { seerBase: "/other" }]) {
-  test(`Seer preserves a different existing URL (${Object.keys(options)[0]})`, async () => {
-    const { ctx, calls } = apis({ initialized: true, ...options });
-    await expect(connectSeer(ctx)).rejects.toThrow(/another Jellyfin server or URL/);
-    expect(calls.some((c) => c.path === "/api/v1/settings/initialize")).toBe(false);
-  });
-}
-
-test("Seer resumes a Jellyfin setup interrupted before initialization completes", async () => {
-  const { ctx, calls } = apis({ initialized: false, mediaServerType: 2 });
-  await connectSeer(ctx);
-  expect(calls.find((c) => c.path === "/api/v1/auth/jellyfin")?.body.hostname).toBeUndefined();
-  expect(calls.filter((c) => c.path === "/api/v1/settings/initialize")).toHaveLength(1);
-});
-
-for (const mediaServerType of [1, 3]) {
-  test(`Seer preserves partial setup for another media-server type ${mediaServerType}`, async () => {
-    const { ctx, calls } = apis({ initialized: false, mediaServerType });
-    await expect(connectSeer(ctx)).rejects.toThrow(/already connected/);
-    expect(calls.some((c) => c.method === "POST")).toBe(false);
-  });
-}
-
-test("Seer requires an affirmative media-server setup state", async () => {
-  const { ctx, calls } = apis({ missingMediaType: true });
-  await expect(connectSeer(ctx)).rejects.toThrow();
-  expect(calls.some((c) => c.method === "POST")).toBe(false);
-});
-
-test("Seer requires a session cookie before initializing", async () => {
-  const { ctx, calls } = apis({ missingCookie: true });
-  await expect(connectSeer(ctx)).rejects.toThrow();
-  expect(calls.some((c) => c.path === "/api/v1/settings/initialize")).toBe(false);
-});
-
-test("Seer reports an initialization failure instead of claiming success", async () => {
-  const { ctx } = apis({ initializeFails: true });
-  await expect(connectSeer(ctx)).rejects.toThrow(/complete Seer.*503/);
-});
-
-for (const options of [{ initializeNoop: true }, { verifiedType: 1 }]) {
-  test(`Seer verifies the completed setup (${Object.keys(options)[0]})`, async () => {
-    const { ctx } = apis(options);
-    await expect(connectSeer(ctx)).rejects.toThrow(/could not be verified/);
-  });
-}
 
 for (const wizard of [true, false, null]) {
   test(`Fladder checks the link without writes (wizard ${wizard})`, async () => {

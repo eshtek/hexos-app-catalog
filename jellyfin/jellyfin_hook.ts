@@ -1,7 +1,25 @@
-import type { HookContext } from "../_lib/hook_context";
+// Sibling files are type imports only: each script is compiled standalone, so runtime imports of them wouldn't resolve.
+import { Database } from "bun:sqlite";
+
+import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
+
+/**
+ * Pre-configure Jellyfin (configure-jellyfin): finishes Jellyfin's setup wizard with the sign-in
+ * the owner chose for the install or collection (`ctx.signIn`) as its administrator, then makes its
+ * libraries and the now-playing widget's API key. A Jellyfin the owner already had, which a
+ * collection brings in, gets the owner's sign-in as an administrator of its own beside the ones it
+ * has (or, when a user by that name exists, that user gets the password and is made one), through
+ * an administrator's key from Jellyfin's own database, read-only, or the sign-in of an
+ * administrator the owner gives. Its server name and libraries stay as they are. Run from the card
+ * with no sign-in chosen, it asks for one.
+ */
 
 const DEVICE_ID = "hexos-jellyfin-setup";
 const CLIENT_HEADER = `MediaBrowser Client="HexOS", Device="Setup", DeviceId="${DEVICE_ID}", Version="1.0.0"`;
+const SERVER_NAME = "HexOS Jellyfin";
+const DB_RELATIVE = "/data/jellyfin.db";
+/** Jellyfin's PermissionKind.IsAdministrator. */
+const IS_ADMINISTRATOR = 0;
 
 /** The name of the API key the now-playing widget reads sessions with. */
 const WIDGET_KEY_NAME = "HexOS";
@@ -14,6 +32,17 @@ const READINESS_INTERVAL_MS = 5000;
 const SUBSYSTEM_ATTEMPTS = 8;
 const SUBSYSTEM_INTERVAL_MS = 5000;
 
+interface SignIn {
+  username: string;
+  password: string;
+}
+
+interface JellyfinUser {
+  Id: string;
+  Name: string;
+  Policy?: Record<string, unknown> & { IsAdministrator?: boolean; IsDisabled?: boolean };
+}
+
 export async function afterInstall(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "jellyfinReady",  message: "Starting Jellyfin server" },
@@ -25,40 +54,163 @@ export async function afterInstall(ctx: HookContext) {
     { id: "lib_videos",     message: "Creating library: Videos" },
   ]);
 
-  const username   = ctx.getInput<string>("admin_username") || "admin";
-  const password   = ctx.getInput<string>("admin_password");
-  const serverName = getServerName(ctx);
-
-  if (!password) throw new Error("Admin password is required");
-
   await waitForWizard(ctx);
   await ctx.emitCheckpoint("jellyfinReady");
 
-  const alreadyConfigured = await isWizardComplete(ctx);
-  if (alreadyConfigured) {
-    ctx.log("Wizard already completed, skipping setup.");
-    await ctx.emitCheckpoint("wizardComplete", "Already configured", 30);
+  let token: string;
+  if (await isWizardComplete(ctx)) {
+    token = await administrator(ctx);
+    await ctx.emitCheckpoint("wizardComplete", ctx.signIn ? "Your sign-in is an administrator" : "Already configured", 30);
   } else {
-    await runWizard(ctx, username, password);
+    const account = ctx.signIn ?? (await chooseSignIn(ctx));
+    await runWizard(ctx, account.username, account.password);
+    token = await authenticate(ctx, account.username, account.password);
+    await setServerName(ctx, token, SERVER_NAME);
     await ctx.emitCheckpoint("wizardComplete", "Setup wizard complete", 30);
   }
-
-  let token: string;
-  try {
-    token = await authenticate(ctx, username, password);
-  } catch (e) {
-    if (alreadyConfigured) {
-      throw new Error(
-        ctx.event === "action"
-          ? "Existing Jellyfin data detected. Run Pre-configure Jellyfin again with the original username and password."
-          : "Existing Jellyfin data detected. Please retry pre-configuration with the original username and password, or skip to keep your previous install.",
-      );
-    }
-    throw e;
-  }
-  await setServerName(ctx, token, serverName);
   await createLibraries(ctx, token);
   await ensureWidgetKey(ctx, token);
+}
+
+async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { title: string; description: string }) {
+  if (typeof ctx.askForInputs !== "function") return undefined;
+  return ctx.askForInputs(inputs, prompt).catch((error: unknown) => {
+    if (error instanceof Error && error.name === "HookInputsUnanswered") return undefined;
+    throw error;
+  });
+}
+
+const signInQuestions: HookInputDeclaration[] = [
+  { type: "question", id: "username", question: { question: "Jellyfin username", type: "text", key: "username", required: true } },
+  { type: "question", id: "password", question: { question: "Jellyfin password", type: "password", key: "password", required: true } },
+];
+
+function answered(answers: Record<string, unknown> | undefined): SignIn | undefined {
+  const username = typeof answers?.username === "string" ? answers.username.trim() : "";
+  const password = typeof answers?.password === "string" ? answers.password : "";
+  return username && password ? { username, password } : undefined;
+}
+
+/** A fresh Jellyfin's administrator, from the owner, when no sign-in came with the install. */
+async function chooseSignIn(ctx: HookContext): Promise<SignIn> {
+  const chosen = answered(
+    await ask(ctx, signInQuestions, {
+      title: "Choose your Jellyfin sign-in",
+      description: "Jellyfin makes this its administrator. You'll sign in to Jellyfin with it.",
+    }),
+  );
+  if (!chosen) ctx.fail("Jellyfin needs a sign-in to finish its setup. Run Pre-configure Jellyfin from its Connections tab to choose one.");
+  return chosen;
+}
+
+const tokenHeader = (token: string) => ({ "Authorization": `MediaBrowser Token="${token}"` });
+
+async function jellyfin<T>(ctx: HookContext, token: string, path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  const resp = await fetch(`${ctx.baseUrl}${path}`, {
+    method: init.method ?? (init.body === undefined ? "GET" : "POST"),
+    headers: { ...tokenHeader(token), ...(init.body === undefined ? {} : { "Content-Type": "application/json" }) },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: AbortSignal.timeout(15000),
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`${path}: ${resp.status} ${text.slice(0, 200)}`);
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/**
+ * An administrator's key from Jellyfin's own database, read-only: an API key (HexOS's widget makes
+ * one), else the newest sign-in of an administrator. Null when there's neither, or no database.
+ */
+function storedAdministratorToken(ctx: HookContext): string | null {
+  const config: ContextMount | undefined =
+    ctx.mounts.find((m) => m.containerPath === "/config") ?? ctx.mounts.find((m) => m.hostPath.endsWith("/jellyfin/config"));
+  if (!config) return null;
+  let db: Database | undefined;
+  try {
+    db = new Database(config.localPath + DB_RELATIVE, { readonly: true });
+    const key = db.query<{ AccessToken: string }, []>("SELECT AccessToken FROM ApiKeys ORDER BY DateCreated DESC LIMIT 1").get();
+    if (key?.AccessToken) return key.AccessToken;
+    const session = db
+      .query<{ AccessToken: string }, [number]>(
+        `SELECT d.AccessToken FROM Devices d
+           JOIN Permissions p ON p.UserId = d.UserId AND p.Kind = ? AND p.Value = 1
+          WHERE d.IsActive = 1
+          ORDER BY d.DateLastActivity DESC
+          LIMIT 1`,
+      )
+      .get(IS_ADMINISTRATOR);
+    return session?.AccessToken ?? null;
+  } catch {
+    return null;
+  } finally {
+    db?.close();
+  }
+}
+
+/** Signs in, and says whether the account is an administrator. Undefined when Jellyfin refuses it. */
+async function signInAs(ctx: HookContext, account: SignIn): Promise<{ token: string; admin: boolean } | undefined> {
+  const resp = await fetch(`${ctx.baseUrl}/Users/AuthenticateByName`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": CLIENT_HEADER },
+    body: JSON.stringify({ Username: account.username, Pw: account.password }),
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => undefined);
+  if (!resp?.ok) return undefined;
+  const data = await resp.json() as { AccessToken?: string; User?: JellyfinUser };
+  return data.AccessToken ? { token: data.AccessToken, admin: data.User?.Policy?.IsAdministrator === true } : undefined;
+}
+
+/**
+ * A token of an administrator on a Jellyfin that was set up before. With the owner's sign-in, that
+ * account becomes one first: made, or given the password and made an administrator when a user by
+ * that name exists, by an administrator HexOS can act as.
+ */
+async function administrator(ctx: HookContext): Promise<string> {
+  const wanted = ctx.signIn;
+  if (!wanted) {
+    const given = answered(
+      await ask(ctx, signInQuestions, {
+        title: "Sign in to Jellyfin",
+        description: "Enter the sign-in of a Jellyfin administrator, so HexOS can set Jellyfin up.",
+      }),
+    );
+    const signedIn = given && (await signInAs(ctx, given));
+    if (!signedIn?.admin) ctx.fail("HexOS needs a Jellyfin administrator's sign-in to set Jellyfin up. Run this again with one.");
+    return signedIn.token;
+  }
+
+  const already = await signInAs(ctx, wanted);
+  if (already?.admin) return already.token;
+
+  let acting = storedAdministratorToken(ctx);
+  if (acting && !(await jellyfin(ctx, acting, "/Users").then(() => true, () => false))) acting = null;
+  if (!acting) {
+    const given = answered(
+      await ask(ctx, signInQuestions, {
+        title: "Sign in to Jellyfin",
+        description: `Enter the sign-in of a Jellyfin administrator, so HexOS can add ${wanted.username} as one.`,
+      }),
+    );
+    const signedIn = given && (await signInAs(ctx, given));
+    if (!signedIn?.admin) ctx.fail(`HexOS needs a Jellyfin administrator's sign-in to add ${wanted.username}. Run this again with one.`);
+    acting = signedIn.token;
+  }
+
+  const users = await jellyfin<JellyfinUser[]>(ctx, acting, "/Users");
+  let user = users.find((entry) => entry.Name.toLowerCase() === wanted.username.toLowerCase());
+  if (user) {
+    await jellyfin(ctx, acting, `/Users/${user.Id}/Password`, { body: { NewPw: wanted.password, ResetPassword: false } });
+    user = await jellyfin<JellyfinUser>(ctx, acting, `/Users/${user.Id}`);
+  } else {
+    user = await jellyfin<JellyfinUser>(ctx, acting, "/Users/New", { body: { Name: wanted.username, Password: wanted.password } });
+  }
+  if (!user.Policy?.IsAdministrator || user.Policy.IsDisabled) {
+    await jellyfin(ctx, acting, `/Users/${user.Id}/Policy`, { body: { ...user.Policy, IsAdministrator: true, IsDisabled: false } });
+  }
+  const now = await signInAs(ctx, wanted);
+  if (!now?.admin) ctx.fail(`Jellyfin didn't make ${wanted.username} an administrator. Run this again.`);
+  ctx.log(`${wanted.username} is a Jellyfin administrator`);
+  return now.token;
 }
 
 /**
@@ -87,14 +239,6 @@ async function ensureWidgetKey(ctx: HookContext, token: string): Promise<void> {
     ctx.log(createResp.ok ? "Created the widget API key." : `Creating the widget API key returned ${createResp.status}.`);
   } catch (e) {
     ctx.log(`Could not create the widget API key: ${e}`);
-  }
-}
-
-function getServerName(ctx: HookContext): string {
-  try {
-    return ctx.getInput<string>("server_name") || "HexOS Jellyfin";
-  } catch {
-    return "HexOS Jellyfin";
   }
 }
 
@@ -315,7 +459,9 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
               "Content-Type": "application/json",
               "Authorization": `MediaBrowser Token="${token}"`,
             },
-            body: "{}",
+            // Jellyfin's own form turns real-time monitoring on; without it, what Radarr and Sonarr
+            // download shows up only at the next scheduled scan
+            body: JSON.stringify({ LibraryOptions: { EnableRealtimeMonitor: true } }),
             signal: AbortSignal.timeout(15000),
           });
 

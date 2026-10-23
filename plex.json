@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "2.1.0",
-    "changeLog": "Added the now-playing widget and moved to the v6 install script format"
+    "version": "2.3.0",
+    "changeLog": "Connect to Tautulli finds Tautulli wherever it's installed, and waits for it to start"
   },
   "installation_questions": [
     {
@@ -25,10 +25,26 @@
     }
   ],
   "requirements": {
-    "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Media", "Photos", "Music", "Movies", "Shows", "Videos"],
-    "specifications": ["2CORE", "200MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [32400]
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Media",
+      "Photos",
+      "Music",
+      "Movies",
+      "Shows",
+      "Videos"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      32400
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -61,10 +77,30 @@
       "path": "$LOCATION(Videos)",
       "network_share": true
     },
-    { "path": "$LOCATION(ApplicationsPerformance)/plex/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
-    { "path": "$LOCATION(ApplicationsPerformance)/plex/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
-    { "path": "$LOCATION(ApplicationsCapacity)/plex/logs" },
-    { "path": "$LOCATION(ApplicationsPerformance)/plex/transcode" }
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/plex/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/plex/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/plex/logs"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/plex/transcode"
+    }
   ],
   "app_values": {
     "plex": {
@@ -94,6 +130,12 @@
         "$MOUNTED_HOST_PATH($LOCATION(Videos), /videos)"
       ]
     },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 32400
+      }
+    },
     "resources": {
       "limits": {
         "cpus": 2,
@@ -108,7 +150,12 @@
       "title": "Pre-configure Plex",
       "description": "Setting up Plex server",
       "events": [
-        "onAfterInstall"
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
       ],
       "optional": true,
       "userOptional": {
@@ -159,14 +206,81 @@
       "retries": 0
     },
     {
+      "id": "connect-seerr",
+      "title": "Connect to Seerr",
+      "description": "Sets Seerr up with this Plex server, so you sign in to Seerr with your Plex account.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "requiresHooks": [
+        "configure-plex"
+      ],
+      "inputs": [
+        {
+          "type": "oauth",
+          "id": "plex_login",
+          "name": "Sign in to Plex",
+          "description": "The Plex account that owns this server. You'll sign in to Seerr with it too.",
+          "provider": "plex",
+          "flow": {
+            "type": "pin",
+            "pinUrl": "https://plex.tv/api/v2/pins",
+            "authUrl": "https://app.plex.tv/auth#?clientID={clientId}&code={code}",
+            "pollUrl": "https://plex.tv/api/v2/pins/{pinId}",
+            "clientId": "hexos-platform",
+            "tokenField": "authToken",
+            "headers": {
+              "X-Plex-Client-Identifier": "{clientId}",
+              "X-Plex-Product": "HexOS"
+            }
+          }
+        }
+      ],
+      "rerun": "converge",
+      "script": "plex/connect_seerr.ts",
+      "entrypoint": "run",
+      "timeout": 180,
+      "retries": 0
+    },
+    {
       "id": "connect-tautulli",
       "title": "Connect to Tautulli",
       "description": "Lets Tautulli track what's watched on this Plex server.",
       "kind": "connect",
+      "requiresHooks": [
+        "configure-plex"
+      ],
       "conditions": [
-        { "role": "visibility", "type": "appInstalled", "app": "tautulli" },
-        { "role": "availability", "type": "appRunning", "app": "tautulli" },
-        { "role": "availability", "type": "appRunning", "app": "plex" }
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "tautulli"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tautulli"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
       ],
       "rerun": "converge",
       "script": "plex/connect_tautulli.ts",

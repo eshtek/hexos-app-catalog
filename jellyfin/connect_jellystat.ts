@@ -1,4 +1,4 @@
-import type { HookContext } from "../_lib/hook_context";
+import type { HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
 const JELLYFIN_AUTH_HEADER = 'MediaBrowser Client="HexOS", Device="HexOS", DeviceId="hexos-app-actions", Version="1.0"';
 const API_KEY_APP_NAME = "Jellystat";
@@ -206,6 +206,42 @@ async function jellystatSignIn(
   return { token, state };
 }
 
+/**
+ * The Jellyfin administrator Jellystat's account and API key come from: the sign-in the owner chose
+ * for the install or collection (`ctx.signIn`, which Pre-configure Jellyfin made an administrator),
+ * else the answers an older Pre-configure Jellyfin was given, else asked for.
+ */
+async function jellyfinAdmin(ctx: HookContext): Promise<{ username: string; password: string }> {
+  if (ctx.signIn) return { username: ctx.signIn.username, password: ctx.signIn.password };
+  const inherited = { username: ctx.getInput<string>("admin_username"), password: ctx.getInput<string>("admin_password") };
+  // Jellyfin takes an empty password, so an inherited one counts once the username is there
+  if (inherited.username && typeof inherited.password === "string") return inherited;
+  const inputs: HookInputDeclaration[] = [
+    { type: "question", id: "username", question: { question: "Jellyfin username", type: "text", key: "username", required: true } },
+    { type: "question", id: "password", question: { question: "Jellyfin password", type: "password", key: "password", required: true } },
+  ];
+  const answered =
+    typeof ctx.askForInputs === "function"
+      ? await ctx
+          .askForInputs(inputs, {
+            title: "Sign in to Jellyfin",
+            description: "Enter a Jellyfin administrator's sign-in, so HexOS can connect Jellystat to Jellyfin.",
+          })
+          .catch((error: unknown) => {
+            if (error instanceof Error && error.name === "HookInputsUnanswered") return undefined;
+            throw error;
+          })
+      : undefined;
+  const username = answered?.username as string | undefined;
+  const password = answered?.password as string | undefined;
+  if (!username || !password) {
+    const message = "Jellystat needs a Jellyfin administrator's sign-in. Run Connect to Jellystat from Jellyfin to give it.";
+    if (ctx.skip) ctx.skip(message);
+    ctx.fail(message);
+  }
+  return { username, password };
+}
+
 function sameServer(left: string, right: string): boolean {
   return new URL(left).href.replace(/\/+$/, "") === new URL(right).href.replace(/\/+$/, "");
 }
@@ -224,8 +260,7 @@ export async function run(ctx: HookContext) {
   if (!ctx.baseUrl) throw new Error("Missing Jellyfin host/port in action context");
   await ctx.emitCheckpoint("locate");
 
-  const username = ctx.getInput<string>("admin_username");
-  const password = ctx.getInput<string>("admin_password");
+  const { username, password } = await jellyfinAdmin(ctx);
   const accessToken = await jellyfinSignIn(ctx.baseUrl, username, password);
   await ctx.emitCheckpoint("auth");
 

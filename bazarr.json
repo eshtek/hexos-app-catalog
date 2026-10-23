@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "1.2.0",
+    "changeLog": "Links to Radarr and Sonarr and fetches English subtitles with no setup"
   },
   "requirements": {
     "locations": [
@@ -18,7 +18,9 @@
     "permissions": [
       "READ_WRITE_LOCATIONS"
     ],
-    "ports": [30046]
+    "ports": [
+      30046
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -38,7 +40,9 @@
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/bazarr/config",
-      "snapshot": { "id": "config" }
+      "snapshot": {
+        "id": "config"
+      }
     }
   ],
   "app_values": {
@@ -62,5 +66,76 @@
         "memory": "$MEMORY(5%, 1024)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "configure-bazarr",
+      "title": "Pre-configure Bazarr",
+      "description": "Sets Bazarr up to fetch English subtitles",
+      "events": [
+        "onAfterInstall"
+      ],
+      "script": "bazarr/bazarr_hook.ts",
+      "entrypoint": "configure",
+      "timeout": 600,
+      "optional": true,
+      "retries": 0
+    },
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Fetches English subtitles for what Radarr manages.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "bazarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "bazarr/bazarr_hook.ts",
+      "entrypoint": "radarr",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Fetches English subtitles for what Sonarr manages.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "bazarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "bazarr/bazarr_hook.ts",
+      "entrypoint": "sonarr",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
 }

@@ -1,0 +1,123 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.1.0",
+    "changeLog": "Uses the sign-in you choose. A Profilarr you already have gets that password when you add it to a collection"
+  },
+  "sign_in": {
+    "username": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "1CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30223
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/profilarr/config",
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30223
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/profilarr/config)"
+    }
+  },
+  "hooks": [
+    {
+      "id": "configure-profilarr",
+      "title": "Pre-configure Profilarr",
+      "description": "Setting up Profilarr",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "script": "profilarr/profilarr_hook.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "optional": true,
+      "retries": 0
+    },
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Keeps Radarr's quality profiles in sync with Profilarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "profilarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "profilarr/profilarr_hook.ts",
+      "entrypoint": "radarr",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Keeps Sonarr's quality profiles in sync with Profilarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "profilarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "profilarr/profilarr_hook.ts",
+      "entrypoint": "sonarr",
+      "timeout": 900,
+      "retries": 0
+    }
+  ]
+}

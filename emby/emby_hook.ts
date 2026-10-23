@@ -1,7 +1,22 @@
-import type { HookContext } from "../_lib/hook_context";
+// Sibling files are type imports only: each script is compiled standalone, so runtime imports of them wouldn't resolve.
+import { Database } from "bun:sqlite";
+
+import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
+
+/**
+ * Pre-configure Emby (configure-emby): finishes Emby's setup wizard with the sign-in the owner
+ * chose for the install or collection (`ctx.signIn`) as its administrator, then makes its
+ * libraries. An Emby the owner already had, which a collection brings in, gets the owner's sign-in
+ * as an administrator of its own beside the ones it has (or, when a user by that name exists, that
+ * user gets the password and is made one), through an administrator's token from Emby's own
+ * database, read-only, or the sign-in of an administrator the owner gives. Its server name and
+ * libraries stay as they are. Run from the card with no sign-in chosen, it asks for one.
+ */
 
 const DEVICE_ID = "hexos-emby-setup";
 const CLIENT_HEADER = `Emby Client="HexOS", Device="Setup", DeviceId="${DEVICE_ID}", Version="1.0.0"`;
+const SERVER_NAME = "HexOS Emby";
+const DB_RELATIVE = "/data/authentication.db";
 
 const AUTO_RETRIES = 5;
 const AUTO_RETRY_DELAY_MS = 5000;
@@ -10,6 +25,17 @@ const READINESS_ATTEMPTS = 20;
 const READINESS_INTERVAL_MS = 5000;
 const SUBSYSTEM_ATTEMPTS = 8;
 const SUBSYSTEM_INTERVAL_MS = 5000;
+
+interface SignIn {
+  username: string;
+  password: string;
+}
+
+interface EmbyUser {
+  Id: string;
+  Name: string;
+  Policy?: Record<string, unknown> & { IsAdministrator?: boolean; IsDisabled?: boolean };
+}
 
 function api(ctx: HookContext, path: string): string {
   return `${ctx.baseUrl}/emby${path}`;
@@ -30,48 +56,162 @@ export async function afterInstall(ctx: HookContext) {
     { id: "lib_videos",     message: "Creating library: Videos" },
   ]);
 
-  const username   = ctx.getInput<string>("admin_username") || "admin";
-  const password   = ctx.getInput<string>("admin_password");
-  const serverName = getServerName(ctx);
-
-  if (!password) throw new Error("Admin password is required");
-
   await waitForWizard(ctx);
   await ctx.emitCheckpoint("embyReady");
 
-  const alreadyConfigured = await isWizardComplete(ctx);
-  if (alreadyConfigured) {
-    ctx.log("Wizard already completed, skipping setup.");
-    await ctx.emitCheckpoint("wizardComplete", "Already configured", 30);
+  let token: string;
+  if (await isWizardComplete(ctx)) {
+    token = await administrator(ctx);
+    await ctx.emitCheckpoint("wizardComplete", ctx.signIn ? "Your sign-in is an administrator" : "Already configured", 30);
   } else {
-    await runWizard(ctx, username, password);
+    const account = ctx.signIn ?? (await chooseSignIn(ctx));
+    await runWizard(ctx, account.username, account.password);
+    token = await authenticate(ctx, account.username, account.password);
+    await setServerName(ctx, token, SERVER_NAME);
     await ctx.emitCheckpoint("wizardComplete", "Setup wizard complete", 30);
   }
-
-  let token: string;
-  try {
-    token = await authenticate(ctx, username, password);
-  } catch (e) {
-    if (alreadyConfigured) {
-      throw new Error(
-        ctx.event === "action"
-          ? "Existing Emby data detected. Run Pre-configure Emby again with the original username and password."
-          : "Existing Emby data detected. Please retry pre-configuration with the original username and password, or skip to keep your previous install.",
-      );
-    }
-    throw e;
-  }
-
-  await setServerName(ctx, token, serverName);
   await createLibraries(ctx, token);
 }
 
-function getServerName(ctx: HookContext): string {
+async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { title: string; description: string }) {
+  if (typeof ctx.askForInputs !== "function") return undefined;
+  return ctx.askForInputs(inputs, prompt).catch((error: unknown) => {
+    if (error instanceof Error && error.name === "HookInputsUnanswered") return undefined;
+    throw error;
+  });
+}
+
+const signInQuestions: HookInputDeclaration[] = [
+  { type: "question", id: "username", question: { question: "Emby username", type: "text", key: "username", required: true } },
+  { type: "question", id: "password", question: { question: "Emby password", type: "password", key: "password", required: true } },
+];
+
+function answered(answers: Record<string, unknown> | undefined): SignIn | undefined {
+  const username = typeof answers?.username === "string" ? answers.username.trim() : "";
+  const password = typeof answers?.password === "string" ? answers.password : "";
+  return username && password ? { username, password } : undefined;
+}
+
+/** A fresh Emby's administrator, from the owner, when no sign-in came with the install. */
+async function chooseSignIn(ctx: HookContext): Promise<SignIn> {
+  const chosen = answered(
+    await ask(ctx, signInQuestions, {
+      title: "Choose your Emby sign-in",
+      description: "Emby makes this its administrator. You'll sign in to Emby with it.",
+    }),
+  );
+  if (!chosen) ctx.fail("Emby needs a sign-in to finish its setup. Run Pre-configure Emby from its Connections tab to choose one.");
+  return chosen;
+}
+
+async function emby<T>(ctx: HookContext, token: string, path: string, init: { body?: unknown } = {}): Promise<T> {
+  const resp = await fetch(api(ctx, path), {
+    method: init.body === undefined ? "GET" : "POST",
+    headers: { ...authHeader(token), ...(init.body === undefined ? {} : { "Content-Type": "application/json" }) },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    signal: AbortSignal.timeout(15000),
+  });
+  const text = await resp.text();
+  if (!resp.ok) throw new Error(`${path}: ${resp.status} ${text.slice(0, 200)}`);
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** Whether the token acts as an administrator: only one reads the server's configuration. */
+const actsAsAdministrator = (ctx: HookContext, token: string) =>
+  emby(ctx, token, "/System/Configuration").then(() => true, () => false);
+
+/**
+ * An administrator's token from Emby's own database, read-only: an API key (a token with no user),
+ * else the newest sign-ins, the first that acts as an administrator. Null when there's none.
+ */
+async function storedAdministratorToken(ctx: HookContext): Promise<string | null> {
+  const config: ContextMount | undefined =
+    ctx.mounts.find((m) => m.containerPath === "/config") ?? ctx.mounts.find((m) => m.hostPath.endsWith("/emby/config"));
+  if (!config) return null;
+  let tokens: string[] = [];
+  let db: Database | undefined;
   try {
-    return ctx.getInput<string>("server_name") || "HexOS Emby";
+    db = new Database(config.localPath + DB_RELATIVE, { readonly: true });
+    tokens = db
+      .query<{ AccessToken: string }, []>(
+        `SELECT AccessToken FROM Tokens_2
+          WHERE IsActive = 1
+          ORDER BY (UserId IS NULL OR UserId = '') DESC, DateLastActivityInt DESC
+          LIMIT 5`,
+      )
+      .all()
+      .map((row) => row.AccessToken);
   } catch {
-    return "HexOS Emby";
+    return null;
+  } finally {
+    db?.close();
   }
+  for (const token of tokens) {
+    if (await actsAsAdministrator(ctx, token)) return token;
+  }
+  return null;
+}
+
+/** Signs in, and says whether the account is an administrator. Undefined when Emby refuses it. */
+async function signInAs(ctx: HookContext, account: SignIn): Promise<{ token: string; admin: boolean } | undefined> {
+  const resp = await fetch(api(ctx, "/Users/AuthenticateByName"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Emby-Authorization": CLIENT_HEADER },
+    body: JSON.stringify({ Username: account.username, Pw: account.password }),
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => undefined);
+  if (!resp?.ok) return undefined;
+  const data = await resp.json() as { AccessToken?: string; User?: EmbyUser };
+  return data.AccessToken ? { token: data.AccessToken, admin: data.User?.Policy?.IsAdministrator === true } : undefined;
+}
+
+/**
+ * A token of an administrator on an Emby that was set up before. With the owner's sign-in, that
+ * account becomes one first: made, or given the password and made an administrator when a user by
+ * that name exists, by an administrator HexOS can act as.
+ */
+async function administrator(ctx: HookContext): Promise<string> {
+  const wanted = ctx.signIn;
+  if (!wanted) {
+    const given = answered(
+      await ask(ctx, signInQuestions, {
+        title: "Sign in to Emby",
+        description: "Enter the sign-in of an Emby administrator, so HexOS can set Emby up.",
+      }),
+    );
+    const signedIn = given && (await signInAs(ctx, given));
+    if (!signedIn?.admin) ctx.fail("HexOS needs an Emby administrator's sign-in to set Emby up. Run this again with one.");
+    return signedIn.token;
+  }
+
+  const already = await signInAs(ctx, wanted);
+  if (already?.admin) return already.token;
+
+  let acting = await storedAdministratorToken(ctx);
+  if (!acting) {
+    const given = answered(
+      await ask(ctx, signInQuestions, {
+        title: "Sign in to Emby",
+        description: `Enter the sign-in of an Emby administrator, so HexOS can add ${wanted.username} as one.`,
+      }),
+    );
+    const signedIn = given && (await signInAs(ctx, given));
+    if (!signedIn?.admin) ctx.fail(`HexOS needs an Emby administrator's sign-in to add ${wanted.username}. Run this again with one.`);
+    acting = signedIn.token;
+  }
+
+  const users = await emby<EmbyUser[]>(ctx, acting, "/Users");
+  let user = users.find((entry) => entry.Name.toLowerCase() === wanted.username.toLowerCase());
+  user ??= await emby<EmbyUser>(ctx, acting, "/Users/New", { body: { Name: wanted.username } });
+  await emby(ctx, acting, `/Users/${user.Id}/Password`, { body: { NewPw: wanted.password, ResetPassword: false } });
+  user = await emby<EmbyUser>(ctx, acting, `/Users/${user.Id}`);
+  if (!user.Policy?.IsAdministrator || user.Policy.IsDisabled) {
+    await emby(ctx, acting, `/Users/${user.Id}/Policy`, { body: { ...user.Policy, IsAdministrator: true, IsDisabled: false } });
+  }
+  const now = await signInAs(ctx, wanted);
+  if (!now?.admin) ctx.fail(`Emby didn't make ${wanted.username} an administrator. Run this again.`);
+  ctx.log(`${wanted.username} is an Emby administrator`);
+  return now.token;
 }
 
 async function waitForWizard(ctx: HookContext): Promise<void> {

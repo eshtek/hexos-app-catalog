@@ -67,6 +67,20 @@ export interface HookContext {
   readonly inputs: Record<string, unknown>;
 
   /**
+   * The sign-in the owner chose for this install or collection run, for an app whose script
+   * declares `sign_in` (a username of at least 3 characters and a password of at least 8). Undefined for a card run outside an
+   * install or collection, and from a deck that predates it: a hook then falls back to what it did
+   * before, or asks with `askForInputs`. Never write it to a file of HexOS's own; the app's own
+   * settings are where it belongs.
+   */
+  readonly signIn?: {
+    username: string;
+    password: string;
+    /** The owner's email, for an app whose first account takes one (Seerr's, made through Jellyfin or Emby). */
+    email?: string;
+  };
+
+  /**
    * File-targeted actions only: the files the user selected. `containerPath`
    * is the same file as THIS app sees it (pre-resolved from its mounts), or
    * null when the file isn't under any of the app's mounts — scripts for
@@ -102,6 +116,22 @@ export interface HookContext {
    */
   getInput<T = unknown>(inputId: string): T;
 
+  /**
+   * Pause and ask the owner for what the hook can't find itself (another app's password, a Plex
+   * sign-in), in the same form a declared input gets, then carry on with the answers keyed by input
+   * id. Rejects with an Error named "HookInputsUnanswered" when the owner skips or after 10
+   * minutes. A last resort: try everything the hook can read for itself first.
+   *
+   * @example
+   * ```ts
+   * const answers = await ctx.askForInputs(
+   *   [{ type: "question", id: "password", question: { question: "qBittorrent password", type: "password", key: "password", required: true } }],
+   *   { title: "Sign in to qBittorrent", description: "Enter the password you use for qBittorrent, so Radarr can send it downloads." },
+   * );
+   * ```
+   */
+  askForInputs(inputs: HookInputDeclaration[], prompt?: { title?: string; description?: string }): Promise<Record<string, unknown>>;
+
   /** Log a message (visible in backend logs, not shown to user) */
   log(message: string): void;
 
@@ -123,6 +153,12 @@ export interface HookContext {
    * actions; lifecycle hooks may receive null depending on platform version.
    */
   getInstalledAppUrl(appId: string): Promise<string | null>;
+  /**
+   * Another installed app's live mounts, resolved as this hook's own `mounts` are: how a link
+   * between two apps reads the other one's settings file (an *arr's config.xml for its API key).
+   * Empty when the app isn't installed or its mounts can't be read.
+   */
+  getInstalledAppMounts(appId: string): Promise<ContextMount[]>;
 
   registerCheckpoints(checkpoints: Array<{ id: string; message: string }>): Promise<void>;
 
@@ -185,6 +221,14 @@ export interface HookContext {
   fail(message: string, context?: Array<{ label: string; value: string }>): never;
 
   /**
+   * End the hook without its work because the owner skipped something it needs (Plex's sign-in, so
+   * Seerr was never set up), which trying again won't change. A collection run skips the step with
+   * the message and goes on; anywhere else the hook fails with it, as fail() does. Missing on a box
+   * from before it: call `ctx.skip ? ctx.skip(message) : ctx.fail(message)`.
+   */
+  skip?(message: string, context?: Array<{ label: string; value: string }>): never;
+
+  /**
    * Pause the hook at a failed checkpoint and wait for the user to retry or skip.
    * The error and context are surfaced in the UI exactly like `fail()`, but the hook
    * stays alive — it resumes when the user acts.
@@ -232,6 +276,30 @@ export interface WaitForAppOptions {
   /** Additional fetch headers */
   headers?: Record<string, string>;
 }
+
+/** An input a hook asks for: the same shape as an entry of a hook's declared `inputs`. */
+export type HookInputDeclaration =
+  | {
+      type: "question";
+      id: string;
+      question: {
+        question: string;
+        type: "text" | "password" | "number" | "boolean" | "select";
+        key: string;
+        required?: boolean;
+        description?: string;
+        placeholder?: string;
+        default?: string | number | boolean;
+      };
+    }
+  | {
+      type: "oauth";
+      id: string;
+      name: string;
+      description?: string;
+      provider: string;
+      flow: Record<string, unknown>;
+    };
 
 /**
  * Common OAuth result shapes for type-safe input access.

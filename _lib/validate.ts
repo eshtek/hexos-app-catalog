@@ -5,7 +5,7 @@
 //
 // Run: bun run validate
 
-import { readdirSync, existsSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
   CALL_MACROS,
@@ -217,6 +217,31 @@ function validate(file: string, script: Record<string, unknown>) {
     err(file, "script block is missing");
   } else if (typeof scriptMeta.version !== "string") {
     err(file, "script.version is missing");
+  }
+
+  // --- sign-in: the app's hooks set the one the owner chooses (ctx.signIn) ---
+  if (script.default_sign_in !== undefined) {
+    err(file, "default_sign_in is gone: declare sign_in, and the hooks set the sign-in the owner chooses");
+  }
+  const signIn = script.sign_in;
+  if (signIn !== undefined) {
+    if (!isObject(signIn)) {
+      err(file, "sign_in must be an object");
+    } else {
+      if (signIn.username !== undefined && typeof signIn.username !== "boolean") {
+        err(file, "sign_in.username must be true or false");
+      }
+      // An app with several users gets a new administrator in place of a replaced sign-in
+      if (signIn.adds_user !== undefined && typeof signIn.adds_user !== "boolean") {
+        err(file, "sign_in.adds_user must be true or false");
+      }
+      const extra = Object.keys(signIn).filter((key) => key !== "username" && key !== "adds_user");
+      if (extra.length > 0) err(file, `sign_in: unknown keys ${extra.join(", ")}`);
+    }
+    // The sign-in is set by a hook; a script with none would promise the owner one it never gets
+    if (!Array.isArray(script.hooks) || script.hooks.length === 0) {
+      err(file, "sign_in needs a hook that sets the sign-in");
+    }
   }
 
   // --- requirements (required from v4 on) ---
@@ -692,6 +717,120 @@ function validate(file: string, script: Record<string, unknown>) {
   }
 }
 
+// --- collections ---
+
+// A collection (`_collections/<id>.json`) names catalog apps and says how each is chosen: always
+// installed (fixed), one of a group (single), or any of a group (multiple). Main reads the same
+// rules (hexos-platform shared/eshtek/appCollections.ts) and leaves out a file that breaks them.
+const COLLECTIONS_DIR = "_collections";
+const COLLECTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const GROUP_TYPES = ["fixed", "single", "multiple"];
+
+/** A collection's answers for an app: each one a question the app asks, with a value it accepts. */
+function checkAnswers(file: string, at: string, appId: string, answers: unknown) {
+  if (!isObject(answers)) {
+    err(file, `${at}: answers must map question keys to answers`);
+    return;
+  }
+  let script: unknown;
+  try {
+    script = JSON.parse(readFileSync(`${appId}.json`, "utf-8"));
+  } catch {
+    return; // the app's own file reports its problem
+  }
+  const questions = isObject(script) && Array.isArray(script.installation_questions) ? script.installation_questions : [];
+  for (const [key, value] of Object.entries(answers)) {
+    const question = questions.find((q) => isObject(q) && q.key === key) as Record<string, unknown> | undefined;
+    if (!question) {
+      err(file, `${at}: answers "${key}", which ${appId} doesn't ask`);
+      continue;
+    }
+    if (!["string", "number", "boolean"].includes(typeof value)) {
+      err(file, `${at}: the answer to "${key}" must be a string, number or boolean`);
+      continue;
+    }
+    const options = Array.isArray(question.options) ? question.options.filter(isObject) : [];
+    if (question.type === "select" && !options.some((o) => String(o.value) === String(value))) {
+      err(file, `${at}: "${String(value)}" isn't one of the answers ${appId} offers to "${key}"`);
+    }
+  }
+}
+
+function validateCollection(file: string, collection: Record<string, unknown>, catalogApps: Set<string>) {
+  const id = file.slice(COLLECTIONS_DIR.length + 1).replace(/\.json$/, "");
+  if (!COLLECTION_ID.test(id)) err(file, "the file name must be the collection id: lowercase words joined by hyphens");
+  if (collection.type !== "collection") err(file, 'type must be "collection"');
+  if (collection.version !== 1) err(file, "version must be 1");
+  for (const field of ["name", "description"]) {
+    if (typeof collection[field] !== "string" || !(collection[field] as string).trim()) err(file, `${field} is required`);
+  }
+  if (collection.image !== undefined) {
+    if (typeof collection.image !== "string") err(file, "image must be a path");
+    else checkAssetPath(file, "image", collection.image);
+  }
+  const specs = isObject(collection.requirements) ? collection.requirements.specifications : undefined;
+  if (specs !== undefined) {
+    if (!Array.isArray(specs)) err(file, "requirements.specifications must be an array");
+    else for (const spec of specs) if (typeof spec !== "string" || !SPEC_REGEX.test(spec)) err(file, `requirements.specifications: "${spec}" is not a specification`);
+  }
+  if (!Array.isArray(collection.groups) || collection.groups.length === 0) {
+    err(file, "groups must list at least one group");
+    return;
+  }
+  const groupIds = new Set<string>();
+  const seen = new Set<string>();
+  const requirable = new Set<string>();
+  for (const [index, group] of collection.groups.entries()) {
+    const where = `groups[${index}]`;
+    if (!isObject(group)) {
+      err(file, `${where}: must be an object`);
+      continue;
+    }
+    if (typeof group.id !== "string" || !COLLECTION_ID.test(group.id)) err(file, `${where}: id must be lowercase words joined by hyphens`);
+    else if (groupIds.has(group.id)) err(file, `${where}: group "${group.id}" appears twice`);
+    else groupIds.add(group.id);
+    if (typeof group.type !== "string" || !GROUP_TYPES.includes(group.type)) err(file, `${where}: type must be fixed, single or multiple`);
+    if (typeof group.title !== "string" || !group.title.trim()) err(file, `${where}: title is required`);
+    if (!Array.isArray(group.options) || group.options.length === 0) {
+      err(file, `${where}: options must list at least one app`);
+      continue;
+    }
+    for (const [o, option] of group.options.entries()) {
+      const at = `${where}.options[${o}]`;
+      if (!isObject(option) || typeof option.app !== "string") {
+        err(file, `${at}: must name an app`);
+        continue;
+      }
+      if (!catalogApps.has(option.app)) err(file, `${at}: "${option.app}" has no install script in this catalog`);
+      if (seen.has(option.app)) err(file, `${at}: "${option.app}" appears in more than one place`);
+      seen.add(option.app);
+      if (option.summary !== undefined && (typeof option.summary !== "string" || !option.summary.trim())) {
+        err(file, `${at}: summary must be a few words on what the app is for`);
+      }
+      if (option.answers !== undefined && catalogApps.has(option.app)) checkAnswers(file, at, option.app, option.answers);
+      if (option.vpnRecommended !== undefined && typeof option.vpnRecommended !== "boolean") {
+        err(file, `${at}: vpnRecommended must be true or false`);
+      }
+      for (const field of ["requires", "requiresAny"] as const) {
+        const required = option[field];
+        if (required === undefined) continue;
+        if (group.type === "fixed") err(file, `${at}: a fixed app can't require another app`);
+        else if (!Array.isArray(required)) err(file, `${at}: ${field} must list apps`);
+        else for (const app of required) {
+          if (!requirable.has(app)) err(file, `${at}: ${field} "${app}", which no earlier group offers`);
+        }
+      }
+    }
+    if (group.type === "single" && group.options.filter((option) => isObject(option) && option.default === true).length > 1) {
+      err(file, `${where}: a single group has at most one default`);
+    }
+    if (group.min !== undefined && (group.type !== "multiple" || !Number.isInteger(group.min) || (group.min as number) < 1)) {
+      err(file, `${where}: min is a whole number from 1, and only a multiple group sets one`);
+    }
+    for (const option of group.options) if (isObject(option) && typeof option.app === "string") requirable.add(option.app);
+  }
+}
+
 // --- run ---
 
 const files = readdirSync(".")
@@ -716,6 +855,67 @@ for (const file of files) {
     continue;
   }
   validate(file, parsed);
+}
+
+// A hook reaches an app at the box's LAN IP and the app's requirements.ports[0] (getInstalledAppUrl,
+// ctx.baseUrl), so an app a hook runs on or names must publish its web UI on that port, pinned in
+// app_values.network (web_port, or http_port for Emby). A container's own port (Radarr's 7878) is not
+// where TrueNAS publishes it.
+const parsedScripts = new Map<string, Record<string, unknown>>();
+for (const file of files) {
+  try {
+    const parsed = JSON.parse(await Bun.file(file).text());
+    if (isObject(parsed)) parsedScripts.set(file.replace(/\.json$/, ""), parsed);
+  } catch { /* already reported as a parse error */ }
+}
+const linkedApps = new Set<string>();
+for (const [appId, script] of parsedScripts) {
+  const hooks = Array.isArray(script.hooks) ? script.hooks.filter(isObject) : [];
+  if (hooks.length > 0) linkedApps.add(appId);
+  for (const hook of hooks) {
+    for (const cond of Array.isArray(hook.conditions) ? hook.conditions.filter(isObject) : []) {
+      if (typeof cond.app === "string") linkedApps.add(cond.app);
+    }
+  }
+}
+for (const appId of [...linkedApps].sort()) {
+  const script = parsedScripts.get(appId);
+  if (!script) continue;
+  const requirements = isObject(script.requirements) ? script.requirements : {};
+  const declared = Array.isArray(requirements.ports) ? requirements.ports[0] : undefined;
+  const appValues = isObject(script.app_values) ? script.app_values : {};
+  const network = isObject(appValues.network) ? appValues.network : {};
+  const pinned = Object.values(network)
+    .filter(isObject)
+    .map((port) => port.port_number)
+    .filter((port) => port !== undefined);
+  if (pinned.length === 0) {
+    warn(`${appId}.json`, `takes part in a hook, so pin its web port in app_values.network (requirements.ports[0] is ${declared ?? "missing"})`);
+  } else if (!pinned.includes(declared)) {
+    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in app_values.network (${pinned.join(", ")})`);
+  }
+}
+
+const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));
+const collectionFiles = existsSync(COLLECTIONS_DIR)
+  ? readdirSync(COLLECTIONS_DIR)
+      .filter((f) => f.endsWith(".json"))
+      .sort()
+      .map((f) => `${COLLECTIONS_DIR}/${f}`)
+  : [];
+for (const file of collectionFiles) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await Bun.file(file).text());
+  } catch (cause) {
+    err(file, `is not valid JSON: ${(cause as Error).message}`);
+    continue;
+  }
+  if (!isObject(parsed)) {
+    err(file, "top level must be an object");
+    continue;
+  }
+  validateCollection(file, parsed, catalogApps);
 }
 
 // Assets are cheap to orphan and invisible when they rot, so name the ones
@@ -751,7 +951,7 @@ for (const [file, messages] of group(errors)) {
 }
 
 console.log(
-  `\n${files.length} install scripts checked — ` +
+  `\n${files.length} install scripts and ${collectionFiles.length} collections checked — ` +
     `${errors.length} error(s), ${warnings.length} warning(s)`,
 );
 

@@ -20,14 +20,16 @@ export async function afterInstall(ctx: HookContext) {
   await ctx.waitForApp("/identity", { headers: { Accept: "application/json" } });
   await ctx.emitCheckpoint("plexReady");
 
-  if (await isServerClaimed(authToken, ctx)) {
+  // Run again from the card or a collection, a server already claimed keeps the name it has
+  const claimedBefore = await isServerClaimed(authToken, ctx);
+  if (claimedBefore) {
     ctx.log("Server already claimed, skipping.");
   } else {
     await claimServer(authToken, ctx);
   }
   await ctx.emitCheckpoint("serverClaimed");
 
-  await setPreferences(authToken, ctx, serverName);
+  await setPreferences(authToken, ctx, claimedBefore ? undefined : serverName);
   await ctx.emitCheckpoint("prefsSet");
 
   await createLibraries(authToken, ctx);
@@ -96,11 +98,16 @@ async function claimServer(authToken: string, ctx: HookContext) {
   ctx.log("Fallback claim applied.");
 }
 
-async function setPreferences(authToken: string, ctx: HookContext, serverName: string) {
+async function setPreferences(authToken: string, ctx: HookContext, serverName: string | undefined) {
   const prefs: Record<string, string | number> = {
     AcceptedEULA: 1,
     PublishServerOnPlexOnlineKey: 1,
-    FriendlyName: serverName,
+    ...(serverName ? { FriendlyName: serverName } : {}),
+    // Plex scans only by hand until these are on, so what Radarr and Sonarr download would never appear
+    FSEventLibraryUpdatesEnabled: 1,
+    FSEventLibraryPartialScanEnabled: 1,
+    ScheduledLibraryUpdatesEnabled: 1,
+    ScheduledLibraryUpdateInterval: 43200,
   };
 
   for (const [key, value] of Object.entries(prefs)) {

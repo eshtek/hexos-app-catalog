@@ -1,14 +1,35 @@
 {
   "version": 6,
   "script": {
-    "version": "2.2.0",
-    "changeLog": "Setup is optional: a prompt left unanswered no longer fails the install, and Pre-configure Emby can be run from the app later"
+    "version": "2.4.0",
+    "changeLog": "Uses the sign-in you choose as Emby's administrator, which Seerr signs in with too. A Emby you already have gets it as an administrator of its own when you add it to a collection"
+  },
+  "sign_in": {
+    "username": true,
+    "adds_user": true
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Media", "Photos", "Music", "Movies", "Shows", "Videos"],
-    "specifications": ["2CORE", "512MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [9096, 8920]
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Media",
+      "Photos",
+      "Music",
+      "Movies",
+      "Shows",
+      "Videos"
+    ],
+    "specifications": [
+      "2CORE",
+      "512MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      9096,
+      8920
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -41,9 +62,18 @@
       "path": "$LOCATION(Videos)",
       "network_share": true
     },
-    { "path": "$LOCATION(ApplicationsPerformance)/emby/config", "snapshot": { "id": "config" } },
-    { "path": "$LOCATION(ApplicationsPerformance)/emby/cache" },
-    { "path": "$LOCATION(ApplicationsPerformance)/emby/transcode" }
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/emby/config",
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/emby/cache"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/emby/transcode"
+    }
   ],
   "app_values": {
     "storage": {
@@ -89,7 +119,7 @@
       ],
       "script": "emby/emby_hook.ts",
       "entrypoint": "afterInstall",
-      "timeout": 300,
+      "timeout": 900,
       "description": "Setting up Emby",
       "optional": true,
       "retries": 0,
@@ -100,44 +130,38 @@
           "url": "https://emby.media/terms.html",
           "label": "Emby Terms of Service"
         }
-      },
-      "inputs": [
+      }
+    },
+    {
+      "id": "connect-seerr",
+      "title": "Connect to Seerr",
+      "description": "Sets Seerr up with this Emby server, so you sign in to Seerr with your Emby account.",
+      "kind": "connect",
+      "conditions": [
         {
-          "type": "question",
-          "id": "admin_username",
-          "question": {
-            "question": "Emby username",
-            "description": "This will be the admin username for your Emby server once installed.",
-            "type": "text",
-            "key": "admin_username",
-            "required": true
-          }
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "seerr"
         },
         {
-          "type": "question",
-          "id": "admin_password",
-          "question": {
-            "question": "Emby password",
-            "description": "This will be the admin password for your Emby server once installed.",
-            "type": "password",
-            "key": "admin_password",
-            "required": true
-          }
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
         },
         {
-          "type": "question",
-          "id": "server_name",
-          "question": {
-            "question": "Server name",
-            "type": "text",
-            "key": "server_name",
-            "required": false,
-            "default": "HexOS Emby",
-            "description": "The name your Emby server will appear as to you and your friends.",
-            "placeholder": "HexOS Emby"
-          }
+          "role": "availability",
+          "type": "appRunning",
+          "app": "emby"
         }
-      ]
+      ],
+      "requiresHooks": [
+        "configure-emby"
+      ],
+      "rerun": "converge",
+      "script": "emby/connect_seerr.ts",
+      "entrypoint": "run",
+      "timeout": 900,
+      "retries": 0
     }
   ],
   "widgetsSchema": 3,

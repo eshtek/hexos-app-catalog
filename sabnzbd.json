@@ -1,0 +1,94 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.1.0",
+    "changeLog": "Uses the sign-in you choose, asked for only from outside your home network"
+  },
+  "sign_in": {
+    "username": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Downloads"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30055
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/sabnzbd/config",
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30055
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sabnzbd/config)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/sabnzbd, /downloads/sabnzbd)"
+      ]
+    }
+  },
+  "hooks": [
+    {
+      "id": "seed-settings",
+      "title": "Set SABnzbd up",
+      "description": "Sets SABnzbd's folders and the API key other apps use to send it downloads, so only your Usenet server is left to add",
+      "events": [
+        "onBeforeInstall"
+      ],
+      "optional": true,
+      "script": "sabnzbd/seed_settings.ts",
+      "entrypoint": "seedSettings",
+      "timeout": 60
+    },
+    {
+      "id": "configure-sabnzbd",
+      "title": "Pre-configure SABnzbd",
+      "description": "Gives SABnzbd the sign-in you chose, asked for only from outside your home network",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "sabnzbd/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 600,
+      "retries": 0
+    }
+  ]
+}

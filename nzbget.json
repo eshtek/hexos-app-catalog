@@ -1,0 +1,82 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.1.0",
+    "changeLog": "Uses the sign-in you choose, still opening without it on your home network"
+  },
+  "sign_in": {
+    "username": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Downloads"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      6789
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/nzbget/config",
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 6789
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nzbget/config)",
+      "downloads": "$HOST_PATH($LOCATION(Downloads)/nzbget)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/nzbget, /downloads/nzbget)"
+      ]
+    }
+  },
+  "hooks": [
+    {
+      "id": "configure-nzbget",
+      "title": "Pre-configure NZBGet",
+      "description": "Gives NZBGet the sign-in you chose, and opens its web page on your home network without it",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "nzbget/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 600
+    }
+  ]
+}
