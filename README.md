@@ -30,6 +30,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Lidarr](lidarr.json) | Music collection manager |
 | [Linkwarden](linkwarden.json) | Webpage archiving utility |
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
+| [Maintainerr](maintainerr.json) | Rule-based clean-up of watched media |
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
