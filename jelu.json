@@ -1,0 +1,42 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [31106]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    { "path": "$LOCATION(ApplicationsPerformance)/jelu/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/jelu/database", "owner": { "user": "apps" }, "snapshot": { "id": "db" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/jelu/images", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/jelu/imports", "owner": { "user": "apps" }, "snapshot": { "id": "db" } }
+  ],
+  "app_values": {
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/jelu/config)",
+      "database": "$HOST_PATH($LOCATION(ApplicationsPerformance)/jelu/database)",
+      "files_images": "$HOST_PATH($LOCATION(ApplicationsPerformance)/jelu/images)",
+      "files_imports": "$HOST_PATH($LOCATION(ApplicationsPerformance)/jelu/imports)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 31106
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}

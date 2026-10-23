@@ -1,0 +1,62 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial Script"
+  },
+  "installation_questions": [
+    {
+      "question": "Input your Hardcover Api key",
+      "description": "You can get an api key from https://docs.hardcover.app/api/getting-started/",
+      "type": "text",
+      "key": "hardcover_token",
+      "required": false
+    }
+  ],
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance", "Media" ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [30437]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    { "path": "$LOCATION(Media)", "network_share": true },
+    
+    { "path": "$LOCATION(ApplicationsPerformance)/calibre-web-automated/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(Media)/calibre-web" },
+    { "path": "$LOCATION(Media)/calibre-web/ingest" },
+    { "path": "$LOCATION(Media)/calibre-web/books" }
+  ],
+  "app_values": {
+    "cwa": {
+      "watch_mode": "inotify",
+      "hardcover_token": "$IF($QUESTION(hardcover_token), $QUESTION(hardcover_token), \"\")"
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/calibre-web-automated/config)",
+      "library": "$HOST_PATH($LOCATION(Media)/calibre-web-automated/books)",
+      "book_ingest": "$HOST_PATH($LOCATION(Media)/calibre-web-automated/ingest)"
+    }
+  },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30437
+      }
+    },
+  "resources": {
+    "limits": {
+      "cpus": 2,
+      "memory": "$MEMORY(10%, 2048)"
+    }
+  }
+}

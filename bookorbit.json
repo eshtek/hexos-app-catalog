@@ -1,0 +1,60 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "initial install script"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "Media"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30441]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    { "path": "$LOCATION(Media)/books"},
+    { "path": "$LOCATION(Media)/bookorbit"},
+    { "path": "$LOCATION(Media)/bookorbit/bookdrop"},
+    { "path": "$LOCATION(ApplicationsPerformance)/bookorbit/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/bookorbit/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
+    { "path": "$LOCATION(Media)/manga"},
+    { "path": "$LOCATION(Media)/comics"},
+    { "path": "$LOCATION(Media)/audiobooks"}
+  ],
+  "app_values": {
+    "bookorbit": {
+      "db_password": "$RANDOM_STRING(16)",
+      "jwt_secret": "$RANDOM_STRING(32)",
+      "bootstrap_token": "$RANDOM_STRING(32)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30441
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/bookorbit/data)",
+      "books": "$HOST_PATH($LOCATION(Media)/books)",
+      "book_drop": "$HOST_PATH($LOCATION(Media)/bookorbit/bookdrop)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/bookorbit/postgres_data)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/audiobooks, /audiobooks)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/comics, /comics)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/manga, /manga)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}

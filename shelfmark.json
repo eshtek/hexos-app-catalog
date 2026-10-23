@@ -1,0 +1,141 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "installation_questions": [
+    {
+      "question": "What is your primary app for books?",
+      "type": "select",
+      "key": "CALIBRE_WEB_URL",
+      "required": true,
+      "options": [
+        {
+          "text": "I don't use an app for books",
+          "value": "null"
+        },
+        {
+          "text": "Bookorbit",
+          "value": "http://$SERVER_LAN_IP:30441"
+        },
+        {
+          "text": "Bookshelf",
+          "value": "http://$SERVER_LAN_IP:30378"
+        },
+        {
+          "text": "Calibre Web",
+          "value": "http://$SERVER_LAN_IP:31067"
+        },
+        {
+          "text": "Calibre Web Automated",
+          "value": "http://$SERVER_LAN_IP:30437"
+        },
+        {
+          "text": "Grimmory",
+          "value": "http://$SERVER_LAN_IP:30396"
+        },
+        {
+          "text": "Kavita",
+          "value": "http://$SERVER_LAN_IP:30069"
+        },
+        {
+          "text": "Komga",
+          "value": "http://$SERVER_LAN_IP:30048"
+        }
+      ],
+      "default": "null"
+    },
+    {
+      "question": "What is your primary app for audiobooks?",
+      "type": "select",
+      "key": "AUDIOBOOK_LIBRARY_URL",
+      "required": true,
+      "options": [
+        {
+          "text": "I don't use an app for audiobooks",
+          "value": "null"
+        },
+        {
+          "text": "Audiobookshelf",
+          "value": "http://$SERVER_LAN_IP:30067"
+        },
+        {
+          "text": "Bookshelf",
+          "value": "http://$SERVER_LAN_IP:30378"
+        },
+        {
+          "text": "emby",
+          "value": "http://$SERVER_LAN_IP:9096"
+        },
+        {
+          "text": "Jellyfin",
+          "value": "http://$SERVER_LAN_IP:30013"
+        },
+        {
+          "text": "Plex",
+          "value": "http://$SERVER_LAN_IP:32400"
+        },
+        {
+          "text": "Storyteller",
+          "value": "http://$SERVER_LAN_IP:30042"
+        }
+      ],
+      "default": "null"
+    }
+  ],
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance", "Media"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [30260]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    { "path": "$LOCATION(ApplicationsPerformance)/shelfmark/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(Downloads)/shelfmark" }
+  ],
+  "app_values": {
+    "shelfmark": {
+      "additional_envs": [
+        {
+          "name": "CALIBRE_WEB_URL",
+          "value": "$IF($QUESTION(CALIBRE_WEB_URL) == \"null\", \"\", $QUESTION(CALIBRE_WEB_URL))"
+        },
+        {
+          "name": "AUDIOBOOK_LIBRARY_URL",
+          "value": "$IF($QUESTION(AUDIOBOOK_LIBRARY_URL) == \"null\", \"\", $QUESTION(AUDIOBOOK_LIBRARY_URL))"
+        }
+      ]
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/shelfmark/config)",
+      "books": "$HOST_PATH($LOCATION(Downloads)/shelfmark)"
+    }
+  },
+  "network": {
+    "web_port": {
+      "bind_mode": "published",
+      "port_number": 30260
+    }
+  },
+  "resources": {
+    "limits": {
+      "cpus": 2,
+      "memory": "$MEMORY(10%, 2048)"
+    }
+  }
+}

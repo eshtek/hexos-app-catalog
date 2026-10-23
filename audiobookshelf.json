@@ -1,0 +1,54 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial Script"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance", "Media"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [30067]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    { "path": "$LOCATION(Media)", "network_share": true },
+    { "path": "$LOCATION(ApplicationsPerformance)/audiobookshelf/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/audiobookshelf/metadata", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(Media)/audiobooks" },
+    { "path": "$LOCATION(Media)/podcasts" },
+    { "path": "$LOCATION(Media)/books" }
+  ],
+  "app_values": {
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/audiobookshelf/config)",
+      "metadata": "$HOST_PATH($LOCATION(ApplicationsPerformance)/audiobookshelf/metadata)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/audiobooks, /audiobooks)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/podcasts, /podcasts)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/books, /books)"
+      ]
+    }
+  },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30067
+      }
+    },
+  "resources": {
+    "limits": {
+      "cpus": 2,
+      "memory": "$MEMORY(10%, 2048)"
+    }
+  }
+}

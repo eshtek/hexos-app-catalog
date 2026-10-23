@@ -1,0 +1,48 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "Media"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30048]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    { "path": "$LOCATION(ApplicationsPerformance)/komga/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(Media)/manga"},
+    { "path": "$LOCATION(Media)/comics"},
+    { "path": "$LOCATION(Media)/books"}
+  ],
+  "app_values": {
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/komga/config)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/books, /books)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/comics, /comics)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/manga, /manga)"
+      ]
+    },
+  "network": {
+    "web_port": {
+      "bind_mode": "published",
+      "port_number": 30048
+    }
+  },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}
