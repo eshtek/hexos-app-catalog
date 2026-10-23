@@ -57,6 +57,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Tailscale](tailscale.json) | Private access to the server from anywhere |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
 | [Warracker](warracker.json) | warranty tracker |
 | [Wiki.js](wiki-js.json) | Open source Wiki software |

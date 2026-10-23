@@ -1,0 +1,59 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "1CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": []
+  },
+  "installation_questions": [
+    {
+      "question": "Tailscale auth key",
+      "description": "In the Tailscale admin console, open the Keys page and select Generate auth key. Paste the key here. Afterwards, turn off key expiry for this server on the Machines page, so it stays connected.",
+      "type": "password",
+      "key": "auth_key",
+      "required": true,
+      "installonly": true
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/tailscale/state",
+      "snapshot": {
+        "id": "state"
+      }
+    }
+  ],
+  "app_values": {
+    "tailscale": {
+      "hostname": "hexos",
+      "auth_key": "$QUESTION(auth_key)"
+    },
+    "network": {
+      "host_network": true
+    },
+    "storage": {
+      "state": "$HOST_PATH($LOCATION(ApplicationsPerformance)/tailscale/state)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 1,
+        "memory": 512
+      }
+    }
+  }
+}
