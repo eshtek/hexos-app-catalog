@@ -49,6 +49,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Radarr](radarr.json) | Movie collection manager |
 | [Ratelog](radarr.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
+| [SABnzbd](sabnzbd.json) | Usenet downloader |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
