@@ -32,6 +32,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
+| [Minecraft](minecraft.json) | Minecraft Java Edition server |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
