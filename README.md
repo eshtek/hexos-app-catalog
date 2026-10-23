@@ -10,6 +10,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 |-----|-------------|
 | [AFFiNE](affine.json) | Knowledge base software |
 | [Actual Budget](actual-budget.json) | Financial planning software |
+| [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
