@@ -53,6 +53,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
+| [SparkyFitness](sparkyfitness.json) | Food, exercise and weight tracker |
 | [Sportarr](sportarr.json) | Sports collection manager |
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
