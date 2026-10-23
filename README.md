@@ -41,6 +41,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Peanut](peanut.json) | UPS monitoring dashboard |
 | [PhotoStructure](photostructure.json) | Photo and video library organizer |
 | [Plex](plex.json) | Media server with Plex Pass support |
+| [Portainer](portainer.json) | Docker container management |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
 | [qBittorrent](qbittorrent.json) | BitTorrent client |

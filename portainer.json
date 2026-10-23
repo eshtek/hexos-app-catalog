@@ -1,0 +1,112 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "300MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      31015,
+      31017
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/portainer/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "portainer": {
+      "additional_envs": [
+        {
+          "name": "PORTAINER_NO_SETUP_TOKEN",
+          "value": "true"
+        }
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 31015
+      },
+      "http_port": {
+        "bind_mode": "published",
+        "port_number": 31017
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/portainer/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "setup-portainer",
+      "title": "Set up Portainer",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "idempotent",
+      "surfaces": [
+        "card"
+      ],
+      "script": "portainer/portainer_hook.ts",
+      "entrypoint": "setup",
+      "timeout": 300,
+      "description": "Setting up Portainer",
+      "optional": true,
+      "retries": 0,
+      "inputs": [
+        {
+          "type": "question",
+          "id": "admin_username",
+          "question": {
+            "question": "Admin username",
+            "description": "You sign in to Portainer with this name.",
+            "type": "text",
+            "key": "admin_username",
+            "required": true,
+            "default": "admin",
+            "placeholder": "admin"
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_password",
+          "question": {
+            "question": "Admin password",
+            "description": "At least 12 characters. You sign in to Portainer with this password.",
+            "type": "password",
+            "key": "admin_password",
+            "required": true
+          }
+        }
+      ]
+    }
+  ]
+}
