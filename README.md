@@ -35,6 +35,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
+| [Nginx Proxy Manager](nginx-proxy-manager.json) | Reverse proxy with free SSL certificates |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
