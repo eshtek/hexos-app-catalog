@@ -1,0 +1,52 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
+    "specifications": ["4CORE", "10GB", "8GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [31028]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/open-webui/data",
+      "snapshot": { "id": "data" }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/open-webui/ollama"
+    }
+  ],
+  "app_values": {
+    "open_webui": {
+      "image_selector": "ollama_image",
+      "redis_password": "$RANDOM_STRING(32)",
+      "webui_secret_key": "$RANDOM_STRING(32)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 31028
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/open-webui/data)",
+      "ollama": "$HOST_PATH($LOCATION(ApplicationsCapacity)/open-webui/ollama)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(75%, 2)",
+        "memory": "$MEMORY(50%, 4096)"
+      },
+      "gpus": "$GPU_CONFIG()"
+    }
+  }
+}
