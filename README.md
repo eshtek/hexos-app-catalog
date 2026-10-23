@@ -21,6 +21,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [FileFlows](fileflows.json) | Automated media file conversion |
 | [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
+| [FlareSolverr](flaresolverr.json) | Proxy server that gets past Cloudflare protection |
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |
