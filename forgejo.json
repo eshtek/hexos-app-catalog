@@ -1,0 +1,139 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30142,
+      30143
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/forgejo/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/forgejo/postgres_data",
+      "owner": {
+        "user": "netdata",
+        "group": "docker"
+      },
+      "snapshot": {
+        "id": "db"
+      }
+    }
+  ],
+  "app_values": {
+    "forgejo": {
+      "db_password": "$RANDOM_STRING(32)",
+      "root_url": "http://$SERVER_LAN_IP:30142",
+      "additional_envs": [
+        {
+          "name": "FORGEJO__server__DOMAIN",
+          "value": "$SERVER_LAN_IP"
+        },
+        {
+          "name": "FORGEJO__server__SSH_DOMAIN",
+          "value": "$SERVER_LAN_IP"
+        }
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30142
+      },
+      "ssh_port": {
+        "bind_mode": "published",
+        "port_number": 30143
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/forgejo/data)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/forgejo/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "setup-forgejo",
+      "title": "Set up Forgejo",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "idempotent",
+      "surfaces": [
+        "card"
+      ],
+      "script": "forgejo/forgejo_hook.ts",
+      "entrypoint": "setup",
+      "timeout": 420,
+      "description": "Setting up Forgejo",
+      "optional": true,
+      "retries": 0,
+      "inputs": [
+        {
+          "type": "question",
+          "id": "admin_username",
+          "question": {
+            "question": "Admin username",
+            "description": "You sign in to Forgejo with this name. Forgejo reserves the name admin.",
+            "placeholder": "your-name",
+            "type": "text",
+            "key": "admin_username",
+            "required": true
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_email",
+          "question": {
+            "question": "Admin email",
+            "description": "Forgejo needs an email address for its admin.",
+            "type": "text",
+            "key": "admin_email",
+            "required": true
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_password",
+          "question": {
+            "question": "Admin password",
+            "description": "At least 8 characters. You sign in to Forgejo with this password.",
+            "type": "password",
+            "key": "admin_password",
+            "required": true
+          }
+        }
+      ]
+    }
+  ]
+}
