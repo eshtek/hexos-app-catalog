@@ -1,0 +1,86 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "1GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30257
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/trilium-notes/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30257
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/trilium-notes/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 1024)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "setup-trilium",
+      "title": "Set up Trilium",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "idempotent",
+      "surfaces": [
+        "card"
+      ],
+      "script": "trilium-notes/trilium_hook.ts",
+      "entrypoint": "setup",
+      "timeout": 420,
+      "description": "Setting up Trilium",
+      "optional": true,
+      "retries": 0,
+      "inputs": [
+        {
+          "type": "question",
+          "id": "password",
+          "question": {
+            "question": "Trilium password",
+            "description": "At least 4 characters. You sign in to Trilium with this password.",
+            "type": "password",
+            "key": "password",
+            "required": true
+          }
+        }
+      ]
+    }
+  ]
+}
