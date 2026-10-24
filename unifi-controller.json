@@ -1,0 +1,72 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30072,
+      8080,
+      3478,
+      10001,
+      30074,
+      30075
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/unifi-controller/data",
+      "owner": {
+        "user": "netdata",
+        "group": "docker"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_https_port": {
+        "bind_mode": "published",
+        "port_number": 30072
+      },
+      "web_http_port": {
+        "bind_mode": "published",
+        "port_number": 8080
+      },
+      "stun_port": {
+        "bind_mode": "published",
+        "port_number": 3478
+      },
+      "discovery_port": {
+        "bind_mode": "published",
+        "port_number": 10001
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/unifi-controller/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}
