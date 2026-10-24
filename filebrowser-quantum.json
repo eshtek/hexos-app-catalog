@@ -1,0 +1,116 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "Documents",
+      "Downloads",
+      "Photos",
+      "Music",
+      "Videos",
+      "Media",
+      "Movies",
+      "Shows"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30334
+    ]
+  },
+  "installation_questions": [
+    {
+      "question": "Admin password",
+      "description": "You sign in to FileBrowser as admin with this password. Use at least 5 characters, and not admin. Change it here, because FileBrowser resets it to this one each time it starts.",
+      "type": "password",
+      "key": "admin_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Documents)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Photos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Videos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Music)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Movies)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Shows)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/filebrowser-quantum/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "filebrowser": {
+      "admin_password": "$QUESTION(admin_password)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30334
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/filebrowser-quantum/config)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Documents), /srv/Documents)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /srv/Downloads)",
+        "$MOUNTED_HOST_PATH($LOCATION(Photos), /srv/Photos)",
+        "$MOUNTED_HOST_PATH($LOCATION(Videos), /srv/Videos)",
+        "$MOUNTED_HOST_PATH($LOCATION(Music), /srv/Music)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media), /srv/Media)",
+        "$MOUNTED_HOST_PATH($LOCATION(Movies), /srv/Movies)",
+        "$MOUNTED_HOST_PATH($LOCATION(Shows), /srv/Shows)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}
