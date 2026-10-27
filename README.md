@@ -19,7 +19,6 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
-| [FileFlows](fileflows.json) | Automated media file conversion |
 | [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
 | [Handbrake](handbrake.json) | Video transcoder |
