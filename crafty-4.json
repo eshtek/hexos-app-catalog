@@ -8,7 +8,7 @@
     "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
     "specifications": ["2CORE", "4GBRAM"],
     "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [8443]
+    "ports": [30146, 25565, 25566, 25567, 25568, 25569, 25570, 25571, 25572, 25573, 25574, 25575, 19132]
   },
   "ensure_directories_exists": [
     {
@@ -29,7 +29,30 @@
     },
     "labels": [],
     "network": {
-      "host_network": true
+      "host_network": false,
+      "web_port": {
+        "bind_mode": "published",
+        "host_ips": [],
+        "port_number": 30146
+      },
+      "additional_ports": [
+        {
+          "bind_mode": "published",
+          "host_ips": [],
+          "port_number": 19132,
+          "container_port": 19132,
+          "protocol": "udp"
+        }
+      ],
+      "additional_port_ranges": [
+        {
+          "bind_mode": "published",
+          "host_ips": [],
+          "protocol": "tcp",
+          "start": 25565,
+          "end": 25575
+        }
+      ]
     },
     "storage": {
       "backups": "$HOST_PATH($LOCATION(ApplicationsCapacity)/crafty-4/backups)",
