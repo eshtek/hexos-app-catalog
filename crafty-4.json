@@ -12,8 +12,10 @@
   },
   "ensure_directories_exists": [
     {
-      "path": "$LOCATION(ApplicationsPerformance)",
-      "network_share": true
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
     },
     { "path": "$LOCATION(ApplicationsCapacity)/crafty-4/backups", "owner": { "user": "apps" }, "snapshot": { "id": "backups" } },
     { "path": "$LOCATION(ApplicationsPerformance)/crafty-4/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
