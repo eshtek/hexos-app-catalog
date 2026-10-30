@@ -37,6 +37,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
+| [Nginx Proxy Manager](nginx-proxy-manager.json) | Reverse proxy with free SSL certificates |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
