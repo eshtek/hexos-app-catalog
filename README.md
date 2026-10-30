@@ -101,6 +101,49 @@ Leave it out when the owner picks the ports inside the app, as with each Minecra
 }
 ```
 
+## Ports
+
+A script states its ports twice. `requirements.ports` is the list HexOS reads, and its first entry is where HexOS reaches the app. The pins in `app_values` are what TrueNAS applies, so a port the script doesn't pin is published at the chart's default. `network` goes in `app_values`, under the chart's own keys; anywhere else it is never applied. A custom app runs on TrueNAS's `ix-app` chart, whose pins sit directly in `app_values`: `ports`, or `host_network` and `portals`.
+
+```json
+"requirements": {
+  "ports": [30146, 19132]
+},
+"app_values": {
+  "network": {
+    "web_port": { "bind_mode": "published", "port_number": "$PORT(30146)" },
+    "additional_ports": [{ "bind_mode": "published", "port_number": 19132, "container_port": 19132, "protocol": "udp" }]
+  }
+}
+```
+
+### Ports that can move
+
+A pinned number is fixed: it never moves, and TrueNAS refuses the install when another app holds it. `"$PORT(30146)"` means the app prefers 30146 and HexOS may move it to a free port.
+
+- As a whole value it resolves to a number. Inside a longer string it resolves to digits, so an address follows the port: `"http://$SERVER_LAN_IP:$PORT(30111)"`.
+- Every `$PORT(n)` with the same `n` in a script resolves to the same port.
+- A range whose `start` and `end` are both `$PORT(...)` moves as one block, by the same offset.
+- `requirements.ports` stays a plain list of preferred numbers, and each `$PORT(n)` names one of them.
+
+Use it for a port the app really can serve on elsewhere: a web UI, the app's own address in a string, a game port players are told. Keep a number where something outside the app expects that port (DNS, discovery, STUN, BitTorrent and Syncthing peers, Bedrock's 19132), and on a host-network or custom app, which binds its port itself. Another app's port in a string stays as written, since `$PORT` only knows the script it's in.
+
+`$PORT` needs a HexOS release that resolves it, so a script that uses it waits for that release.
+
+### What the validator checks
+
+`bun run validate` compares port numbers alone, with every member of a range counted, because TrueNAS ignores protocol: `53/udp` and `53/tcp` clash.
+
+| Check | Result |
+|-------|--------|
+| `requirements.ports` and the pins match, both ways. List a range's members one by one. A pin that reads a question is compared at the question's default | Error |
+| A host-network app binds ports it doesn't pin, so its list must hold its pins and portals, and every other port it binds | Error |
+| `network` sits in `app_values` | Error |
+| Two apps in a collection want one port and at least one of them can't move. Options of one `single` group are never picked together | Error |
+| Every `$PORT(n)` is well formed and declared, and a range has both ends movable or neither | Error |
+| Two scripts in the catalog fix one port: the box refuses the second | Warning |
+| A `$PORT` number another script also wants: the box moves it, and if the other script fixes that port, the box refuses that one when the `$PORT` app got there first | Warning |
+
 ## Values on the Settings tab
 
 An installed app's Settings tab lists each question with its current answer and a Change button. A password stays hidden until the owner shows it, so a question whose key names a secret (`token`, `secret`, `password`, `api_key`) must be typed `password`, and `bun run validate` refuses it as `text`.

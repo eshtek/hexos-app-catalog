@@ -66,6 +66,10 @@ export const CALL_MACROS = [
   "DISPLAY_GPU_PCI",
   "DISPLAY_GPU_CONFIG",
   "DISPLAY_PORT",
+  // A host port that may move: "$PORT(30146)" prefers 30146 and HexOS may pick a free port instead.
+  // As a whole value it resolves to a number, inside a longer string to digits, and every $PORT(n)
+  // with the same n in a script resolves to the same port.
+  "PORT",
 ] as const;
 
 /** Macros substituted as bare tokens, with no argument list. */

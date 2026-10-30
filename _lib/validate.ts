@@ -29,6 +29,16 @@ import {
   WIDGET_MIN_REFRESH_S,
   WIDGET_SLOT_TYPES,
 } from "./contract";
+import {
+  catalogFixedPortClashes,
+  catalogPreferredPortClashes,
+  collectionPortClashes,
+  declaredPortsMatchPins,
+  networkInsideAppValues,
+  portMacrosWellFormed,
+  preferredPort,
+  type Finding,
+} from "./ports";
 
 type Problem = { file: string; message: string };
 
@@ -37,6 +47,9 @@ const warnings: Problem[] = [];
 
 const err = (file: string, message: string) => errors.push({ file, message });
 const warn = (file: string, message: string) => warnings.push({ file, message });
+const report = (file: string, findings: Finding[]) => {
+  for (const { level, message } of findings) (level === "error" ? err : warn)(file, message);
+};
 
 /** A question key that names a secret: an API key, a token, a password. */
 const SECRET_KEY = /token|secret|passw(or)?d|api_?key/i;
@@ -936,8 +949,8 @@ for (const file of files) {
 
 // A hook reaches an app at the box's LAN IP and the app's requirements.ports[0] (getInstalledAppUrl,
 // ctx.baseUrl), so an app a hook runs on or names must publish its web UI on that port, pinned in
-// app_values.network (web_port, or http_port for Emby). A container's own port (Radarr's 7878) is not
-// where TrueNAS publishes it.
+// app_values.network (web_port, or http_port for Emby), as a number or $PORT(n). A container's own port
+// (Radarr's 7878) is not where TrueNAS publishes it.
 const parsedScripts = new Map<string, Record<string, unknown>>();
 for (const file of files) {
   try {
@@ -964,7 +977,7 @@ for (const appId of [...linkedApps].sort()) {
   const network = isObject(appValues.network) ? appValues.network : {};
   const pinned = Object.values(network)
     .filter(isObject)
-    .map((port) => port.port_number)
+    .map((port) => preferredPort(port.port_number))
     .filter((port) => port !== undefined);
   if (pinned.length === 0) {
     warn(`${appId}.json`, `takes part in a hook, so pin its web port in app_values.network (requirements.ports[0] is ${declared ?? "missing"})`);
@@ -972,6 +985,12 @@ for (const appId of [...linkedApps].sort()) {
     err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in app_values.network (${pinned.join(", ")})`);
   }
 }
+
+// What each script publishes, and what scripts would fight over on one box (see ports.ts)
+for (const [appId, script] of parsedScripts) {
+  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script)]);
+}
+report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 
 const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));
 const collectionFiles = existsSync(COLLECTIONS_DIR)
@@ -993,6 +1012,7 @@ for (const file of collectionFiles) {
     continue;
   }
   validateCollection(file, parsed, catalogApps);
+  report(file, collectionPortClashes(parsed, parsedScripts));
 }
 
 // Assets are cheap to orphan and invisible when they rot, so name the ones
