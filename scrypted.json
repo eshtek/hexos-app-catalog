@@ -1,0 +1,68 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity"
+    ],
+    "specifications": [
+      "4CORE",
+      "4GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30130,
+      30131
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/scrypted/server",
+      "snapshot": {
+        "id": "server"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/scrypted/nvr"
+    }
+  ],
+  "app_values": {
+    "scrypted": {
+      "image_selector": "image"
+    },
+    "network": {
+      "insecure_port": {
+        "bind_mode": "published",
+        "port_number": 30130
+      },
+      "secure_port": {
+        "bind_mode": "published",
+        "port_number": 30131
+      },
+      "host_network": true
+    },
+    "storage": {
+      "server": "$HOST_PATH($LOCATION(ApplicationsPerformance)/scrypted/server)",
+      "nvr": "$HOST_PATH($LOCATION(ApplicationsCapacity)/scrypted/nvr)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      },
+      "gpus": "$GPU_CONFIG()"
+    }
+  }
+}

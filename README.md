@@ -53,6 +53,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [RomM](romm.json) | Game ROM collection manager and player |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
+| [Scrypted](scrypted.json) | Camera hub for Google Home, Alexa and Home Assistant |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
