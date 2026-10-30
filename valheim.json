@@ -1,7 +1,7 @@
 {
   "version": 6,
   "custom": true,
-  "internal": true,
+  "internal": false,
   "metadata": {
     "name": "Valheim",
     "description": "A collaborative exploration and survival game for 1-10 players, set in a procedurally generated afterlife inspired by Viking culture. Battle, build, and conquer your way to a saga worthy of Odin's patronage! Supports crossplay between PC and consoles.",
