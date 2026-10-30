@@ -1,0 +1,109 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "1CORE",
+      "100MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30004,
+      53
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/adguard-home/config",
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/adguard-home/work",
+      "snapshot": {
+        "id": "work"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30004
+      },
+      "dns_port": {
+        "bind_mode": "",
+        "port_number": 53
+      },
+      "host_network": true
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/adguard-home/config)",
+      "work": "$HOST_PATH($LOCATION(ApplicationsPerformance)/adguard-home/work)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "setup-adguard-home",
+      "title": "Set up AdGuard Home",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "idempotent",
+      "surfaces": [
+        "card"
+      ],
+      "script": "adguard-home/adguard_home_hook.ts",
+      "entrypoint": "setup",
+      "timeout": 300,
+      "description": "Setting up AdGuard Home",
+      "optional": true,
+      "retries": 0,
+      "inputs": [
+        {
+          "type": "question",
+          "id": "admin_username",
+          "question": {
+            "question": "Admin username",
+            "description": "You sign in to AdGuard Home with this name.",
+            "type": "text",
+            "key": "admin_username",
+            "required": true,
+            "default": "admin",
+            "placeholder": "admin"
+          }
+        },
+        {
+          "type": "question",
+          "id": "admin_password",
+          "question": {
+            "question": "Admin password",
+            "description": "At least 8 characters. You sign in to AdGuard Home with this password. To filter your whole network, set your router's DNS server to this server's address.",
+            "type": "password",
+            "key": "admin_password",
+            "required": true
+          }
+        }
+      ]
+    }
+  ]
+}
