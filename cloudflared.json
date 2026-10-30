@@ -1,0 +1,36 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "installation_questions": [
+    {
+      "question": "Tunnel token",
+      "description": "In the Cloudflare dashboard, go to Networking, then Tunnels, and create a tunnel. The token is the long string at the end of the install command it shows. Routes you add there can point at localhost and an app's port.",
+      "type": "password",
+      "key": "tunnel_token",
+      "required": true
+    }
+  ],
+  "requirements": {
+    "locations": [],
+    "specifications": ["1CORE", "100MB"],
+    "permissions": [],
+    "ports": []
+  },
+  "app_values": {
+    "cloudflared": {
+      "tunnel_token": "$QUESTION(tunnel_token)"
+    },
+    "network": {
+      "host_network": true
+    },
+    "resources": {
+      "limits": {
+        "cpus": 1,
+        "memory": 512
+      }
+    }
+  }
+}
