@@ -1,17 +1,20 @@
 // Image watcher. A custom app (custom: true) runs on TrueNAS's ix-app chart with the image its
 // script pins in app_values.image, and an installed server sees a new image only as a raised
 // script.version: the platform compares script versions and nothing else
-// (isScriptUpdateAvailable). So for each custom app this finds the newest tag of its image shaped
+// (isScriptUpdateAvailable). So for each custom app this finds the newest tags of its image shaped
 // like the pinned one (1.4.1 is followed by 1.5.0, never by sha-0ab6cdc or latest; 21.2-1 by
-// 21.2-2), and writes the change a pull request carries: the tag, with its digest when the pin
-// carries one, a raised script.version, metadata.version where it reads as the tag, and the change
-// log. A pin whose tag now names another digest (re-pushed upstream) is reported, never followed.
+// 21.2-2), one with the pin's first number and one with a higher first number, and writes the
+// change a pull request carries for each: the tag, with its digest when the pin carries one, a
+// raised script.version, metadata.version where it reads as the tag, and the change log. Its body
+// compares what the two images declare and quotes the release notes between them. A pin whose tag
+// now names another digest (re-pushed upstream) is reported, never followed.
 //
 // Run: bun _lib/image_watch.ts check [--out plan.json]   what is newer, and any re-pushed pin
-//      bun _lib/image_watch.ts apply plan.json <app>      write one app's update into its script
+//      bun _lib/image_watch.ts apply plan.json <id>       write one update into its script
 //
-// The image-watch workflow runs both from the repo root and opens one pull request per app.
-// Nothing here merges: a person tests the update on a lab box first.
+// The image-watch workflow runs both from the repo root and opens one pull request per update: on
+// image-watch/<app>, and a draft on image-watch/<app>-major for the next major version. Nothing here
+// merges: a person tests the update on a lab box first.
 
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { applyEdits, type JSONPath, modify } from "jsonc-parser";
@@ -68,6 +71,19 @@ export function newestTag(version: string, tags: string[]): string | null {
 
 /** Whether the first number moved (1.4.1 to 2.0.0), where an image's options most often change. */
 export const isMajorStep = (from: string, to: string): boolean => numbersOf(from)[0] !== numbersOf(to)[0];
+
+/**
+ * The tags to offer for a pin, one per lane: the newest with the pin's first number, and the newest
+ * with a higher one (the next major version, whose options may have changed). Two lanes, so a
+ * major version waiting on a person never holds back the fixes to the one servers run.
+ */
+export function laneTags(version: string, tags: string[]): { current: string | null; major: string | null } {
+  const first = numbersOf(version)[0];
+  return {
+    current: newestTag(version, tags.filter((tag) => numbersOf(tag)[0] === first)),
+    major: newestTag(version, tags.filter((tag) => numbersOf(tag)[0] > first)),
+  };
+}
 
 /**
  * metadata.version after the move to `newTag`, where it reads as the old tag or as its leading
@@ -266,9 +282,162 @@ async function digestOf(registry: Registry, token: string | undefined, tag: stri
   return digest;
 }
 
+// --- what an image declares ---
+
+/** The settings an image's config declares, which a script's env, ports and storage are written against. */
+export interface ImageSettings {
+  env: Record<string, string>;
+  ports: string[];
+  volumes: string[];
+  user: string;
+  command: string[];
+}
+
+/** An OCI or Docker image config blob's settings. */
+export function settingsOf(blob: unknown): ImageSettings {
+  const config = isObject(blob) && isObject(blob.config) ? blob.config : {};
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : []);
+  const keys = (v: unknown): string[] => (isObject(v) ? Object.keys(v).sort() : []);
+  const env: Record<string, string> = {};
+  for (const entry of strings(config.Env)) {
+    const at = entry.indexOf("=");
+    if (at > 0) env[entry.slice(0, at)] = entry.slice(at + 1);
+  }
+  return {
+    env,
+    ports: keys(config.ExposedPorts),
+    volumes: keys(config.Volumes),
+    user: typeof config.User === "string" ? config.User : "",
+    command: [...strings(config.Entrypoint), ...strings(config.Cmd)],
+  };
+}
+
+/** What moved between two images' settings, as [what, pinned, newest] with "" for not declared. */
+export function settingsChanges(before: ImageSettings, after: ImageSettings): Array<[string, string, string]> {
+  const changes: Array<[string, string, string]> = [];
+  for (const name of [...new Set([...Object.keys(before.env), ...Object.keys(after.env)])].sort()) {
+    if (before.env[name] !== after.env[name]) changes.push([`Variable ${name}`, before.env[name] ?? "", after.env[name] ?? ""]);
+  }
+  const lists: Array<[string, string[], string[]]> = [
+    ["Ports", before.ports, after.ports],
+    ["Folders", before.volumes, after.volumes],
+    ["Start command", before.command, after.command],
+  ];
+  for (const [what, a, b] of lists) if (a.join(" ") !== b.join(" ")) changes.push([what, a.join(" "), b.join(" ")]);
+  if (before.user !== after.user) changes.push(["User", before.user, after.user]);
+  return changes;
+}
+
+// TrueNAS runs on amd64, so that is the image a server pulls from a multi-platform index
+const PLATFORM = { os: "linux", architecture: "amd64" };
+
+/**
+ * A registry read that follows a redirect without the registry's token: blobs live on storage
+ * behind a signed address (Docker Hub's and GHCR's both), which takes the address alone.
+ */
+async function registryJson(registry: Registry, token: string | undefined, path: string): Promise<Record<string, unknown>> {
+  const url = `https://${registry.host}/v2/${registry.repository}/${path}`;
+  let response = await fetch(url, { headers: { ...authorized(token), Accept: MANIFEST_TYPES }, redirect: "manual" });
+  const location = response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+  if (location) {
+    await response.body?.cancel();
+    response = await fetch(new URL(location, url));
+  }
+  if (!response.ok) throw new Error(`${registry.host}/${registry.repository}: ${path} answered ${response.status}`);
+  const body = await response.json();
+  if (!isObject(body)) throw new Error(`${registry.host}/${registry.repository}: ${path} is not an object`);
+  return body;
+}
+
+/** The settings of the image a server pulls for `reference` (a tag or a digest). */
+async function settingsAt(registry: Registry, token: string | undefined, reference: string): Promise<ImageSettings> {
+  let manifest = await registryJson(registry, token, `manifests/${reference}`);
+  if (Array.isArray(manifest.manifests)) {
+    const entry = manifest.manifests.find(
+      (m) => isObject(m) && isObject(m.platform) && m.platform.os === PLATFORM.os && m.platform.architecture === PLATFORM.architecture,
+    );
+    if (!isObject(entry) || typeof entry.digest !== "string") throw new Error(`${reference} has no ${PLATFORM.os}/${PLATFORM.architecture} image`);
+    manifest = await registryJson(registry, token, `manifests/${entry.digest}`);
+  }
+  const config = isObject(manifest.config) ? manifest.config.digest : undefined;
+  if (typeof config !== "string") throw new Error(`${reference} names no image config`);
+  return settingsOf(await registryJson(registry, token, `blobs/${config}`));
+}
+
+// --- release notes ---
+
+export interface Release {
+  tag: string;
+  body: string;
+  url: string;
+}
+
+/** The repository a script's sources name on GitHub (owner/name), where its release notes are. */
+export const sourceRepo = (sources: string[]): string | undefined =>
+  sources
+    .map((source) => /^https:\/\/github\.com\/([^/]+\/[^/#?]+)/.exec(source)?.[1]?.replace(/\.git$/, ""))
+    .find(Boolean);
+
+/**
+ * The releases after the pinned version up to the newest, newest first. A release counts when its
+ * tag has the pin's shape, a leading v aside (v1.4.1 for 1.4.1), so another numbering in the same
+ * repository (Kodi's 21.2-Omega for an image's 21.2-1) never reads as one.
+ */
+export function releasesBetween(releases: Release[], from: string, to: string): Release[] {
+  const bare = (tag: string) => tag.replace(/^v/i, "");
+  const shape = tagShape(bare(from));
+  if (!shape) return [];
+  const [low, high] = [numbersOf(from), numbersOf(to)];
+  return releases
+    .filter((r) => shape.test(bare(r.tag)))
+    .filter((r) => compareNumbers(numbersOf(r.tag), low) > 0 && compareNumbers(numbersOf(r.tag), high) <= 0)
+    .sort((a, b) => compareNumbers(numbersOf(b.tag), numbersOf(a.tag)));
+}
+
+const SHOWN_RELEASES = 10;
+const NOTE_CHARACTERS = 4000;
+
+/**
+ * The release notes as a pull request shows them, each folded under its tag. Each sits in a code
+ * block, so a mention or an issue number in upstream's text notifies and links no one from here;
+ * the fence is longer than any run of backticks inside it.
+ */
+export function notesSection(releases: Release[]): string[] {
+  const lines: string[] = [];
+  for (const release of releases.slice(0, SHOWN_RELEASES)) {
+    const text = release.body.trim() || "(no notes)";
+    const shown = text.length > NOTE_CHARACTERS ? `${text.slice(0, NOTE_CHARACTERS)}\n…` : text;
+    const fence = "`".repeat(Math.max(3, ...[...shown.matchAll(/`+/g)].map((m) => m[0].length + 1)));
+    lines.push(`<details><summary>${release.tag}</summary>`, "", `${fence}text`, shown, fence, "");
+    if (shown !== text) lines.push(`The rest: ${release.url}`, "");
+    lines.push("</details>", "");
+  }
+  if (releases.length > SHOWN_RELEASES) lines.push(`${releases.length - SHOWN_RELEASES} older releases are left out.`, "");
+  return lines;
+}
+
+async function fetchReleases(repo: string): Promise<Release[]> {
+  // The workflow's token raises GitHub's limit for anonymous reads, which runners share
+  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
+  const response = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=100`, {
+    headers: { Accept: "application/vnd.github+json", "User-Agent": "hexos-image-watch", ...authorized(token) },
+  });
+  if (!response.ok) throw new Error(`${repo}'s releases answered ${response.status}`);
+  const body = (await response.json()) as Array<{ tag_name?: string; body?: string | null; html_url?: string; draft?: boolean }>;
+  return body
+    .filter((r) => !r.draft && typeof r.tag_name === "string")
+    .map((r) => ({ tag: r.tag_name as string, body: r.body ?? "", url: r.html_url ?? "" }));
+}
+
 // --- the plan ---
 
 export interface ImageUpdate {
+  /** The app, or <app>-major for the next major version: the pull request's branch is image-watch/<id> */
+  id: string;
+  lane: "current" | "major";
+  branch: string;
+  /** A major version opens as a draft: its script may need more than the new tag */
+  draft: boolean;
   app: string;
   file: string;
   name: string;
@@ -293,9 +462,59 @@ export interface Plan {
   failures: Array<{ app: string; error: string }>;
 }
 
-/** The update for one app moving to `newVersion` (with `newDigest` when its pin carries one). */
-export function updateFor(app: WatchedApp, newVersion: string, newDigest?: string): ImageUpdate {
+/** What a pull request shows beside the change, each read from upstream, or why it couldn't be. */
+export interface UpdateDetails {
+  settings?: { before: ImageSettings; after: ImageSettings } | { error: string };
+  releases?: Release[] | { error: string };
+}
+
+/** A table cell holding `text` as code: pipes escaped, and a fence longer than any backtick run in it. */
+function codeCell(text: string): string {
+  if (!text) return "not declared";
+  const shown = (text.length > 100 ? `${text.slice(0, 100)}…` : text).replace(/\|/g, "\\|");
+  const ticks = "`".repeat(Math.max(1, ...[...shown.matchAll(/`+/g)].map((m) => m[0].length + 1)));
+  return ticks.length > 1 ? `${ticks} ${shown} ${ticks}` : `\`${shown}\``;
+}
+
+function settingsSection(settings: UpdateDetails["settings"]): string[] {
+  if (!settings) return [];
+  const heading = `### What the image declares (${PLATFORM.os}/${PLATFORM.architecture})`;
+  if ("error" in settings) return [heading, "", `⚠️ The two images couldn't be compared: ${settings.error}`, ""];
+  const changes = settingsChanges(settings.before, settings.after);
+  const note = "An image can read settings it doesn't declare, so the release notes say more.";
+  if (changes.length === 0) {
+    return [heading, "", `The same variables, ports, folders, start command and user as the pinned image. ${note}`, ""];
+  }
+  return [
+    heading,
+    "",
+    "| | Pinned | Newest |",
+    "|---|---|---|",
+    ...changes.map(([what, before, after]) => `| ${what} | ${codeCell(before)} | ${codeCell(after)} |`),
+    "",
+    note,
+    "",
+  ];
+}
+
+function releasesSection(releases: UpdateDetails["releases"], repo: string | undefined): string[] {
+  if (!repo) return [];
+  const link = `https://github.com/${repo}/releases`;
+  if (!releases) return [`Release notes: ${link}`, ""];
+  const heading = "### Release notes";
+  if ("error" in releases) return [heading, "", `⚠️ They couldn't be read (${releases.error}): ${link}`, ""];
+  if (releases.length === 0) return [heading, "", `No release on GitHub has a tag shaped like the image's: ${link}`, ""];
+  return [heading, "", `From ${link}, newest first, as upstream wrote them.`, "", ...notesSection(releases)];
+}
+
+/**
+ * The update for one app moving to `newVersion` (with `newDigest` when its pin carries one). A
+ * move to a higher first number is the major lane's: its own branch and a draft pull request.
+ */
+export function updateFor(app: WatchedApp, newVersion: string, newDigest?: string, details: UpdateDetails = {}): ImageUpdate {
   const pin = splitPin(app.pin);
+  const lane = isMajorStep(pin.version, newVersion) ? "major" : "current";
+  const id = lane === "major" ? `${app.app}-major` : app.app;
   const to = joinPin({ version: newVersion, digest: pin.digest ? newDigest : undefined });
   const metadataVersion = app.metadataVersion ? followVersion(app.metadataVersion, pin.version, newVersion) : null;
   const change: ScriptChange = {
@@ -314,9 +533,6 @@ export function updateFor(app: WatchedApp, newVersion: string, newDigest?: strin
       ? [`| \`metadata.version\` | ${app.metadataVersion} | ${metadataVersion ?? `${app.metadataVersion} (check it)`} |`]
       : []),
   ];
-  const releases = app.sources
-    .map((source) => /^https:\/\/github\.com\/([^/]+\/[^/#?]+)/.exec(source)?.[1])
-    .find(Boolean);
   const body = [
     `The image watcher found a newer image for ${app.name}. Installed servers see it as an update to the app's script once this merges and the catalog syncs.`,
     "",
@@ -324,18 +540,44 @@ export function updateFor(app: WatchedApp, newVersion: string, newDigest?: strin
     "|---|---|---|",
     ...rows,
     "",
-    ...(isMajorStep(pin.version, newVersion)
-      ? [`⚠️ The first number moved (${pin.version} to ${newVersion}). Read the release notes for changed options before merging.`, ""]
+    ...(lane === "major"
+      ? [
+          `⚠️ The first number moved (${pin.version} to ${newVersion}), so this is a draft: options may have changed, and the script may need more than the new tag. Updates within ${numbersOf(pin.version)[0]}.x keep coming in their own pull request. Push the script's changes to this branch: once it has a commit from a person, the watcher only comments here when a newer tag is out.`,
+          "",
+        ]
       : []),
     ...(metadataVersion === null && app.metadataVersion !== undefined
       ? [`⚠️ \`metadata.version\` (${app.metadataVersion}) doesn't read as the tag, so it was left as it is. Set it by hand if the app's version moved.`, ""]
       : []),
-    ...(releases ? [`Release notes: https://github.com/${releases.replace(/\.git$/, "")}/releases`, ""] : []),
+    ...settingsSection(details.settings),
+    ...releasesSection(details.releases, sourceRepo(app.sources)),
     "Before merging: on a lab box, update an installed copy from its card's Update now and check it still runs with its data, then install it fresh.",
   ].join("\n");
 
-  return { app: app.app, file: app.file, name: app.name, repository: app.repository, from: app.pin, to, change, title, body };
+  return {
+    id,
+    lane,
+    branch: `image-watch/${id}`,
+    draft: lane === "major",
+    app: app.app,
+    file: app.file,
+    name: app.name,
+    repository: app.repository,
+    from: app.pin,
+    to,
+    change,
+    title,
+    body,
+  };
 }
+
+const settle = async <T>(read: () => Promise<T>): Promise<T | { error: string }> => {
+  try {
+    return await read();
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
+  }
+};
 
 async function check(apps: WatchedApp[]): Promise<Plan> {
   const plan: Plan = { updates: [], repushed: [], failures: [] };
@@ -348,10 +590,25 @@ async function check(apps: WatchedApp[]): Promise<Plan> {
         const now = await digestOf(registry, token, pin.version);
         if (now !== pin.digest) plan.repushed.push({ app: app.app, repository: app.repository, pin: app.pin, now });
       }
-      const newest = newestTag(pin.version, await listTags(registry, token));
-      if (!newest) continue;
-      const digest = pin.digest ? await digestOf(registry, token, newest) : undefined;
-      plan.updates.push(updateFor(app, newest, digest));
+      const lanes = laneTags(pin.version, await listTags(registry, token));
+      const offered = [lanes.current, lanes.major].filter((tag): tag is string => tag !== null);
+      if (offered.length === 0) continue;
+      // What the pull requests show beside the change: a read that fails says so there, and the
+      // update still opens
+      const pinned = await settle(() => settingsAt(registry, token, pin.digest ?? pin.version));
+      const repo = sourceRepo(app.sources);
+      const releases = repo ? await settle(() => fetchReleases(repo)) : undefined;
+      for (const newest of offered) {
+        const digest = pin.digest ? await digestOf(registry, token, newest) : undefined;
+        const after = await settle(() => settingsAt(registry, token, digest ?? newest));
+        const settings = "error" in pinned ? pinned : "error" in after ? after : { before: pinned, after };
+        plan.updates.push(
+          updateFor(app, newest, digest, {
+            settings,
+            releases: releases && !("error" in releases) ? releasesBetween(releases, pin.version, newest) : releases,
+          }),
+        );
+      }
     } catch (error) {
       plan.failures.push({ app: app.app, error: error instanceof Error ? error.message : String(error) });
     }
@@ -361,7 +618,9 @@ async function check(apps: WatchedApp[]): Promise<Plan> {
 
 function report(apps: WatchedApp[], plan: Plan): string {
   const lines = [`## Image watch`, "", `${apps.length} custom app images checked.`, ""];
-  for (const update of plan.updates) lines.push(`- ${update.name}: \`${update.from}\` → \`${update.to}\``);
+  for (const update of plan.updates) {
+    lines.push(`- ${update.name}${update.lane === "major" ? " (next major version)" : ""}: \`${update.from}\` → \`${update.to}\``);
+  }
   for (const repushed of plan.repushed) {
     lines.push(
       `- ⚠️ ${repushed.app}: \`${repushed.repository}:${splitPin(repushed.pin).version}\` now names \`${repushed.now}\`, not the pinned digest. Installed servers keep the pinned one; check what changed upstream.`,
@@ -383,17 +642,17 @@ if (import.meta.main) {
     // A registry that didn't answer fails the run, after the other apps' updates are planned
     process.exit(plan.failures.length > 0 ? 1 : 0);
   } else if (command === "apply" && args.length === 2) {
-    const [planFile, app] = args;
+    const [planFile, id] = args;
     const plan = JSON.parse(readFileSync(planFile, "utf-8")) as Plan;
-    const update = plan.updates.find((u) => u.app === app);
+    const update = plan.updates.find((u) => u.id === id);
     if (!update) {
-      console.error(`The plan has no update for ${app}`);
+      console.error(`The plan has no update ${id}`);
       process.exit(1);
     }
     writeFileSync(update.file, applyChange(readFileSync(update.file, "utf-8"), update.change));
     console.log(`${update.file}: ${update.from} → ${update.to}, script.version ${update.change.scriptVersion}`);
   } else {
-    console.error("Usage: bun _lib/image_watch.ts check [--out plan.json] | apply plan.json <app>");
+    console.error("Usage: bun _lib/image_watch.ts check [--out plan.json] | apply plan.json <id>");
     process.exit(2);
   }
 }

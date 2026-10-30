@@ -1,5 +1,6 @@
 # Opens a pull request when a custom app's image has a newer tag than its script pins
-# (_lib/image_watch.ts): one per app, on image-watch/<app>, kept up to date as newer tags appear.
+# (_lib/image_watch.ts): one per app on image-watch/<app>, and a draft on image-watch/<app>-major for
+# the next major version, each kept up to date as newer tags appear until a person commits to it.
 # Nothing here merges; an update is tested on a lab box first.
 #
 # A pull request opened with the workflow's own token starts no other workflow, so Validate doesn't
@@ -50,16 +51,16 @@ jobs:
         # pull requests still open and the run still ends red
         continue-on-error: true
         run: bun _lib/image_watch.ts check --out "$RUNNER_TEMP/plan.json" | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Open or refresh a pull request per app
+      - name: Open or refresh a pull request per update
         run: |
           [ -f "$RUNNER_TEMP/plan.json" ] || exit 0
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch --quiet --no-tags origin "+refs/heads/image-watch/*:refs/remotes/origin/image-watch/*"
           failed=0
-          for app in $(jq -r '.updates[].app' "$RUNNER_TEMP/plan.json"); do
-            if ! bash _lib/image_watch_pr.sh "$RUNNER_TEMP/plan.json" "$app" | tee -a "$GITHUB_STEP_SUMMARY"; then
-              echo "::error::The pull request for $app could not be opened"
+          for id in $(jq -r '.updates[].id' "$RUNNER_TEMP/plan.json"); do
+            if ! bash _lib/image_watch_pr.sh "$RUNNER_TEMP/plan.json" "$id" | tee -a "$GITHUB_STEP_SUMMARY"; then
+              echo "::error::The pull request for $id could not be opened"
               failed=1
             fi
           done
