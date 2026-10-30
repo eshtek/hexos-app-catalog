@@ -15,7 +15,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
-| [Donetick](dozzle.json) | Smart task manager |
+| [Donetick](donetick.json) | Smart task manager |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
@@ -37,7 +37,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
-| [PairDrop](pairdrop.json) | Transfer files cross-clatform |
+| [PairDrop](pairdrop.json) | Transfer files cross-platform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
@@ -49,7 +49,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [qui](qui.json) | A qBittorrent web UI |
 | [Rackula](rackula.json) | A drag and drop rack visualizer |
 | [Radarr](radarr.json) | Movie collection manager |
-| [Ratelog](radarr.json) | App for rating movies and TV shows |
+| [Ratelog](ratelog.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
@@ -80,7 +80,7 @@ For schema documentation, macros reference, and contribution guidelines, see [do
 | `{n}MBRAM` / `{n}GBRAM` | Minimum memory | `512MBRAM`, `8GBRAM` |
 | `GPU` | GPU recommended | `GPU` |
 
-Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU` â€” anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
+Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU` or `DISPLAY` â€” anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
 
 ```json
 "requirements": {
@@ -149,6 +149,7 @@ A collection is a curated set of apps installed in one walk ("Media library": a 
 | `requirements.specifications` | Lines the collection adds to its apps' own requirements, in the same patterns |
 | `image` | Optional card art, a path in this repo. Without it the card shows the apps' icons |
 | `internal` | Left out of the `prod` catalog, as an internal install script is |
+| `DISPLAY` | The app draws on a TV or monitor plugged into the server | `DISPLAY` |
 
 Each app appears once in a collection. Apps install one after another, in the order the file lists them, and one with data from an earlier install reuses it. An app the owner already has, and picks, is brought up to date and set up to work with the others, as one the collection installs would be. `bun run validate` checks every collection against these rules and the catalog's own apps.
 
