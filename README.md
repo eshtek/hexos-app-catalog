@@ -13,6 +13,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
+| [Code Server](code-server.json) | VS Code in the browser |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
 | [Donetick](dozzle.json) | Smart task manager |

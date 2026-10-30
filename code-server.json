@@ -1,0 +1,58 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "installation_questions": [
+    {
+      "question": "Login password",
+      "description": "You type this to open Code Server in your browser.",
+      "type": "password",
+      "key": "password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GB", "1GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30145]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/code-server/home",
+      "owner": { "user": "apps" },
+      "snapshot": { "id": "home" }
+    }
+  ],
+  "app_values": {
+    "code_server": {
+      "additional_envs": [
+        {
+          "name": "PASSWORD",
+          "value": "$QUESTION(password)"
+        }
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30145
+      }
+    },
+    "storage": {
+      "homedir": "$HOST_PATH($LOCATION(ApplicationsPerformance)/code-server/home)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  }
+}
