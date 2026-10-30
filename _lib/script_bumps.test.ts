@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bumpProblem, versionRaised } from "./script_bumps";
+import { bumpProblem, droppedFolders, unanswerableQuestions, updateProblems, versionRaised } from "./script_bumps";
 
 const kodi = (tag: string, version: string, extra: Record<string, unknown> = {}) => ({
   version: 6,
@@ -49,5 +49,51 @@ describe("versionRaised", () => {
     expect(versionRaised("1.0.10", "1.0.9")).toBe(true);
     expect(versionRaised("2.0.0", "1.9.9")).toBe(true);
     expect(versionRaised("1.0.0", "1.0.0")).toBe(false);
+  });
+});
+
+describe("what an update can carry", () => {
+  const question = (key: string, extra: Record<string, unknown> = {}) => ({ question: key, type: "text", key, required: true, ...extra });
+  const valheim = (questions: unknown[], storage: unknown[], version = "1.0.0") => ({
+    custom: true,
+    script: { version },
+    installation_questions: questions,
+    app_values: { image: { repository: "example/valheim", tag: "1.4.1" }, storage },
+  });
+  const config = { type: "host_path", mount_path: "/config", host_path_config: { path: "$LOCATION(ApplicationsPerformance)/valheim/config" } };
+
+  test("a new required question with no default is one no installed server can answer", () => {
+    const base = valheim([question("server_name")], [config]);
+    expect(unanswerableQuestions(base, valheim([question("server_name"), question("admin_ids")], [config]))).toEqual(["admin_ids"]);
+    expect(unanswerableQuestions(base, valheim([question("server_name"), question("admin_ids", { default: "" })], [config]))).toEqual(["admin_ids"]);
+  });
+
+  test("a default, an optional question, or one the servers already answered is fine", () => {
+    const base = valheim([question("server_name")], [config]);
+    const head = valheim(
+      [question("server_name"), question("world_seed", { default: "random" }), question("mods", { required: false })],
+      [config],
+    );
+    expect(unanswerableQuestions(base, head)).toEqual([]);
+  });
+
+  test("a folder no longer mounted is named, and one moved to a new mount_path isn't", () => {
+    const base = valheim([], [config, { type: "ix_volume", mount_path: "/cache", ix_volume_config: { dataset_name: "cache" } }]);
+    expect(droppedFolders(base, valheim([], [{ ...config, mount_path: "/data" }]))).toEqual(["ix volume cache"]);
+    const moved = { ...config, host_path_config: { path: "$LOCATION(ApplicationsPerformance)/valheim/data" } };
+    expect(droppedFolders(base, valheim([], [moved]))).toEqual(["$LOCATION(ApplicationsPerformance)/valheim/config", "ix volume cache"]);
+  });
+
+  test("a folder behind an ACL counts as mounted", () => {
+    const acl = { type: "host_path", mount_path: "/config", host_path_config: { acl_enable: true, acl: { path: "/mnt/a/config" } } };
+    expect(droppedFolders(valheim([], [acl]), valheim([], [acl]))).toEqual([]);
+    expect(droppedFolders(valheim([], [acl]), valheim([], []))).toEqual(["/mnt/a/config"]);
+  });
+
+  test("every reason is listed, and a TrueNAS catalog app has none", () => {
+    const base = valheim([question("server_name")], [config]);
+    const head = valheim([question("server_name"), question("admin_ids")], [], "1.0.1");
+    expect(updateProblems(base, head)).toHaveLength(2);
+    expect(updateProblems({ ...base, custom: undefined }, { ...head, custom: undefined })).toEqual([]);
   });
 });

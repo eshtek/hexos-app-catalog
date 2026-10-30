@@ -33,8 +33,9 @@ jobs:
       - name: Validate install scripts
         run: bun _lib/validate.ts
       # A custom app's change reaches the servers that already have it only with a raised
-      # script.version, so compare each one with the branch this merges into.
-      - name: Check raised script versions
+      # script.version, and only when their stored answers and folders still fit it, so compare
+      # each one with the branch this merges into.
+      - name: Check updates to installed apps
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}

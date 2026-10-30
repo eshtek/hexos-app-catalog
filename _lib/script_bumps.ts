@@ -2,7 +2,9 @@
 // platform offers the catalog's script as an update when its script.version is semver-greater than
 // the one the app last ran (isScriptUpdateAvailable), and compares nothing else. A change to what a
 // custom app runs under the same version reaches new installs and never those servers, so this
-// compares each custom app's script with the base branch's and refuses that change.
+// compares each custom app's script with the base branch's and refuses that change. It refuses two
+// changes such an update can't carry too (a script adapted to an image's new major version is where
+// they turn up): a new required question with no default, and a host folder no longer mounted.
 //
 // Run: bun _lib/script_bumps.ts <base ref>     (CI passes origin/<the pull request's base>)
 
@@ -44,6 +46,60 @@ export function bumpProblem(base: Record<string, unknown>, head: Record<string, 
   return `what the app runs changed but script.version is still ${to}; raise it (to ${from.replace(/\d+$/, (n) => String(Number(n) + 1))} or later) or servers that already have the app never get the change`;
 }
 
+const questionsOf = (script: Record<string, unknown>): Record<string, unknown>[] =>
+  Array.isArray(script.installation_questions) ? script.installation_questions.filter(isObject) : [];
+
+/**
+ * Required questions new in `head` with no default. An update takes each answer from the app's live
+ * settings, where the old script put it, and the platform refuses an update with a required question
+ * that has neither an answer nor a default, so every server that has the app would be refused.
+ */
+export function unanswerableQuestions(base: Record<string, unknown>, head: Record<string, unknown>): string[] {
+  const known = new Set(questionsOf(base).map((q) => q.key));
+  return questionsOf(head)
+    .filter((q) => !known.has(q.key) && q.required !== false && (q.default === undefined || q.default === null || q.default === ""))
+    .map((q) => String(q.key));
+}
+
+/** The host folders (and ix volumes) a script mounts into the container. */
+function mountedFolders(script: Record<string, unknown>): string[] {
+  const values = isObject(script.app_values) ? script.app_values : {};
+  const folders: string[] = [];
+  for (const entry of Array.isArray(values.storage) ? values.storage.filter(isObject) : []) {
+    const host = isObject(entry.host_path_config) ? entry.host_path_config : {};
+    const acl = isObject(host.acl) ? host.acl : {};
+    const path = host.path ?? acl.path;
+    if (typeof path === "string") folders.push(path);
+    const volume = isObject(entry.ix_volume_config) ? entry.ix_volume_config.dataset_name : undefined;
+    if (typeof volume === "string") folders.push(`ix volume ${volume}`);
+  }
+  return folders;
+}
+
+/**
+ * Folders `base` mounts that `head` doesn't. A server that has the app keeps its data there, so the
+ * update would start the app without it. Mounting the same folder at a new mount_path is fine.
+ */
+export function droppedFolders(base: Record<string, unknown>, head: Record<string, unknown>): string[] {
+  const kept = new Set(mountedFolders(head));
+  return mountedFolders(base).filter((folder) => !kept.has(folder));
+}
+
+/** Why a custom app's head script can't ship to the servers that have its base, one reason a line. */
+export function updateProblems(base: Record<string, unknown>, head: Record<string, unknown>): string[] {
+  if (head.custom !== true) return [];
+  const problems: string[] = [];
+  const bump = bumpProblem(base, head);
+  if (bump) problems.push(bump);
+  for (const key of unanswerableQuestions(base, head)) {
+    problems.push(`question "${key}" is new, required and has no default; servers that already have the app have no answer for it, so their update would be refused. Give it a default`);
+  }
+  for (const folder of droppedFolders(base, head)) {
+    problems.push(`${folder} is no longer mounted; servers that already have the app keep its data there, so it would start without it. Keep the folder mounted (a new mount_path is fine)`);
+  }
+  return problems;
+}
+
 if (import.meta.main) {
   const base = process.argv[2];
   if (!base) {
@@ -63,10 +119,9 @@ if (import.meta.main) {
       continue; // the validator reports a script that doesn't parse
     }
     if (!isObject(before) || !isObject(after)) continue;
-    const problem = bumpProblem(before, after);
-    if (problem) problems.push(`✗ ${file}\n    ${problem}`);
+    for (const problem of updateProblems(before, after)) problems.push(`✗ ${file}\n    ${problem}`);
   }
   for (const problem of problems) console.log(`\n${problem}`);
-  console.log(`\nScript versions checked against ${base}: ${problems.length} error(s)`);
+  console.log(`\nUpdates to installed apps checked against ${base}: ${problems.length} error(s)`);
   process.exit(problems.length > 0 ? 1 : 0);
 }
