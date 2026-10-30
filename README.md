@@ -41,6 +41,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
+| [Pi-hole](pihole.json) | Network-wide ad blocking |
 | [Plex](plex.json) | Media server with Plex Pass support |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |

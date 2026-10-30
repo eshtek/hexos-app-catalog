@@ -1,0 +1,81 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [],
+    "ports": [
+      20720,
+      53
+    ]
+  },
+  "installation_questions": [
+    {
+      "question": "Admin password",
+      "description": "You type this to sign in to Pi-hole. To filter your whole network, set your router's DNS server to this server's address.",
+      "type": "password",
+      "key": "web_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "app_values": {
+    "pihole": {
+      "web_password": "$QUESTION(web_password)",
+      "additional_envs": [
+        {
+          "name": "FTLCONF_misc_dnsmasq_lines",
+          "value": "bind-dynamic;except-interface=incusbr0;except-interface=hexos0"
+        },
+        {
+          "name": "FTLCONF_ntp_ipv4_active",
+          "value": "false"
+        },
+        {
+          "name": "FTLCONF_ntp_ipv6_active",
+          "value": "false"
+        },
+        {
+          "name": "FTLCONF_ntp_sync_active",
+          "value": "false"
+        }
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 20720
+      },
+      "host_network": true
+    },
+    "storage": {
+      "config": {
+        "type": "ix_volume",
+        "ix_volume_config": {
+          "acl_enable": false,
+          "dataset_name": "config"
+        }
+      },
+      "dnsmasq": {
+        "type": "ix_volume",
+        "ix_volume_config": {
+          "acl_enable": false,
+          "dataset_name": "dnsmasq"
+        }
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  }
+}
