@@ -1,0 +1,145 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": true,
+  "metadata": {
+    "name": "Valheim",
+    "description": "Your own Valheim world, running on this server so friends can play in it whenever they like. They join with a join code from any platform Valheim plays across, and nothing needs setting up on your router. The server updates Valheim itself whenever nobody is playing, and backs up the world every hour.",
+    "icon": "valheim/icon.png",
+    "version": "1.4.1",
+    "categories": ["games"],
+    "keywords": ["valheim", "game server", "dedicated server", "crossplay", "multiplayer", "steam", "xbox"],
+    "homepage": "https://www.valheimgame.com/",
+    "sources": ["https://github.com/community-valheim-tools/valheim-server-docker"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Valheim on crossplay with a join code, on ghcr.io/community-valheim-tools/valheim-server 1.4.1."
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "4GBRAM", "2GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [2456, 2457, 2458]
+  },
+  "installation_questions": [
+    {
+      "question": "Server name",
+      "type": "text",
+      "key": "server_name",
+      "required": true,
+      "default": "HexOS Valheim"
+    },
+    {
+      "question": "Password",
+      "description": "Players type it when they join. At least 5 characters, and not part of the server name.",
+      "type": "password",
+      "key": "server_password",
+      "required": true
+    },
+    {
+      "question": "World name",
+      "description": "Changing it later starts a new world. The old one stays on the server.",
+      "type": "text",
+      "key": "world_name",
+      "required": true,
+      "default": "Midgard"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/valheim/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "worlds"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/valheim/server",
+      "owner": {
+        "user": "apps"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/community-valheim-tools/valheim-server",
+      "tag": "1.4.1@sha256:f34d67ba8023e343b10ffda0144759a8c8d986f276510460315a01051bed8a6d",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      { "name": "SERVER_NAME", "value": "$QUESTION(server_name)" },
+      { "name": "SERVER_PASS", "value": "$QUESTION(server_password)" },
+      { "name": "WORLD_NAME", "value": "$QUESTION(world_name)" },
+      { "name": "CROSSPLAY", "value": "true" },
+      { "name": "SERVER_PUBLIC", "value": "false" },
+      { "name": "PUID", "value": "568" },
+      { "name": "PGID", "value": "568" },
+      { "name": "VALHEIM_LOG_FILTER_CONTAINS_HexosSession", "value": "with join code" },
+      { "name": "ON_VALHEIM_LOG_FILTER_CONTAINS_HexosSession", "value": "cat > /config/hexos-session.txt" },
+      { "name": "VALHEIM_LOG_FILTER_CONTAINS_HexosNewCode", "value": "Created new join code" },
+      { "name": "ON_VALHEIM_LOG_FILTER_CONTAINS_HexosNewCode", "value": "cat > /config/hexos-session.txt" },
+      { "name": "PRE_SERVER_RUN_HOOK", "value": "rm -f /config/hexos-session.txt" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": 2456, "container_port": 2456, "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": 2457, "container_port": 2457, "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": 2458, "container_port": 2458, "protocol": "udp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/config",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/valheim/config"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/opt/valheim",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/valheim/server"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(50%, 6144)"
+      }
+    }
+  },
+  "widgets": [
+    {
+      "id": "join",
+      "title": "Play with friends",
+      "description": "The code friends type in Valheim to join this server.",
+      "refresh": 30,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "valheim"
+        }
+      ],
+      "slots": [
+        {
+          "type": "stat",
+          "field": "code"
+        }
+      ],
+      "script": "valheim/widget_join.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}
