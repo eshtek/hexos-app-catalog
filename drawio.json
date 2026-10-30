@@ -15,11 +15,11 @@
     "network": {
       "http_port": {
         "bind_mode": "published",
-        "port_number": 30090
+        "port_number": "$PORT(30090)"
       },
       "https_port": {
         "bind_mode": "published",
-        "port_number": 30091
+        "port_number": "$PORT(30091)"
       }
     },
     "resources": {

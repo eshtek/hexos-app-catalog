@@ -128,8 +128,6 @@ A pinned number is fixed: it never moves, and TrueNAS refuses the install when a
 
 Use it for a port the app really can serve on elsewhere: a web UI, the app's own address in a string, a game port players are told. Keep a number where something outside the app expects that port (DNS, discovery, STUN, BitTorrent and Syncthing peers, Bedrock's 19132), and on a host-network or custom app, which binds its port itself. Another app's port in a string stays as written, since `$PORT` only knows the script it's in.
 
-`$PORT` needs a HexOS release that resolves it, so a script that uses it waits for that release.
-
 ### What the validator checks
 
 `bun run validate` compares port numbers alone, with every member of a range counted, because TrueNAS ignores protocol: `53/udp` and `53/tcp` clash.

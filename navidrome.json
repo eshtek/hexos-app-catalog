@@ -214,7 +214,7 @@
     },
     "network": {
       "web_port": {
-        "port_number": 30043
+        "port_number": "$PORT(30043)"
       }
     },
     "resources": {

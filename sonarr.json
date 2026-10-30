@@ -54,7 +54,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30113
+        "port_number": "$PORT(30113)"
       }
     },
     "storage": {

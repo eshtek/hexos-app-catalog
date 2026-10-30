@@ -50,7 +50,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30024
+        "port_number": "$PORT(30024)"
       },
       "bt_port": {
         "bind_mode": "published",

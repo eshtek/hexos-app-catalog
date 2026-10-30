@@ -87,7 +87,7 @@
     },
     "network": {
       "web_port": {
-        "port_number": 30309
+        "port_number": "$PORT(30309)"
       }
     },
     "resources": {

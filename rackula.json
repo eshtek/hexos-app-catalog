@@ -27,11 +27,11 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30323
+        "port_number": "$PORT(30323)"
       }
     },
     "rackula": {
-      "cors_origins": ["http://$SERVER_LAN_IP:30323"]
+      "cors_origins": ["http://$SERVER_LAN_IP:$PORT(30323)"]
     },
     "storage": {
       "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/rackula/data)"

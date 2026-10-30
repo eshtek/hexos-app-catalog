@@ -28,7 +28,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 31054
+        "port_number": "$PORT(31054)"
       },
       "influxdb_port": {
         "bind_mode": "published",

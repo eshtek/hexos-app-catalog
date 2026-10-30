@@ -57,7 +57,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30046
+        "port_number": "$PORT(30046)"
       }
     },
     "resources": {

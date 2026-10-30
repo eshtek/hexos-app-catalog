@@ -34,7 +34,7 @@
           "db_password": "$RANDOM_STRING(16)",
           "redis_password": "$RANDOM_STRING(16)",
           "app_key": "$RANDOM_STRING(32)",
-          "app_url": "http://$SERVER_LAN_IP:30105"
+          "app_url": "http://$SERVER_LAN_IP:$PORT(30105)"
         },
           
         "storage": {
@@ -44,7 +44,7 @@
         "network": {
             "web_port": {
                 "bind_mode": "published",
-                "port_number": 30105
+                "port_number": "$PORT(30105)"
             }
         },
         "resources": {

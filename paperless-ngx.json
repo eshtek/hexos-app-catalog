@@ -82,7 +82,7 @@
         "network": {
             "web_port": {
                 "bind_mode": "published",
-                "port_number": 30070
+                "port_number": "$PORT(30070)"
             }
         }
     }

@@ -34,7 +34,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 8123
+        "port_number": "$PORT(8123)"
       }
     },
     "resources": {

@@ -15,7 +15,7 @@
         "network": {
             "web_port": {
                 "bind_mode": "published",
-                "port_number": 30255
+                "port_number": "$PORT(30255)"
             }
         },
         "resources": {

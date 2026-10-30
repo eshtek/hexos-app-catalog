@@ -90,11 +90,11 @@
     "network": {
       "http_port": {
         "bind_mode": "published",
-        "port_number": 9096
+        "port_number": "$PORT(9096)"
       },
       "https_port": {
         "bind_mode": "published",
-        "port_number": 8920
+        "port_number": "$PORT(8920)"
       }
     },
     "resources": {

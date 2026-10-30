@@ -30,7 +30,7 @@
   "app_values": {
     "mealie": {
       "allow_signup": true,
-      "base_url": "http://$SERVER_LAN_IP:30111/",
+      "base_url": "http://$SERVER_LAN_IP:$PORT(30111)/",
       "db_password": "$RANDOM_STRING(16)",
       "default_group": "Home"
     },
@@ -38,7 +38,7 @@
       "networks": [],
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30111
+        "port_number": "$PORT(30111)"
       }
     },
     "resources": {

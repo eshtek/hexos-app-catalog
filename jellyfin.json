@@ -92,11 +92,11 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30013
+        "port_number": "$PORT(30013)"
       },
       "https_port": {
         "bind_mode": "published",
-        "port_number": 30014
+        "port_number": "$PORT(30014)"
       }
     },
     "resources": {

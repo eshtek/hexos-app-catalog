@@ -1389,7 +1389,7 @@
             "server_port": {
                 "bind_mode": "published",
                 "host_ips": [],
-                "port_number": 38211
+                "port_number": "$PORT(38211)"
             }
         },
         "palworld": {

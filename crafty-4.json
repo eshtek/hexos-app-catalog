@@ -33,7 +33,7 @@
       "web_port": {
         "bind_mode": "published",
         "host_ips": [],
-        "port_number": 30146
+        "port_number": "$PORT(30146)"
       },
       "additional_ports": [
         {
@@ -49,8 +49,8 @@
           "bind_mode": "published",
           "host_ips": [],
           "protocol": "tcp",
-          "start": 25565,
-          "end": 25575
+          "start": "$PORT(25565)",
+          "end": "$PORT(25575)"
         }
       ]
     },
