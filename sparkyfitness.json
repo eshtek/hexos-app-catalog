@@ -1,0 +1,86 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30448
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/sparkyfitness/postgres_data",
+      "owner": {
+        "user": "netdata",
+        "group": "docker"
+      },
+      "snapshot": {
+        "id": "db"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/sparkyfitness/uploads",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "uploads"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/sparkyfitness/backup",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "backup"
+      }
+    }
+  ],
+  "app_values": {
+    "sparkyfitness": {
+      "db_password": "$RANDOM_STRING(32)",
+      "api_encryption_key": "$RANDOM_STRING(43)=",
+      "better_auth_secret": "$RANDOM_STRING(32)",
+      "frontend_url": "http://$SERVER_LAN_IP:30448",
+      "additional_envs": [
+        {
+          "name": "ALLOW_PRIVATE_NETWORK_CORS",
+          "value": "true"
+        }
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30448
+      }
+    },
+    "storage": {
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sparkyfitness/postgres_data)",
+      "uploads": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sparkyfitness/uploads)",
+      "backup": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sparkyfitness/backup)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}
