@@ -60,6 +60,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Tailscale](tailscale.json) | Private access to the server from anywhere |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
 | [Uptime Kuma](uptime-kuma.json) | Self-hosted uptime monitoring |
 | [Valheim](valheim.json) | Viking survival game server, joined with a crossplay join code |
