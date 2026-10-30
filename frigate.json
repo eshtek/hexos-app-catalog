@@ -1,0 +1,101 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity"
+    ],
+    "specifications": [
+      "4CORE",
+      "4GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30193
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/frigate/config",
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/frigate/media"
+    }
+  ],
+  "app_values": {
+    "frigate": {
+      "shm_size_mb": 512
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30193
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/frigate/config)",
+      "media": "$HOST_PATH($LOCATION(ApplicationsCapacity)/frigate/media)",
+      "cache": {
+        "type": "tmpfs",
+        "tmpfs_config": {
+          "size": 1000
+        }
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      },
+      "gpus": "$GPU_CONFIG()"
+    }
+  },
+  "hooks": [
+    {
+      "id": "set-frigate-password",
+      "title": "Set the admin password",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "idempotent",
+      "surfaces": [
+        "card"
+      ],
+      "script": "frigate/frigate_hook.ts",
+      "entrypoint": "setPassword",
+      "timeout": 420,
+      "description": "Setting the Frigate admin password",
+      "optional": true,
+      "retries": 0,
+      "inputs": [
+        {
+          "type": "question",
+          "id": "password",
+          "question": {
+            "question": "Admin password",
+            "description": "At least 12 characters. You sign in to Frigate as admin with this password. Setting it again signs out open admin sessions.",
+            "type": "password",
+            "key": "password",
+            "required": true
+          }
+        }
+      ]
+    }
+  ]
+}
