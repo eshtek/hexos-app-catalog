@@ -27,14 +27,14 @@
     }
   ],
   "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30224
+      }
+    },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/peanut/config)"
-    }
-  },
-  "network": {
-    "web_port": {
-      "bind_mode": "published",
-      "port_number": 30224
     }
   },
   "resources": {

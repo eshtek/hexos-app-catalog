@@ -50,6 +50,12 @@
     { "path": "$LOCATION(ApplicationsPerformance)/snapotter/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } }
   ],
   "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30428
+      }
+    },
     "storage": {
       "data": "$HOST_PATH($LOCATION(ApplicationsCapacity)/snapotter/data)",
       "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/snapotter/postgres_data)",
@@ -78,12 +84,6 @@
           "value": "true"
         }
       ],
-    "network": {
-      "web_port": {
-        "bind_mode": "published",
-        "port_number": 30428
-      }
-    },
     "resources": {
       "gpus": "$GPU_CONFIG()",
       "limits": {

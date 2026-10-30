@@ -24,14 +24,14 @@
     { "path": "$LOCATION(ApplicationsPerformance)/portracker/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
   ],
   "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30233
+      }
+    },
     "storage": {
       "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/portracker/data)"
-    }
-  },
-  "network": {
-    "web_port": {
-      "bind_mode": "published",
-      "port_number": 30233
     }
   },
   "resources": {

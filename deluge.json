@@ -51,6 +51,10 @@
       "web_port": {
         "bind_mode": "published",
         "port_number": 30038
+      },
+      "torrent_port": {
+        "bind_mode": "published",
+        "port_number": 30039
       }
     },
     "storage": {

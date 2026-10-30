@@ -25,14 +25,14 @@
     { "path": "$LOCATION(ApplicationsPerformance)/qui/config", "snapshot": { "id": "config" } }
   ],
   "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30318
+      }
+    },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/qui/config)"
-    }
-  },
-  "network": {
-    "web_port": {
-      "bind_mode": "published",
-      "port_number": 30318
     }
   },
   "resources": {
