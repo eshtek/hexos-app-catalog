@@ -4,22 +4,57 @@ import { readFileSync } from "node:fs";
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
 const PREFS_RELATIVE = "/Library/Application Support/Plex Media Server/Preferences.xml";
+const DOCKER_SOCKET = "/var/run/docker.sock";
+/** Each read is short, and Tautulli's config.ini is waited for in a loop of its own. */
+const DOCKER_TIMEOUT_MS = 2000;
+
+/** The file in a tar from Docker's archive endpoint: a 512-byte header, then its bytes. */
+export function untar(tar: Uint8Array): string {
+  const text = new TextDecoder();
+  for (let at = 0; tar[at]; ) {
+    const size = Number.parseInt(text.decode(tar.subarray(at + 124, at + 136)), 8);
+    const type = tar[at + 156];
+    if (type === 0 || type === 48) return text.decode(tar.subarray(at + 512, at + 512 + size)); // a regular file
+    at += 512 + Math.ceil(size / 512) * 512; // a pax header ahead of the file
+  }
+  return "";
+}
+
+async function readThroughDocker(appId: string, path: string): Promise<string> {
+  const url = `http://docker/containers/ix-${appId}-${appId}-1/archive?path=${encodeURIComponent(path)}`;
+  try {
+    const response = await fetch(url, { unix: DOCKER_SOCKET, signal: AbortSignal.timeout(DOCKER_TIMEOUT_MS) });
+    return response.ok ? untar(new Uint8Array(await response.arrayBuffer())) : "";
+  } catch {
+    return ""; // a box with no socket yet
+  }
+}
+
+/**
+ * A file from an app's config folder, empty when there's none yet. The folder sits on the app's own
+ * dataset, which the HexOS container can't see on a box whose app config predates the pool mounts,
+ * so what the mount doesn't give is read out of the app's container over the daemon socket the
+ * HexOS container has for its host commands.
+ */
+async function readConfigFile(appId: string, config: ContextMount, file: string): Promise<string> {
+  try {
+    return readFileSync(config.localPath + file, "utf-8");
+  } catch {
+    return readThroughDocker(appId, (config.containerPath ?? "/config") + file);
+  }
+}
 
 /** Plex's config folder. The chart fixes its container path, so it is matched by host path. */
 function plexConfig(mounts: ContextMount[]): ContextMount | undefined {
   return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith("/plex/config"));
 }
 
-function readPlex(config: ContextMount): { token: string; machineId: string; name?: string } | undefined {
-  try {
-    const xml = readFileSync(config.localPath + PREFS_RELATIVE, "utf-8");
-    const token = xml.match(/PlexOnlineToken="([^"]+)"/)?.[1];
-    const machineId = xml.match(/ProcessedMachineIdentifier="([^"]+)"/)?.[1];
-    if (!token || !machineId) return undefined;
-    return { token, machineId, name: xml.match(/FriendlyName="([^"]+)"/)?.[1] };
-  } catch {
-    return undefined;
-  }
+async function readPlex(config: ContextMount): Promise<{ token: string; machineId: string; name?: string } | undefined> {
+  const xml = await readConfigFile("plex", config, PREFS_RELATIVE);
+  const token = xml.match(/PlexOnlineToken="([^"]+)"/)?.[1];
+  const machineId = xml.match(/ProcessedMachineIdentifier="([^"]+)"/)?.[1];
+  if (!token || !machineId) return undefined;
+  return { token, machineId, name: xml.match(/FriendlyName="([^"]+)"/)?.[1] };
 }
 
 /** Tautulli's config folder, from its own mounts wherever it is installed. */
@@ -28,25 +63,20 @@ function tautulliConfig(mounts: ContextMount[]): ContextMount | undefined {
 }
 
 /** Tautulli's config.ini as key/value pairs. */
-function readTautulliIni(tautulli: ContextMount): Map<string, string> | undefined {
-  try {
-    const ini = readFileSync(`${tautulli.localPath}/config.ini`, "utf-8");
-    const settings = new Map<string, string>();
-    for (const line of ini.split("\n")) {
-      const match = line.match(/^(\w+)\s*=\s*(.*)$/);
-      if (match) settings.set(match[1], match[2].trim().replace(/^"(.*)"$/, "$1"));
-    }
-    return settings;
-  } catch {
-    return undefined;
+async function readTautulliIni(tautulli: ContextMount): Promise<Map<string, string>> {
+  const settings = new Map<string, string>();
+  for (const line of (await readConfigFile("tautulli", tautulli, "/config.ini")).split("\n")) {
+    const match = line.match(/^(\w+)\s*=\s*(.*)$/);
+    if (match) settings.set(match[1], match[2].trim().replace(/^"(.*)"$/, "$1"));
   }
+  return settings;
 }
 
 /** Tautulli writes its config.ini at its first start, a little after its container is up. */
 async function waitForTautulliIni(ctx: HookContext, tautulli: ContextMount): Promise<Map<string, string> | undefined> {
   for (let attempt = 0; attempt < 24; attempt++) {
-    const ini = readTautulliIni(tautulli);
-    if (ini?.get("api_key")) return ini;
+    const ini = await readTautulliIni(tautulli);
+    if (ini.get("api_key")) return ini;
     await ctx.sleep(5_000);
   }
   return undefined;
@@ -90,7 +120,7 @@ export async function run(ctx: HookContext) {
   await ctx.emitCheckpoint("locate");
 
   const config = plexConfig(ctx.mounts);
-  const plex = config && readPlex(config);
+  const plex = config && (await readPlex(config));
   // The owner skipped Plex's sign-in, so trying again can't help
   if (!plex) {
     const message = "Plex isn't signed in yet. Run Pre-configure Plex, then connect Tautulli from Plex's Connections tab.";
@@ -188,7 +218,7 @@ export async function run(ctx: HookContext) {
     if (after.machineId === plex.machineId && after.connected) break;
     await ctx.sleep(3000);
   }
-  const tokenSaved = readTautulliIni(tautulli)?.get("pms_token") === plex.token;
+  const tokenSaved = (await readTautulliIni(tautulli)).get("pms_token") === plex.token;
   if (after.machineId !== plex.machineId || !after.connected || !tokenSaved) {
     ctx.fail("Tautulli saved this Plex server but hasn't connected to it", [
       { label: "Plex server", value: plex.machineId },
