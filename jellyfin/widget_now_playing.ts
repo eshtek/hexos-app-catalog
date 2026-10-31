@@ -240,29 +240,38 @@ function artworkPath(item: JellyfinItem): string | undefined {
   return undefined;
 }
 
-/** A crop of the image filling `width` x `height`, as a data URI, or undefined when over the cap. */
+/** The platform's limit on a widget's data URI. */
+const IMAGE_LIMIT = 60_000;
+
+/**
+ * The crops to try in turn until one fits: near twice the card's size for a sharp picture, then
+ * softer, then smaller, down to the card's own size. The scrim over the artwork hides the loss.
+ */
+const ARTWORK_CROPS = [
+  { width: 660, height: 260, quality: 80 },
+  { width: 660, height: 260, quality: 60 },
+  { width: 560, height: 220, quality: 60 },
+  { width: 480, height: 190, quality: 60 },
+  { width: 330, height: 130, quality: 60 },
+];
+
+/** The image at one crop as a data URI, or undefined when the app doesn't give one. */
 async function fetchImage(
   base: string,
   headers: Record<string, string>,
   path: string,
-  width: number,
-  height: number,
+  { width, height, quality }: (typeof ARTWORK_CROPS)[number],
 ): Promise<string | undefined> {
-  const response = await fetch(`${base}${path}?fillWidth=${width}&fillHeight=${height}&quality=80&format=Jpg`, {
+  const response = await fetch(`${base}${path}?fillWidth=${width}&fillHeight=${height}&quality=${quality}&format=Jpg`, {
     headers,
   });
   if (!response.ok) return undefined;
   const type = response.headers.get("content-type") ?? "";
   if (!type.startsWith("image/")) return undefined;
-  const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
-  return uri.length <= 60_000 ? uri : undefined;
+  return `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
 }
 
-/**
- * The item's wide artwork as a size-capped data URI, for the app card's background while the
- * card shows this stream. Near twice the card's size for a sharp picture, then near its own size
- * when the sharp one is over the cap.
- */
+/** The item's wide artwork as a data URI, for the app card's background while the card shows this stream. */
 // A stream's artwork does not change while it plays, and the card asks every few seconds, so each
 // picture is fetched once and kept: the box reuses this module between runs until the script
 // changes. Only pictures that arrived are kept, so a failed one is tried again on the next run.
@@ -276,7 +285,7 @@ function rememberArtwork(key: string, image: string): void {
   if (artworkCache.size > ARTWORK_CACHE_SIZE && oldest !== undefined) artworkCache.delete(oldest);
 }
 
-async function fetchArtwork(
+export async function fetchArtwork(
   base: string,
   headers: Record<string, string>,
   item: JellyfinItem,
@@ -287,10 +296,14 @@ async function fetchArtwork(
   const kept = artworkCache.get(key);
   if (kept) return kept;
   try {
-    const image =
-      (await fetchImage(base, headers, path, 660, 260)) ?? (await fetchImage(base, headers, path, 480, 190));
-    if (image) rememberArtwork(key, image);
-    return image;
+    for (const crop of ARTWORK_CROPS) {
+      const image = await fetchImage(base, headers, path, crop);
+      if (!image) return undefined;
+      if (image.length > IMAGE_LIMIT) continue;
+      rememberArtwork(key, image);
+      return image;
+    }
+    return undefined;
   } catch {
     return undefined;
   }

@@ -55,29 +55,40 @@ async function harvestPlexToken(ctx: WidgetContext): Promise<string | null> {
   return xml.match(/PlexOnlineToken="([^"]+)"/)?.[1] ?? null;
 }
 
-/** A Plex photo-transcoder crop of `path` as a data URI, or undefined when it is over the size cap. */
+/** The platform's limit on a widget's data URI. */
+const IMAGE_LIMIT = 60_000;
+
+/**
+ * The crops to try in turn until one fits: near twice the card's size for a sharp picture, then
+ * softer, then smaller, down to the card's own size. The scrim over the artwork hides the loss.
+ */
+const ARTWORK_CROPS = [
+  { width: 660, height: 260, quality: 80 },
+  { width: 660, height: 260, quality: 60 },
+  { width: 560, height: 220, quality: 60 },
+  { width: 480, height: 190, quality: 60 },
+  { width: 330, height: 130, quality: 60 },
+];
+
+/** A Plex photo-transcoder crop of `path` as a data URI, or undefined when Plex doesn't give one. */
 async function transcodeImage(
   base: string,
   token: string,
   path: string,
-  width: number,
-  height: number,
+  { width, height, quality }: (typeof ARTWORK_CROPS)[number],
 ): Promise<string | undefined> {
   const response = await fetch(
-    `${base}/photo/:/transcode?width=${width}&height=${height}&minSize=1&format=jpeg&url=${encodeURIComponent(path)}&X-Plex-Token=${token}`,
+    `${base}/photo/:/transcode?width=${width}&height=${height}&minSize=1&format=jpeg&quality=${quality}&url=${encodeURIComponent(path)}&X-Plex-Token=${token}`,
   );
   if (!response.ok) return undefined;
   const type = response.headers.get("content-type") ?? "";
   if (!type.startsWith("image/")) return undefined;
-  const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
-  return uri.length <= 60_000 ? uri : undefined;
+  return `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
 }
 
 /**
- * The session's wide artwork as a size-capped data URI, for the app card's background while the
- * card shows this session. A card is about 330x130, so the transcoder is asked for a landscape
- * crop near twice that for a sharp picture, then near the card's own size when the sharp one is
- * over the cap. An item with no wide artwork falls back to its poster, cropped the same way.
+ * The session's wide artwork as a data URI, for the app card's background while the card shows
+ * this session. An item with no wide artwork falls back to its poster, cropped the same way.
  */
 // A stream's artwork does not change while it plays, and the card asks every few seconds, so each
 // picture is fetched once and kept: the box reuses this module between runs until the script
@@ -95,17 +106,21 @@ function rememberArtwork(key: string, image: string): void {
   if (artworkCache.size > ARTWORK_CACHE_SIZE && oldest !== undefined) artworkCache.delete(oldest);
 }
 
-async function fetchArtwork(base: string, token: string, session: PlexSession): Promise<string | undefined> {
+export async function fetchArtwork(base: string, token: string, session: PlexSession): Promise<string | undefined> {
   const path = session.art || session.grandparentArt || session.grandparentThumb || session.thumb;
   if (!path) return undefined;
   const key = `${base}${path}`;
   const kept = artworkCache.get(key);
   if (kept) return kept;
   try {
-    const image =
-      (await transcodeImage(base, token, path, 660, 260)) ?? (await transcodeImage(base, token, path, 480, 190));
-    if (image) rememberArtwork(key, image);
-    return image;
+    for (const crop of ARTWORK_CROPS) {
+      const image = await transcodeImage(base, token, path, crop);
+      if (!image) return undefined;
+      if (image.length > IMAGE_LIMIT) continue;
+      rememberArtwork(key, image);
+      return image;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
