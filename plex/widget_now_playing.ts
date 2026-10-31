@@ -5,18 +5,54 @@ import { readFileSync } from "node:fs";
 import type { WidgetContext, WidgetQueryResult } from "../_lib/widget_context";
 
 const PREFS_RELATIVE = "/Library/Application Support/Plex Media Server/Preferences.xml";
+const DOCKER_SOCKET = "/var/run/docker.sock";
+/** Under the widget's 10 s timeout, so a stuck daemon reads as nothing rather than failing the card. */
+const DOCKER_TIMEOUT_MS = 2000;
 
-function harvestPlexToken(ctx: WidgetContext): string | null {
+/** The file in a tar from Docker's archive endpoint: a 512-byte header, then its bytes. */
+export function untar(tar: Uint8Array): string {
+  const text = new TextDecoder();
+  for (let at = 0; tar[at]; ) {
+    const size = Number.parseInt(text.decode(tar.subarray(at + 124, at + 136)), 8);
+    const type = tar[at + 156];
+    if (type === 0 || type === 48) return text.decode(tar.subarray(at + 512, at + 512 + size)); // a regular file
+    at += 512 + Math.ceil(size / 512) * 512; // a pax header ahead of the file
+  }
+  return "";
+}
+
+async function readThroughDocker(appId: string, path: string): Promise<string> {
+  const url = `http://docker/containers/ix-${appId}-${appId}-1/archive?path=${encodeURIComponent(path)}`;
+  try {
+    const response = await fetch(url, { unix: DOCKER_SOCKET, signal: AbortSignal.timeout(DOCKER_TIMEOUT_MS) });
+    return response.ok ? untar(new Uint8Array(await response.arrayBuffer())) : "";
+  } catch {
+    return ""; // a box with no socket yet
+  }
+}
+
+/**
+ * Plex's preferences. They sit on the app's own dataset, which the HexOS container can't see on a
+ * box whose app config predates the pool mounts, so what the mount doesn't give is read out of the
+ * app's container over the daemon socket the HexOS container has for its host commands.
+ */
+async function readPreferences(ctx: WidgetContext, mount: WidgetContext["mounts"][number] | undefined): Promise<string> {
+  if (mount) {
+    try {
+      return readFileSync(mount.localPath + PREFS_RELATIVE, "utf-8");
+    } catch {
+      // Not written yet, or the dataset isn't visible from here
+    }
+  }
+  return readThroughDocker(ctx.appId, (mount?.containerPath ?? "/config") + PREFS_RELATIVE);
+}
+
+async function harvestPlexToken(ctx: WidgetContext): Promise<string | null> {
   const config =
     ctx.mounts.find((m) => m.containerPath === "/config") ??
     ctx.mounts.find((m) => m.hostPath.endsWith("/plex/config"));
-  if (!config) return null;
-  try {
-    const xml = readFileSync(config.localPath + PREFS_RELATIVE, "utf-8");
-    return xml.match(/PlexOnlineToken="([^"]+)"/)?.[1] ?? null;
-  } catch {
-    return null;
-  }
+  const xml = await readPreferences(ctx, config);
+  return xml.match(/PlexOnlineToken="([^"]+)"/)?.[1] ?? null;
 }
 
 /** A Plex photo-transcoder crop of `path` as a data URI, or undefined when it is over the size cap. */
@@ -160,7 +196,7 @@ function sessionMeta(session: PlexSession): string | undefined {
 }
 
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
-  const token = harvestPlexToken(ctx);
+  const token = await harvestPlexToken(ctx);
   if (!token) return { needsSetup: true, reason: "Sign in to Plex to see your library here" };
 
   const base = `http://${ctx.host}:${ctx.port ?? 32400}`;

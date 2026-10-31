@@ -8,22 +8,60 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 /** The days the stats cover: Tautulli's own default for its home stats and graphs. */
 const STATS_DAYS = 30;
 
+const CONFIG_FILE = "/config.ini";
+const DOCKER_SOCKET = "/var/run/docker.sock";
+/** Under the widget's 10 s timeout, so a stuck daemon reads as nothing rather than failing the card. */
+const DOCKER_TIMEOUT_MS = 2000;
+
+/** The file in a tar from Docker's archive endpoint: a 512-byte header, then its bytes. */
+export function untar(tar: Uint8Array): string {
+  const text = new TextDecoder();
+  for (let at = 0; tar[at]; ) {
+    const size = Number.parseInt(text.decode(tar.subarray(at + 124, at + 136)), 8);
+    const type = tar[at + 156];
+    if (type === 0 || type === 48) return text.decode(tar.subarray(at + 512, at + 512 + size)); // a regular file
+    at += 512 + Math.ceil(size / 512) * 512; // a pax header ahead of the file
+  }
+  return "";
+}
+
+async function readThroughDocker(appId: string, path: string): Promise<string> {
+  const url = `http://docker/containers/ix-${appId}-${appId}-1/archive?path=${encodeURIComponent(path)}`;
+  try {
+    const response = await fetch(url, { unix: DOCKER_SOCKET, signal: AbortSignal.timeout(DOCKER_TIMEOUT_MS) });
+    return response.ok ? untar(new Uint8Array(await response.arrayBuffer())) : "";
+  } catch {
+    return ""; // a box with no socket yet
+  }
+}
+
+/**
+ * Tautulli's config file. It sits on the app's own dataset, which the HexOS container can't see on
+ * a box whose app config predates the pool mounts, so what the mount doesn't give is read out of
+ * the app's container over the daemon socket the HexOS container has for its host commands.
+ */
+async function readConfig(ctx: WidgetContext, mount: WidgetContext["mounts"][number] | undefined): Promise<string> {
+  if (mount) {
+    try {
+      return readFileSync(mount.localPath + CONFIG_FILE, "utf-8");
+    } catch {
+      // Not written yet, or the dataset isn't visible from here
+    }
+  }
+  return readThroughDocker(ctx.appId, (mount?.containerPath ?? "/config") + CONFIG_FILE);
+}
+
 /** Tautulli's settings. The chart fixes the config folder's container path, so it is matched by host path. */
-function readSettings(ctx: WidgetContext): Map<string, string> | null {
+async function readSettings(ctx: WidgetContext): Promise<Map<string, string>> {
   const config =
     ctx.mounts.find((m) => m.containerPath === "/config") ??
     ctx.mounts.find((m) => m.hostPath.endsWith("/tautulli/config"));
-  if (!config) return null;
-  try {
-    const settings = new Map<string, string>();
-    for (const line of readFileSync(`${config.localPath}/config.ini`, "utf-8").split("\n")) {
-      const match = line.match(/^(\w+)\s*=\s*(.*)$/);
-      if (match) settings.set(match[1], match[2].trim().replace(/^"(.*)"$/, "$1"));
-    }
-    return settings;
-  } catch {
-    return null;
+  const settings = new Map<string, string>();
+  for (const line of (await readConfig(ctx, config)).split("\n")) {
+    const match = line.match(/^(\w+)\s*=\s*(.*)$/);
+    if (match) settings.set(match[1], match[2].trim().replace(/^"(.*)"$/, "$1"));
   }
+  return settings;
 }
 
 interface RecentItem {
@@ -85,9 +123,9 @@ function ago(epochSeconds: number, nowMs: number): string | undefined {
 }
 
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
-  const settings = readSettings(ctx);
-  const apiKey = settings?.get("api_key");
-  if (!settings || !apiKey) return { needsSetup: true, reason: "Tautulli is still starting up" };
+  const settings = await readSettings(ctx);
+  const apiKey = settings.get("api_key");
+  if (!apiKey) return { needsSetup: true, reason: "Tautulli is still starting up" };
   if (!settings.get("pms_identifier")) {
     return { needsSetup: true, reason: "Run Connect to Tautulli to see your Plex stats here" };
   }
