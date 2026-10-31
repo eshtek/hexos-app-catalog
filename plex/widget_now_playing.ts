@@ -55,8 +55,8 @@ async function harvestPlexToken(ctx: WidgetContext): Promise<string | null> {
   return xml.match(/PlexOnlineToken="([^"]+)"/)?.[1] ?? null;
 }
 
-/** The platform's limit on a widget's data URI. */
-const IMAGE_LIMIT = 60_000;
+/** The limit on a widget's data URI on a box too old to send its own. One over it fails the whole result. */
+const OLD_IMAGE_LIMIT = 60_000;
 
 /**
  * The crops to try in turn until one fits: near twice the card's size for a sharp picture, then
@@ -106,7 +106,12 @@ function rememberArtwork(key: string, image: string): void {
   if (artworkCache.size > ARTWORK_CACHE_SIZE && oldest !== undefined) artworkCache.delete(oldest);
 }
 
-export async function fetchArtwork(base: string, token: string, session: PlexSession): Promise<string | undefined> {
+export async function fetchArtwork(
+  base: string,
+  token: string,
+  session: PlexSession,
+  limit = OLD_IMAGE_LIMIT,
+): Promise<string | undefined> {
   const path = session.art || session.grandparentArt || session.grandparentThumb || session.thumb;
   if (!path) return undefined;
   const key = `${base}${path}`;
@@ -116,7 +121,7 @@ export async function fetchArtwork(base: string, token: string, session: PlexSes
     for (const crop of ARTWORK_CROPS) {
       const image = await transcodeImage(base, token, path, crop);
       if (!image) return undefined;
-      if (image.length > IMAGE_LIMIT) continue;
+      if (image.length > limit) continue;
       rememberArtwork(key, image);
       return image;
     }
@@ -244,7 +249,7 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const total = active.length;
   const sessions = active.slice(0, 5);
 
-  const artwork = await Promise.all(sessions.map((session) => fetchArtwork(base, token, session)));
+  const artwork = await Promise.all(sessions.map((session) => fetchArtwork(base, token, session, ctx.imageLimit)));
 
   return {
     fields: {
