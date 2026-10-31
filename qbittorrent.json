@@ -54,7 +54,7 @@
       },
       "bt_port": {
         "bind_mode": "published",
-        "port_number": 51413
+        "port_number": "$PORT(51413)"
       }
     },
     "storage": {

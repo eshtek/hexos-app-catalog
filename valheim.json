@@ -103,9 +103,9 @@
     ],
     "host_network": false,
     "ports": [
-      { "bind_mode": "published", "port_number": 2456, "container_port": 2456, "protocol": "udp", "host_ips": [] },
-      { "bind_mode": "published", "port_number": 2457, "container_port": 2457, "protocol": "udp", "host_ips": [] },
-      { "bind_mode": "published", "port_number": 2458, "container_port": 2458, "protocol": "udp", "host_ips": [] }
+      { "bind_mode": "published", "port_number": "$PORT(2456)", "container_port": 2456, "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(2457)", "container_port": 2457, "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(2458)", "container_port": 2458, "protocol": "udp", "host_ips": [] }
     ],
     "storage": [
       {

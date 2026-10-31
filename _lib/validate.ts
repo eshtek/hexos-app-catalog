@@ -36,6 +36,7 @@ import {
   declaredPortsMatchPins,
   networkInsideAppValues,
   portMacrosWellFormed,
+  portsCanMove,
   preferredPort,
   type Finding,
 } from "./ports";
@@ -988,7 +989,7 @@ for (const appId of [...linkedApps].sort()) {
 
 // What each script publishes, and what scripts would fight over on one box (see ports.ts)
 for (const [appId, script] of parsedScripts) {
-  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script)]);
+  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script)]);
 }
 report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 

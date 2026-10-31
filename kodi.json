@@ -49,7 +49,7 @@
       { "name": "HEXOS_DISPLAY_PCI", "value": "$DISPLAY_GPU_PCI()" },
       { "name": "HEXOS_DISPLAY_PORT", "value": "$DISPLAY_PORT()" },
       { "name": "KODI_WEB_PASSWORD", "value": "$QUESTION(remote_password)" },
-      { "name": "KODI_WEB_PORT", "value": "8080" }
+      { "name": "KODI_WEB_PORT", "value": "$PORT(8080)" }
     ],
     "portals": [
       {
@@ -57,7 +57,7 @@
         "scheme": "http",
         "use_node_ip": true,
         "host": "",
-        "port": 8080,
+        "port": "$PORT(8080)",
         "path": "/"
       }
     ],

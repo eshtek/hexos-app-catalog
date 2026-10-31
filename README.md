@@ -112,21 +112,21 @@ A script states its ports twice. `requirements.ports` is the list HexOS reads, a
 "app_values": {
   "network": {
     "web_port": { "bind_mode": "published", "port_number": "$PORT(30146)" },
-    "additional_ports": [{ "bind_mode": "published", "port_number": 19132, "container_port": 19132, "protocol": "udp" }]
+    "additional_ports": [{ "bind_mode": "published", "port_number": "$PORT(19132)", "container_port": 19132, "protocol": "udp" }]
   }
 }
 ```
 
 ### Ports that can move
 
-A pinned number is fixed: it never moves, and TrueNAS refuses the install when another app holds it. `"$PORT(30146)"` means the app prefers 30146 and HexOS may move it to a free port.
+A port is the first one HexOS tries. `"$PORT(30146)"` starts at 30146, and when that's taken HexOS moves the app to the nearest free port: upward, then back down from 30146 if it runs out. The owner never picks a port and never hears about a move, because Launch and Copy address follow it.
 
 - As a whole value it resolves to a number. Inside a longer string it resolves to digits, so an address follows the port: `"http://$SERVER_LAN_IP:$PORT(30111)"`.
 - Every `$PORT(n)` with the same `n` in a script resolves to the same port.
 - A range whose `start` and `end` are both `$PORT(...)` moves as one block, by the same offset.
 - `requirements.ports` stays a plain list of preferred numbers, and each `$PORT(n)` names one of them.
 
-Use it for a port the app really can serve on elsewhere: a web UI, the app's own address in a string, a game port players are told. Keep a number where something outside the app expects that port (DNS, discovery, STUN, BitTorrent and Syncthing peers, Bedrock's 19132), and on a host-network or custom app, which binds its port itself. Another app's port in a string stays as written, since `$PORT` only knows the script it's in.
+Write every published port this way. A bare number is a port the protocol ties to one number, which means DNS, DHCP, NTP, SSDP, STUN, mDNS and Plex's GDM discovery, where moving it would give a clean install of something that doesn't work. It stays where it is, and the deck tells the owner what holds it. Don't ask the owner for a port in a question. A move happens only when a port is first placed, so an app that's installed keeps the ports its owner may have forwarded.
 
 ### What the validator checks
 
@@ -139,6 +139,7 @@ Use it for a port the app really can serve on elsewhere: a web UI, the app's own
 | `network` sits in `app_values` | Error |
 | Two apps in a collection want one port and at least one of them can't move. Options of one `single` group are never picked together | Error |
 | Every `$PORT(n)` is well formed and declared, and a range has both ends movable or neither | Error |
+| A port that isn't `$PORT(n)` is one a protocol ties to its number. An internal script is exempt | Error |
 | Two scripts in the catalog fix one port: the box refuses the second | Warning |
 | A `$PORT` number another script also wants: the box moves it, and if the other script fixes that port, the box refuses that one when the `$PORT` app got there first | Warning |
 

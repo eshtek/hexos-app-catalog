@@ -1377,14 +1377,14 @@
             "api_port": {
                 "bind_mode": "published",
                 "host_ips": [],
-                "port_number": 30443
+                "port_number": "$PORT(30443)"
             },
             "host_network": false,
             "networks": [],
             "rcon_port": {
                 "bind_mode": "published",
                 "host_ips": [],
-                "port_number": 38212
+                "port_number": "$PORT(38212)"
             },
             "server_port": {
                 "bind_mode": "published",

@@ -92,11 +92,11 @@
       },
       "tcp_port": {
         "bind_mode": "published",
-        "port_number": 20978
+        "port_number": "$PORT(20978)"
       },
       "udp_port": {
         "bind_mode": "published",
-        "port_number": 20970
+        "port_number": "$PORT(20970)"
       },
       "host_network": false
     },

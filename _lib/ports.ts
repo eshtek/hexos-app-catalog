@@ -205,6 +205,30 @@ export function declaredPortsMatchPins(script: Script): Finding[] {
   return findings;
 }
 
+/**
+ * Ports a protocol ties to one number, where moving them gives a clean install of something that
+ * doesn't work: DNS, DHCP, NTP, SSDP, STUN, mDNS and Plex's GDM discovery.
+ */
+const PORTS_TIED_TO_A_PROTOCOL = new Set([53, 67, 68, 123, 1900, 3478, 5353, 32410, 32412, 32413, 32414]);
+
+/**
+ * A port is the first one HexOS tries, and owners never pick one or hear about a move. A number stays
+ * only where the protocol needs it, since anything else refuses an install HexOS could have settled.
+ */
+export function portsCanMove(script: Script): Finding[] {
+  if (script.internal === true) return [];
+  const findings: Finding[] = [];
+  for (const pin of pins(script)) {
+    const read = readPin(pin, script);
+    if (!read || read.movable) continue;
+    const fixed = members(read).filter((port) => !PORTS_TIED_TO_A_PROTOCOL.has(port));
+    if (fixed.length > 0) {
+      findings.push(error(`${pin.path} fixes ${listPorts(fixed)}; write $PORT(n) so HexOS can move it when it's taken`));
+    }
+  }
+  return findings;
+}
+
 /** A network block's mark: a pin, or one of the keys only a network block has. */
 const holdsPins = (value: unknown) =>
   isObject(value) &&

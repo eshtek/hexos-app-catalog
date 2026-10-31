@@ -32,7 +32,7 @@
       },
       "influxdb_port": {
         "bind_mode": "published",
-        "port_number": 31055
+        "port_number": "$PORT(31055)"
       },
       "host_network": false
     },

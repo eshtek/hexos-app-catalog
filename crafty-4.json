@@ -39,7 +39,7 @@
         {
           "bind_mode": "published",
           "host_ips": [],
-          "port_number": 19132,
+          "port_number": "$PORT(19132)",
           "container_port": 19132,
           "protocol": "udp"
         }

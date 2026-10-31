@@ -69,7 +69,7 @@
         "port_number": "$PORT(30089)"
       },
       "vnc_port": {
-        "port_number": 30044
+        "port_number": "$PORT(30044)"
       }
     },
     "resources": {

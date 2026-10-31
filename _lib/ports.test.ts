@@ -8,6 +8,7 @@ import {
   collectionPortClashes,
   declaredPortsMatchPins,
   networkInsideAppValues,
+  portsCanMove,
   portMacrosWellFormed,
   preferredPort,
   publishedPorts,
@@ -464,6 +465,45 @@ describe("portMacrosWellFormed", () => {
 });
 
 // The rules above are only as good as the validator calling them: run it on a small catalog.
+describe("portsCanMove", () => {
+  const scriptWith = (network: Record<string, unknown>, rest: Record<string, unknown> = {}) => ({
+    requirements: { ports: [53, 30100] },
+    app_values: { network },
+    ...rest,
+  });
+
+  test("a $PORT moves and needs nothing more", () => {
+    expect(portsCanMove(scriptWith({ web_port: { port_number: "$PORT(30100)" } }))).toEqual([]);
+  });
+
+  test("a bare number is refused", () => {
+    const [finding] = portsCanMove(scriptWith({ web_port: { port_number: 30100 } }));
+    expect(finding?.level).toBe("error");
+    expect(finding?.message).toContain("$PORT(n)");
+  });
+
+  test("a port an owner answers is refused too", () => {
+    const script = {
+      ...scriptWith({ web_port: { port_number: "$QUESTION(port)" } }),
+      installation_questions: [{ key: "port", default: 30100 }],
+    };
+    expect(portsCanMove(script)).toHaveLength(1);
+  });
+
+  test("a range counts each number it covers", () => {
+    const range = { additional_port_ranges: [{ start: 8000, end: 8002 }] };
+    expect(portsCanMove(scriptWith(range))).toHaveLength(1);
+  });
+
+  test("a port a protocol ties to its number stays", () => {
+    expect(portsCanMove(scriptWith({ dns_port: { port_number: 53 } }))).toEqual([]);
+  });
+
+  test("an internal script is exempt", () => {
+    expect(portsCanMove(scriptWith({ web_port: { port_number: 30100 } }, { internal: true }))).toEqual([]);
+  });
+});
+
 describe("validate.ts", () => {
   const dir = mkdtempSync(join(tmpdir(), "catalog-ports-"));
   afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -529,10 +569,10 @@ describe("validate.ts", () => {
 
   test("a catalog-wide overlap warns and doesn't fail", () => {
     const { code, output } = run({
-      a: script([1, 2], { network: { web_port: pin(1), other: pin("$PORT(2)") } }),
-      b: script([1, 2], { network: { web_port: pin(1), other: pin("$PORT(2)") } }),
+      a: script([53, 2], { network: { dns_port: pin(53), other: pin("$PORT(2)") } }),
+      b: script([53, 2], { network: { dns_port: pin(53), other: pin("$PORT(2)") } }),
     });
-    expect(output).toContain("a and b both fix 1");
+    expect(output).toContain("a and b both fix 53");
     expect(output).toContain("a and b both prefer 2");
     expect(output).toContain("0 error(s), 2 warning(s)");
     expect(code).toBe(0);

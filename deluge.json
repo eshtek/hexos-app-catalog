@@ -54,7 +54,7 @@
       },
       "torrent_port": {
         "bind_mode": "published",
-        "port_number": 30039
+        "port_number": "$PORT(30039)"
       }
     },
     "storage": {
