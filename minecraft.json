@@ -1,0 +1,75 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      25565
+    ]
+  },
+  "installation_questions": [
+    {
+      "question": "Accept the Minecraft EULA",
+      "description": "The server starts only after you accept Mojang's EULA at https://www.minecraft.net/eula.",
+      "type": "boolean",
+      "key": "eula",
+      "required": true
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/minecraft/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "minecraft": {
+      "eula": "$QUESTION(eula)",
+      "image_selector": "j25_image",
+      "motd": "Minecraft on HexOS",
+      "enable_rcon": false,
+      "additional_envs": [
+        {
+          "name": "MAX_MEMORY",
+          "value": "75%"
+        }
+      ]
+    },
+    "network": {
+      "server_port": {
+        "bind_mode": "published",
+        "port_number": 25565
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/minecraft/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      }
+    }
+  }
+}
