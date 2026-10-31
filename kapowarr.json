@@ -1,0 +1,59 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "Media", "Downloads"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30093]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Media)/comics"
+    },
+    {
+      "path": "$LOCATION(Downloads)/kapowarr"
+    },
+    {
+      "path": "$LOCATION(Downloads)/qbittorrent"
+    },
+    { "path": "$LOCATION(ApplicationsPerformance)/kapowarr/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } }
+  ],
+  "app_values": {
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/kapowarr/config)",
+      "downloads": "$HOST_PATH($LOCATION(Downloads)/kapowarr)",
+      "content": "$HOST_PATH($LOCATION(Media)/comics)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)"
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 30093
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}
+

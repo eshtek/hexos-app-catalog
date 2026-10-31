@@ -1,0 +1,65 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial Script"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance", "Media", "ApplicationsCapacity"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [8001]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    { "path": "$LOCATION(Media)", "network_share": true },
+    { "path": "$LOCATION(ApplicationsPerformance)/storyteller/data", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsCapacity)/storyteller/assets", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(Media)/books" },
+    { "path": "$LOCATION(Media)/audiobooks" }
+  ],
+  "app_values": {
+    "storyteller": {
+      "additional_envs": [
+        {
+          "name": "STORYTELLER_ASSETS_DIR",
+          "value": "/assets"
+        }
+      ],
+      "secret_key": "$RANDOM_STRING(32)"
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/storyteller/data)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(ApplicationsCapacity)/storyteller/assets, /assets)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/books, /books)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/audiobooks, /audiobooks)"
+      ]
+    }
+  },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": 8001
+      }
+    },
+  "resources": {
+    "limits": {
+      "cpus": 2,
+      "memory": "$MEMORY(10%, 2048)"
+    },
+      "gpus": "$GPU_CONFIG()"
+  }
+}
