@@ -16,6 +16,8 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
 const DEVICE_ID = "hexos-emby-setup";
 const CLIENT_HEADER = `Emby Client="HexOS", Device="Setup", DeviceId="${DEVICE_ID}", Version="1.0.0"`;
 const SERVER_NAME = "HexOS Emby";
+/** The most a stream outside the owner's network gets, in bits per second. */
+const REMOTE_BITRATE_LIMIT = 20_000_000;
 const DB_RELATIVE = "/data/authentication.db";
 
 const AUTO_RETRIES = 5;
@@ -71,6 +73,10 @@ export async function afterInstall(ctx: HookContext) {
     await ctx.emitCheckpoint("wizardComplete", "Setup wizard complete", 30);
   }
   await createLibraries(ctx, token);
+  await limitRemoteStreams(ctx, token);
+
+  // Emby uses the GPU by itself on Premiere, so this only readies the firmware for the next restart
+  await ctx.prepareHardwareVideo?.().catch((error: unknown) => ctx.log(`GPU firmware not set up: ${error}`));
 }
 
 async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { title: string; description: string }) {
@@ -114,6 +120,21 @@ async function emby<T>(ctx: HookContext, token: string, path: string, init: { bo
   const text = await resp.text();
   if (!resp.ok) throw new Error(`${path}: ${resp.status} ${text.slice(0, 200)}`);
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/**
+ * Limits streams from outside the owner's network, unless the owner has set a limit. Emby already
+ * reads the real client from the address remote access forwards. A failure costs only the limit,
+ * so it never fails the setup.
+ */
+export async function limitRemoteStreams(ctx: HookContext, token: string): Promise<void> {
+  try {
+    const config = await emby<{ RemoteClientBitrateLimit?: number }>(ctx, token, "/System/Configuration");
+    if (config.RemoteClientBitrateLimit) return;
+    await emby(ctx, token, "/System/Configuration", { body: { ...config, RemoteClientBitrateLimit: REMOTE_BITRATE_LIMIT } });
+  } catch (error) {
+    ctx.log(`Remote stream limit not set: ${error}`);
+  }
 }
 
 /** Whether the token acts as an administrator: only one reads the server's configuration. */

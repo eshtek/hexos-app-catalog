@@ -153,6 +153,13 @@ export interface HookContext {
    * actions; lifecycle hooks may receive null depending on platform version.
    */
   getInstalledAppUrl(appId: string): Promise<string | null>;
+
+  /**
+   * Readies the server's GPU for this app's hardware video. On a chip that needs firmware loaded at
+   * boot, sets that up for the next restart. A hook named in `rerunHook` runs again after it, and
+   * the owner is asked for that restart. Absent on a box whose image predates it.
+   */
+  prepareHardwareVideo?(options?: { rerunHook?: string }): Promise<{ restartNeeded: boolean }>;
   /**
    * Another installed app's live mounts, resolved as this hook's own `mounts` are: how a link
    * between two apps reads the other one's settings file (an *arr's config.xml for its API key).
