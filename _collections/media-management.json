@@ -60,6 +60,10 @@
         {
           "app": "lidarr",
           "summary": "Music"
+        },
+        {
+          "app": "sportarr",
+          "summary": "Sports"
         }
       ]
     },

@@ -166,6 +166,34 @@
       "retries": 0
     },
     {
+      "id": "connect-sportarr",
+      "title": "Connect to Sportarr",
+      "description": "Keeps Sportarr's indexers in sync with Prowlarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "prowlarr/connect_arr.ts",
+      "entrypoint": "sportarr",
+      "timeout": 120,
+      "retries": 0
+    },
+    {
       "id": "connect-qbittorrent",
       "title": "Connect to qBittorrent",
       "description": "Sends what you grab in Prowlarr's own search to qBittorrent.",
