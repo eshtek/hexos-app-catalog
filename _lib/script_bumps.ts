@@ -15,6 +15,7 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 
 // A $PORT pin keeps whatever port an installed app is on, so it changes nothing a server runs.
 const PLACED_PORT = /"\$PORT\((\d+)\)"/g;
+const QUOTED_NUMBER = /"(\d+)"/g;
 
 const canonical = (value: unknown): string =>
   JSON.stringify(value, (_key, v) =>
@@ -34,7 +35,7 @@ export function runPart(script: Record<string, unknown>): string {
     const { game_port: _gamePort, instances: _instances, shared_folders: _shared, ...requirements } = runs.requirements;
     runs.requirements = requirements;
   }
-  return asFirstCopy(canonical(runs)).replace(PLACED_PORT, "$1");
+  return asFirstCopy(canonical(runs)).replace(PLACED_PORT, "$1").replace(QUOTED_NUMBER, "$1");
 }
 
 const versionOf = (script: Record<string, unknown>): string | undefined =>
