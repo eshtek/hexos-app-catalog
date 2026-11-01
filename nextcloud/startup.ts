@@ -10,8 +10,9 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * its own there and keeps one script in it. A link writes what it wants into hexos/<name>.wanted and
  * restarts Nextcloud. The script applies it and records that it did.
  *
- * The image stops the container when one of these scripts fails, so the script always exits 0 and
- * time-limits every occ call. What it couldn't do is tried again at the next start. A wanted file is
+ * The image stops the container when one of these scripts fails, and TrueNAS gives up on a start
+ * that isn't healthy in about 90 seconds. So the script always exits 0, does its work in the
+ * background, and time-limits every occ call. What it couldn't do is tried again at the next start. A wanted file is
  * applied once and kept beside it as <name>.applied, which also tells a link it took: occ's own
  * checks passed, as richdocuments:activate-config's reach Collabora and back. A setting the owner
  * changes later stays changed until a link asks for something new. With no wanted files the script does nothing, so a Nextcloud
@@ -28,6 +29,13 @@ const START_SCRIPT = `#!/bin/sh
 # Written by HexOS. Runs at each Nextcloud start. It must never stop Nextcloud from starting.
 dir=${START_FOLDER}/${STATE_DIR}
 [ -d "$dir" ] || exit 0
+
+# TrueNAS gives the container about 90 seconds to turn healthy, and the app store can take longer,
+# so the work runs beside the start and this script returns at once.
+if [ "$1" != "--work" ]; then
+  setsid nohup /bin/sh "$0" --work >/dev/null 2>&1 &
+  exit 0
+fi
 
 occ_try() { timeout 180 php /var/www/html/occ "$@"; }
 value_of() { sed -n "s/^$2=//p" "$1" | head -n 1; }
