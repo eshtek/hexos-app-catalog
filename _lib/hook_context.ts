@@ -167,6 +167,12 @@ export interface HookContext {
    * `getInstalledAppMounts` already answer for this copy. Absent on older boxes.
    */
   linkedApp?(appId: string): { name: string; displayName: string } | null;
+  /**
+   * The TrueNAS name of every installed copy of `appId`, first copy first, for a hook that has to
+   * reach them all. `getInstalledAppUrl` and `getInstalledAppMounts` take these names as they are.
+   * Absent on older boxes.
+   */
+  installedCopies?(appId: string): Promise<string[]>;
 
   /**
    * A request to a partner app's API, authenticated with the credential HexOS

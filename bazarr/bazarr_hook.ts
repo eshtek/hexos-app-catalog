@@ -354,13 +354,14 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
   const saved = (await request<Settings>(ctx, bazarr, "HexOS couldn't read Bazarr's settings", "/system/settings")).general[
     manager.mappingSetting
   ];
-  const mappings = (Array.isArray(saved) ? saved : [])
-    .filter(
-      (entry): entry is [string, string] =>
-        Array.isArray(entry) && entry.length === 2 && entry.every((part) => typeof part === "string"),
-    )
-    .filter(([source, target]) => source !== from || !ours(target));
+  const mine = (Array.isArray(saved) ? saved : []).filter(
+    (entry): entry is [string, string] =>
+      Array.isArray(entry) && entry.length === 2 && entry.every((part) => typeof part === "string"),
+  );
+  const mappings = mine.filter(([source, target]) => source !== from || !ours(target));
   if (from !== to && !mappings.some(([source]) => source === from)) mappings.push([from, to]);
+  // Bazarr leaves a list it isn't sent as it was, so emptying one takes a mapping that changes nothing
+  if (mappings.length === 0 && mine.length > 0) mappings.push([from, from]);
   for (const [source, target] of mappings) form.append(`settings-general-${manager.mappingSetting}`, `${source},${target}`);
   await request(ctx, bazarr, `Bazarr didn't accept ${manager.name}`, "/system/settings", form);
 
