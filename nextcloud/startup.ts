@@ -12,8 +12,9 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  *
  * The image stops the container when one of these scripts fails, so the script always exits 0 and
  * time-limits every occ call. What it couldn't do is tried again at the next start. A wanted file is
- * applied once and kept beside it as <name>.applied, so a setting the owner changes later stays changed
- * until a link asks for something new. With no wanted files the script does nothing, so a Nextcloud
+ * applied once and kept beside it as <name>.applied, which also tells a link it took: occ's own
+ * checks passed, as richdocuments:activate-config's reach Collabora and back. A setting the owner
+ * changes later stays changed until a link asks for something new. With no wanted files the script does nothing, so a Nextcloud
  * with no links starts exactly as it did.
  */
 
@@ -175,21 +176,6 @@ interface Link {
   appId: string;
   name: string;
   file: string;
-  /** Asks Nextcloud's own API whether the link took, when it can say. */
-  confirm?: (ctx: HookContext) => Promise<boolean>;
-}
-
-async function capabilities(ctx: HookContext): Promise<Record<string, unknown> | undefined> {
-  const response = await fetch(`${ctx.baseUrl}/ocs/v2.php/cloud/capabilities?format=json`, {
-    headers: { "OCS-APIRequest": "true" },
-    signal: AbortSignal.timeout(15_000),
-  }).catch(() => undefined);
-  if (!response?.ok) {
-    await response?.body?.cancel();
-    return undefined;
-  }
-  const body = (await response.json().catch(() => undefined)) as { ocs?: { data?: { capabilities?: Record<string, unknown> } } } | undefined;
-  return body?.ocs?.data?.capabilities;
 }
 
 async function connect(ctx: HookContext, link: Link) {
@@ -228,17 +214,10 @@ async function connect(ctx: HookContext, link: Link) {
       ctx.fail(`Nextcloud didn't finish connecting to ${link.name}. It tries again each time it starts.`, log ? [{ label: "Reason", value: log }] : []);
     }
   }
-  if (link.confirm && !(await link.confirm(ctx))) ctx.fail(`Nextcloud restarted, but it doesn't list ${link.name} yet. Try again in a minute.`);
   await ctx.emitCheckpoint("confirm");
 }
 
-export const collabora = (ctx: HookContext) =>
-  connect(ctx, {
-    appId: "collabora",
-    name: "Collabora",
-    file: "collabora",
-    confirm: async (hook) => (await capabilities(hook))?.richdocuments !== undefined,
-  });
+export const collabora = (ctx: HookContext) => connect(ctx, { appId: "collabora", name: "Collabora", file: "collabora" });
 export const drawio = (ctx: HookContext) => connect(ctx, { appId: "drawio", name: "Draw.io", file: "drawio" });
 export const paperless = (ctx: HookContext) => connect(ctx, { appId: "paperless-ngx", name: "Paperless", file: "paperless" });
 export const ollama = (ctx: HookContext) => connect(ctx, { appId: "ollama", name: "Ollama", file: "ollama" });
