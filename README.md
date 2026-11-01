@@ -8,11 +8,14 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 
 | App | Description |
 |-----|-------------|
-| [AFFiNE](affine.json) | Knowledge base software |
 | [Actual Budget](actual-budget.json) | Financial planning software |
+| [AFFiNE](affine.json) | Knowledge base software |
+| [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
+| [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
+| [Collabora](collabora.json) | Documents you edit together in Nextcloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
 | [Donetick](dozzle.json) | Smart task manager |
@@ -22,12 +25,15 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
 | [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
+| [FlareSolverr](flaresolverr.json) | Lets Prowlarr reach indexers behind Cloudflare |
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |
 | [Jellyfin](jellyfin.json) | Free media server |
 | [Jellystat](jellystat.json) | Statistics App for Jellyfin |
+| [Kavita](kavita.json) | Reader for ebooks, comics and manga |
 | [Kodi](kodi.json) | Media player on the TV plugged into the server |
+| [LanguageTool](languagetool.json) | Spelling and grammar checks |
 | [Lidarr](lidarr.json) | Music collection manager |
 | [Linkwarden](linkwarden.json) | Webpage archiving utility |
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
@@ -36,8 +42,8 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Minecraft](minecraft.json) | Minecraft Java Edition server |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
-| [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
+| [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
