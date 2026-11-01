@@ -1351,7 +1351,8 @@
         "permissions": ["READ_WRITE_LOCATIONS"],
         "specifications": ["4CORE", "30GB", "16GBRAM"],
         "ports": [30443, 38212, 38211],
-        "game_port": 38211
+        "game_port": 38211,
+        "instances": "many"
     },
     "ensure_directories_exists": [
         {
@@ -1363,11 +1364,11 @@
             "network_share": true
         },
         {
-            "path": "$LOCATION(Media)/palworld",
+            "path": "$LOCATION(Media)/$INSTANCE(palworld)",
             "owner": "apps"
         },
         {
-            "path": "$LOCATION(ApplicationsPerformance)/palworld/steamcmd",
+            "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(palworld)/steamcmd",
             "owner": "apps"
         }
     ],
@@ -1801,8 +1802,8 @@
         },
         "storage": {
             "additional_storage": [],
-            "server": "$HOST_PATH($LOCATION(Media)/palworld)",
-            "steamcmd": "$HOST_PATH($LOCATION(ApplicationsPerformance)/palworld/steamcmd)"
+            "server": "$HOST_PATH($LOCATION(Media)/$INSTANCE(palworld))",
+            "steamcmd": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(palworld)/steamcmd)"
         }
     }
 }

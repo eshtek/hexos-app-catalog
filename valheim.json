@@ -30,7 +30,9 @@
     "locations": ["ApplicationsPerformance"],
     "specifications": ["2CORE", "4GBRAM", "2GB"],
     "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [2456, 2457, 2458]
+    "ports": [2456, 2457, 2458],
+    "game_port": 2456,
+    "instances": "many"
   },
   "installation_questions": [
     {
@@ -61,7 +63,7 @@
       "path": "$LOCATION(ApplicationsPerformance)"
     },
     {
-      "path": "$LOCATION(ApplicationsPerformance)/valheim/config",
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/config",
       "owner": {
         "user": "apps"
       },
@@ -70,7 +72,7 @@
       }
     },
     {
-      "path": "$LOCATION(ApplicationsPerformance)/valheim/server",
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/server",
       "owner": {
         "user": "apps"
       }
@@ -112,14 +114,14 @@
         "type": "host_path",
         "mount_path": "/config",
         "host_path_config": {
-          "path": "$LOCATION(ApplicationsPerformance)/valheim/config"
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/config"
         }
       },
       {
         "type": "host_path",
         "mount_path": "/opt/valheim",
         "host_path_config": {
-          "path": "$LOCATION(ApplicationsPerformance)/valheim/server"
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/server"
         }
       }
     ],

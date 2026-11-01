@@ -33,6 +33,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
+| [Minecraft](minecraft.json) | Minecraft Java Edition server |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
@@ -89,6 +90,12 @@ Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU`
 ```
 
 ## The port players join on
+
+### Several copies of an app
+
+`requirements.instances: "many"` lets one server run several copies of an app, each with its own name, data and ports. The first copy's TrueNAS name is the app's id, later ones are `<id>-2`, `<id>-3`.
+
+Every private folder has to follow the copy. `$LOCATION(ApplicationsPerformance)/$INSTANCE(sonarr)/config` gives `sonarr` for the first copy and `sonarr-2` for the second, so servers that already have the app keep their folders, and writing it needs no new `script.version`. A folder every copy shares on purpose is listed in `requirements.shared_folders`, as the script writes it. Every published port has to be `$PORT`. `bun run validate` refuses a script that breaks either rule, and `script_bumps` refuses dropping `$INSTANCE` from any script, since later copies live under it. Taking `requirements.instances` off alone is the rollback: copies already installed keep working.
 
 A game server names the port players connect to in `requirements.game_port`. The app's details pane shows it beside the app version, and, for a game with no web UI, Copy address in Launch's place copies the server's LAN address with that port. It must be one of `requirements.ports`, and `bun run validate` refuses one that isn't. It changes nothing a server runs: HexOS reads it from the catalog's current script, so changing it needs no new `script.version`. Palworld names `38211`.
 

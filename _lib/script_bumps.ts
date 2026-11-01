@@ -9,8 +9,12 @@
 // Run: bun _lib/script_bumps.ts <base ref>     (CI passes origin/<the pull request's base>)
 
 import { readdirSync, readFileSync } from "node:fs";
+import { asFirstCopy, instanceChangeProblems } from "./instances";
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+// A $PORT pin keeps whatever port an installed app is on, so it changes nothing a server runs.
+const PLACED_PORT = /"\$PORT\((\d+)\)"/g;
 
 const canonical = (value: unknown): string =>
   JSON.stringify(value, (_key, v) =>
@@ -20,15 +24,17 @@ const canonical = (value: unknown): string =>
 /**
  * What a server runs from a script: everything but the catalog card (metadata), the version block
  * itself, `internal`, which only says which catalog lists the app, and `requirements.game_port`,
- * which the deck reads from the catalog's current script to show the port players join on.
+ * which the deck reads from the catalog's current script to show the port players join on. Neither
+ * does `requirements.instances` change a server that has the app, or `$INSTANCE`, which reads as the
+ * folder it names on every app installed so far, or `$PORT`.
  */
 export function runPart(script: Record<string, unknown>): string {
   const { metadata: _metadata, script: _block, internal: _internal, ...runs } = script;
   if (isObject(runs.requirements)) {
-    const { game_port: _gamePort, ...requirements } = runs.requirements;
+    const { game_port: _gamePort, instances: _instances, shared_folders: _shared, ...requirements } = runs.requirements;
     runs.requirements = requirements;
   }
-  return canonical(runs);
+  return asFirstCopy(canonical(runs)).replace(PLACED_PORT, "$1");
 }
 
 const versionOf = (script: Record<string, unknown>): string | undefined =>
@@ -78,7 +84,7 @@ function mountedFolders(script: Record<string, unknown>): string[] {
     const volume = isObject(entry.ix_volume_config) ? entry.ix_volume_config.dataset_name : undefined;
     if (typeof volume === "string") folders.push(`ix volume ${volume}`);
   }
-  return folders;
+  return folders.map(asFirstCopy);
 }
 
 /**
@@ -92,8 +98,8 @@ export function droppedFolders(base: Record<string, unknown>, head: Record<strin
 
 /** Why a custom app's head script can't ship to the servers that have its base, one reason a line. */
 export function updateProblems(base: Record<string, unknown>, head: Record<string, unknown>): string[] {
-  if (head.custom !== true) return [];
-  const problems: string[] = [];
+  const problems = instanceChangeProblems(base, head);
+  if (head.custom !== true) return problems;
   const bump = bumpProblem(base, head);
   if (bump) problems.push(bump);
   for (const key of unanswerableQuestions(base, head)) {

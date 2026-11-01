@@ -66,6 +66,9 @@ export const CALL_MACROS = [
   "DISPLAY_GPU_PCI",
   "DISPLAY_GPU_CONFIG",
   "DISPLAY_PORT",
+  // A private folder that follows the copy of the app: "$INSTANCE(sonarr)" is "sonarr" for the first
+  // copy and "sonarr-2" for the second, so a first copy's folders never move.
+  "INSTANCE",
   // A host port and the first one HexOS tries: "$PORT(30146)" starts at 30146, and a taken port moves.
   // As a whole value it resolves to a number, inside a longer string to digits, and every $PORT(n)
   // with the same n in a script resolves to the same port.
