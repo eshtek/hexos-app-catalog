@@ -93,8 +93,15 @@ function own(path: string) {
   chownSync(path, WWW_DATA, WWW_DATA);
 }
 
-/** Put the script in place: a new one under another name and renamed, so a start never reads half. */
+/**
+ * Put the script in place: a new one under another name and renamed, so a start never reads half.
+ * The image runs these scripts as www-data, and a folder it can't enter stops the container, so the
+ * folder is opened first. TrueNAS makes a new dataset 770 and root's, and its owner may be set back
+ * at each start, so its mode is what lets www-data in.
+ */
 export function writeStartScript(mount: ContextMount) {
+  own(mount.localPath);
+  chmodSync(mount.localPath, 0o755);
   const state = `${mount.localPath}/${STATE_DIR}`;
   if (!existsSync(state)) mkdirSync(state, { recursive: true, mode: 0o750 });
   own(state);
