@@ -4,9 +4,9 @@ import { readFileSync } from "node:fs";
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
 /**
- * Adds Radarr, Sonarr, Lidarr or Sportarr to Prowlarr as an application with full sync, so every indexer added
+ * Adds Radarr, Sonarr, Lidarr, Sportarr or Chaptarr to Prowlarr as an application with full sync, so every indexer added
  * to Prowlarr reaches the manager without being set up twice. Each manager is one hook
- * (connect-radarr, connect-sonarr, connect-lidarr, connect-sportarr); the application is built from Prowlarr's own
+ * (connect-radarr, connect-sonarr, connect-lidarr, connect-sportarr, connect-chaptarr); the application is built from Prowlarr's own
  * schema and saved with Prowlarr's connection test.
  */
 
@@ -17,6 +17,8 @@ const MANAGERS: Record<string, { name: string; implementation: string; syncCateg
   // Sportarr answers Prowlarr's Sonarr application API, so Prowlarr sees it as a Sonarr. Sports are
   // category 5060 (TV/Sport), which Prowlarr's Sonarr default leaves out (SonarrSettings.cs).
   sportarr: { name: "Sportarr", implementation: "Sonarr", syncCategories: [5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5090] },
+  // Chaptarr answers Prowlarr's Readarr application API, whose default categories cover books and audiobooks.
+  chaptarr: { name: "Chaptarr", implementation: "Readarr" },
 };
 
 interface Field {
@@ -118,3 +120,4 @@ export const radarr = (ctx: HookContext) => connect(ctx, "radarr");
 export const sonarr = (ctx: HookContext) => connect(ctx, "sonarr");
 export const lidarr = (ctx: HookContext) => connect(ctx, "lidarr");
 export const sportarr = (ctx: HookContext) => connect(ctx, "sportarr");
+export const chaptarr = (ctx: HookContext) => connect(ctx, "chaptarr");

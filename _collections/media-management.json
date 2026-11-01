@@ -64,6 +64,10 @@
         {
           "app": "sportarr",
           "summary": "Sports"
+        },
+        {
+          "app": "chaptarr",
+          "summary": "Books and audiobooks"
         }
       ]
     },
@@ -148,6 +152,31 @@
           "answers": {
             "is_emby_api": "false"
           }
+        },
+        {
+          "app": "audiobookshelf",
+          "summary": "Audiobook player",
+          "requires": [
+            "chaptarr"
+          ]
+        },
+        {
+          "app": "kavita",
+          "summary": "Ebook reader",
+          "requires": [
+            "chaptarr"
+          ]
+        },
+        {
+          "app": "flaresolverr",
+          "summary": "Reaches indexers behind Cloudflare",
+          "requiresAny": [
+            "radarr",
+            "sonarr",
+            "lidarr",
+            "sportarr",
+            "chaptarr"
+          ]
         }
       ]
     }

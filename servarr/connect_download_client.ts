@@ -4,7 +4,7 @@ import { chownSync, mkdirSync, readFileSync } from "node:fs";
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
 /**
- * Adds a download client to Radarr, Sonarr, Lidarr or Prowlarr: the hook each of them declares per
+ * Adds a download client to Radarr, Sonarr, Lidarr, Chaptarr or Prowlarr: the hook each of them declares per
  * client (connect-qbittorrent, connect-deluge, connect-sabnzbd, connect-nzbget). Prowlarr's is for
  * what the owner grabs in Prowlarr's own search, which lands in a prowlarr category no manager imports. The client is added
  * through the manager's own schema, so a field the manager renames is still filled, and saved with
@@ -33,6 +33,8 @@ const MANAGERS = {
   radarr: { name: "Radarr", api: "v3", categoryField: "movieCategory" },
   sonarr: { name: "Sonarr", api: "v3", categoryField: "tvCategory" },
   lidarr: { name: "Lidarr", api: "v1", categoryField: "musicCategory" },
+  // Chaptarr sorts books and audiobooks with a field each, and both land in one category
+  chaptarr: { name: "Chaptarr", api: "v1", categoryField: "ebookCategory", alsoCategoryField: "audiobookCategory" },
   prowlarr: { name: "Prowlarr", api: "v1", categoryField: "category" },
 } as const;
 
@@ -40,10 +42,10 @@ type ManagerId = keyof typeof MANAGERS;
 
 /** Each manager's category: the manager's own choice in a torrent client, the client's own for Usenet. */
 const CATEGORIES: Record<string, Record<ManagerId, string>> = {
-  qbittorrent: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", prowlarr: "prowlarr" },
-  deluge: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", prowlarr: "prowlarr" },
-  sabnzbd: { radarr: "movies", sonarr: "tv", lidarr: "audio", prowlarr: "prowlarr" },
-  nzbget: { radarr: "Movies", sonarr: "Series", lidarr: "Music", prowlarr: "Prowlarr" },
+  qbittorrent: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", chaptarr: "chaptarr", prowlarr: "prowlarr" },
+  deluge: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", chaptarr: "chaptarr", prowlarr: "prowlarr" },
+  sabnzbd: { radarr: "movies", sonarr: "tv", lidarr: "audio", chaptarr: "books", prowlarr: "prowlarr" },
+  nzbget: { radarr: "Movies", sonarr: "Series", lidarr: "Music", chaptarr: "Books", prowlarr: "Prowlarr" },
 };
 
 interface Field {
@@ -176,7 +178,11 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
   await ctx.emitCheckpoint("prepare");
 
   const connection: Record<string, unknown> = { host: client.host, port: client.port, useSsl: false, ...plan.connection };
-  const preferences: Record<string, unknown> = { [manager.categoryField]: client.category, ...plan.preferences };
+  const preferences: Record<string, unknown> = {
+    [manager.categoryField]: client.category,
+    ...("alsoCategoryField" in manager ? { [manager.alsoCategoryField]: client.category } : {}),
+    ...plan.preferences,
+  };
   const existing = (await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient")).find(
     (entry) =>
       entry.implementation === plan.implementation &&

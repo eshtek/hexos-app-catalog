@@ -304,6 +304,62 @@
       "entrypoint": "nzbget",
       "timeout": 120,
       "retries": 0
+    },
+    {
+      "id": "connect-chaptarr",
+      "title": "Connect to Chaptarr",
+      "description": "Keeps Chaptarr's indexers in sync with Prowlarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "prowlarr/connect_arr.ts",
+      "entrypoint": "chaptarr",
+      "timeout": 120,
+      "retries": 0
+    },
+    {
+      "id": "connect-flaresolverr",
+      "title": "Connect to FlareSolverr",
+      "description": "Lets Prowlarr reach indexers behind Cloudflare.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "flaresolverr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "flaresolverr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "prowlarr/connect_flaresolverr.ts",
+      "entrypoint": "run",
+      "timeout": 180,
+      "retries": 0
     }
   ]
 }

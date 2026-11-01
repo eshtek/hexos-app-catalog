@@ -287,6 +287,37 @@
       "entrypoint": "run",
       "timeout": 180,
       "retries": 0
+    },
+    {
+      "id": "connect-sportarr",
+      "title": "Connect to Sportarr",
+      "description": "Adds a Sports library to Plex for what Sportarr fetches.",
+      "kind": "connect",
+      "requiresHooks": [
+        "configure-plex"
+      ],
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "rerun": "converge",
+      "script": "plex/add_library.ts",
+      "entrypoint": "sportarr",
+      "timeout": 180,
+      "retries": 0
     }
   ],
   "widgetsSchema": 3,
