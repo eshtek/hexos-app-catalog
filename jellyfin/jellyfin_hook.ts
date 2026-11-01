@@ -27,6 +27,8 @@ const WIDGET_KEY_NAME = "HexOS";
 const AUTO_RETRIES = 5;
 const AUTO_RETRY_DELAY_MS = 5000;
 const LIBRARY_PACE_MS = 5000;
+/** How many looks a requested library gets to appear, about a minute's worth. */
+const LIBRARY_APPEAR_ATTEMPTS = 12;
 const READINESS_ATTEMPTS = 20;
 const READINESS_INTERVAL_MS = 5000;
 const SUBSYSTEM_ATTEMPTS = 8;
@@ -411,6 +413,15 @@ async function getExistingLibraryPaths(ctx: HookContext, token: string): Promise
   }
 }
 
+/** Whether a requested library has appeared: a server busy with its first scan can take a while to list it. */
+async function libraryAppears(ctx: HookContext, token: string, path: string): Promise<boolean> {
+  for (let i = 0; i < LIBRARY_APPEAR_ATTEMPTS; i++) {
+    await ctx.sleep(i === 0 ? 2000 : AUTO_RETRY_DELAY_MS);
+    if ((await getExistingLibraryPaths(ctx, token))?.has(path)) return true;
+  }
+  return false;
+}
+
 async function createLibraries(ctx: HookContext, token: string): Promise<void> {
   await waitForLibrarySubsystem(ctx, token);
   await ctx.sleep(LIBRARY_PACE_MS);
@@ -446,6 +457,23 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
             : `Creating library: ${lib.name}... (retry ${attempt}/${AUTO_RETRIES})`,
         );
 
+        // Jellyfin makes a library for every request, numbering the name (Movies2, Movies3), and a
+        // request that seemed to fail may have worked. So one goes out only when the server says
+        // this library isn't there.
+        const current = await getExistingLibraryPaths(ctx, token);
+        if (current?.has(lib.path)) {
+          ctx.log(`Library is there: ${lib.name}`);
+          created = true;
+          break;
+        }
+        if (current === null) {
+          lastStatus = "Could not read the server's libraries";
+          lastBody = "";
+          ctx.log(`${lib.name}: ${lastStatus}`);
+          await ctx.sleep(AUTO_RETRY_DELAY_MS);
+          continue;
+        }
+
         try {
           const params = new URLSearchParams({
             name: lib.name,
@@ -466,9 +494,7 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
           });
 
           if (resp.ok) {
-            await ctx.sleep(2000);
-            const verified = await getExistingLibraryPaths(ctx, token);
-            if (verified?.has(lib.path)) {
+            if (await libraryAppears(ctx, token, lib.path)) {
               ctx.log(`Created library: ${lib.name}`);
               created = true;
               break;
@@ -483,6 +509,10 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
           lastStatus = "Network error";
           lastBody = String(e);
           ctx.log(`${lib.name}: ${e}`);
+          if (await libraryAppears(ctx, token, lib.path)) {
+            created = true;
+            break;
+          }
         }
 
         await ctx.sleep(AUTO_RETRY_DELAY_MS);
