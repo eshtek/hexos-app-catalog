@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation"
+    "version": "1.1.0",
+    "changeLog": "SearXNG can give Open WebUI private web search."
   },
   "requirements": {
     "locations": [
@@ -47,5 +47,35 @@
       }
     }
   },
-  "internal": true
+  "internal": true,
+  "hooks": [
+    {
+      "id": "connect-open-webui",
+      "title": "Connect to Open WebUI",
+      "description": "Gives Open WebUI private web search.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "open-webui"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "open-webui"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "searxng"
+        }
+      ],
+      "rerun": "converge",
+      "script": "searxng/connect_open_webui.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
 }
