@@ -1,6 +1,11 @@
 // Sibling files are type imports only: each script is compiled standalone, so runtime imports of them wouldn't resolve.
 import { Database } from "bun:sqlite";
 import { Buffer } from "node:buffer";
+import { createReadStream, createWriteStream, mkdtempSync, rmSync } from "node:fs";
+import http from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
 
 import type { WidgetContext, WidgetListEntry, WidgetQueryResult } from "../_lib/widget_context";
 
@@ -17,43 +22,129 @@ const IS_ADMINISTRATOR = 0;
 const SETUP_REASON = "Sign in to Jellyfin to see what's playing here";
 /** Jellyfin counts time in ticks of 100 ns. */
 const TICKS_PER_MS = 10_000;
+const DOCKER_SOCKET = "/var/run/docker.sock";
+/** Under the widget's 10 s timeout, so a database too big to copy reads as no token rather than failing the card. */
+const DOCKER_TIMEOUT_MS = 8000;
+/** The card refreshes every 5 s and a copy is the whole database, so copies are at least this far apart. */
+const DOCKER_RETRY_MS = 60_000;
+
+// A token read through Docker, kept while it works. It's replaced at the next copy after a 401.
+let dockerToken: string | null = null;
+let nextDockerCopy = 0;
 
 /**
- * A token the widget can read sessions with, from Jellyfin's own database, read-only, so the owner
- * never has to hand HexOS one: the API key HexOS's setup made, else any API key, else the session
- * of an administrator signed in to any Jellyfin app (HexOS's setup sign-in first, then the most
- * recently used). Only an administrator sees every stream. Null when no administrator has ever
- * signed in, which signing in fixes.
+ * A token the widget can read sessions with: the API key HexOS's setup made, else any API key, else
+ * the session of an administrator signed in to any Jellyfin app (HexOS's setup sign-in first, then
+ * the most recently used). Only an administrator sees every stream. Null when no administrator has
+ * ever signed in, which signing in fixes.
  */
-function harvestToken(ctx: WidgetContext): string | null {
+function tokenIn(db: Database): string | null {
+  const key = db
+    .query<{ AccessToken: string }, [string]>(
+      "SELECT AccessToken FROM ApiKeys ORDER BY (Name = ?) DESC, DateCreated DESC LIMIT 1",
+    )
+    .get(KEY_NAME);
+  if (key?.AccessToken) return key.AccessToken;
+  const session = db
+    .query<{ AccessToken: string }, [number, string]>(
+      `SELECT d.AccessToken FROM Devices d
+         JOIN Permissions p ON p.UserId = d.UserId AND p.Kind = ? AND p.Value = 1
+        WHERE d.IsActive = 1
+        ORDER BY (d.DeviceId = ?) DESC, d.DateLastActivity DESC
+        LIMIT 1`,
+    )
+    .get(IS_ADMINISTRATOR, SETUP_DEVICE_ID);
+  return session?.AccessToken ?? null;
+}
+
+/** Where the file in a tar from Docker's archive endpoint sits: after its 512-byte header, and any pax header. */
+export function tarFile(head: Uint8Array): { start: number; size: number } | null {
+  const text = new TextDecoder();
+  for (let at = 0; head[at]; ) {
+    const size = Number.parseInt(text.decode(head.subarray(at + 124, at + 136)), 8);
+    const type = head[at + 156];
+    if (type === 0 || type === 48) return { start: at + 512, size }; // a regular file
+    at += 512 + Math.ceil(size / 512) * 512; // a pax header ahead of the file
+  }
+  return null;
+}
+
+/** A GET on Docker's socket. Not fetch: over a unix socket that moves 15 MB/s on Bun 1.4.4, and this 140. */
+function dockerGet(path: string, signal: AbortSignal): Promise<http.IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    http.get({ socketPath: DOCKER_SOCKET, path, signal }, resolve).on("error", reject);
+  });
+}
+
+/** Copies a file with anything in it out of the app's container to `to`, through a file: a database can be large. */
+async function copyFromContainer(appId: string, path: string, to: string, signal: AbortSignal): Promise<boolean> {
+  const response = await dockerGet(
+    `/containers/ix-${appId}-${appId}-1/archive?path=${encodeURIComponent(path)}`,
+    signal,
+  );
+  if (response.statusCode !== 200) {
+    response.resume();
+    return false;
+  }
+  const tar = `${to}.tar`;
+  await pipeline(response, createWriteStream(tar), { signal });
+  const file = tarFile(new Uint8Array(await Bun.file(tar).slice(0, 4096).arrayBuffer()));
+  if (!file?.size) return false;
+  // Not Bun.write of a sliced file: on Bun 1.4.4 that writes the whole of it, header included
+  const bytes = createReadStream(tar, { start: file.start, end: file.start + file.size - 1 });
+  await pipeline(bytes, createWriteStream(to));
+  return true;
+}
+
+/**
+ * The token from a copy of the database, opened read-write so SQLite can take in the copy's
+ * write-ahead log, which holds whatever Jellyfin hasn't written back yet. The live database is only
+ * ever read. The copy is removed before this returns.
+ */
+async function tokenThroughDocker(appId: string, path: string): Promise<string | null> {
+  if (dockerToken || Date.now() < nextDockerCopy) return dockerToken;
+  nextDockerCopy = Date.now() + DOCKER_RETRY_MS;
+  const dir = mkdtempSync(join(tmpdir(), "hexos-jellyfin-"));
+  const copy = join(dir, "jellyfin.db");
+  let db: Database | undefined;
+  try {
+    const signal = AbortSignal.timeout(DOCKER_TIMEOUT_MS);
+    if (await copyFromContainer(appId, path, copy, signal)) {
+      await copyFromContainer(appId, `${path}-wal`, `${copy}-wal`, signal);
+      db = new Database(copy);
+      dockerToken = tokenIn(db);
+    }
+  } catch {
+    // A box with no socket yet, a database too big to copy in time, or one caught mid-write
+  } finally {
+    db?.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return dockerToken;
+}
+
+/**
+ * A token from Jellyfin's own database, so the owner never has to hand HexOS one. The database sits
+ * on the app's own dataset, which the HexOS container can't see on a box whose app config predates
+ * the pool mounts; Docker always can, over the daemon socket the HexOS container has for its host
+ * commands.
+ */
+async function harvestToken(ctx: WidgetContext): Promise<string | null> {
   const config =
     ctx.mounts.find((m) => m.containerPath === "/config") ??
     ctx.mounts.find((m) => m.hostPath.endsWith("/jellyfin/config"));
-  if (!config) return null;
-  let db: Database | undefined;
-  try {
-    db = new Database(config.localPath + DB_RELATIVE, { readonly: true });
-    const key = db
-      .query<{ AccessToken: string }, [string]>(
-        "SELECT AccessToken FROM ApiKeys ORDER BY (Name = ?) DESC, DateCreated DESC LIMIT 1",
-      )
-      .get(KEY_NAME);
-    if (key?.AccessToken) return key.AccessToken;
-    const session = db
-      .query<{ AccessToken: string }, [number, string]>(
-        `SELECT d.AccessToken FROM Devices d
-           JOIN Permissions p ON p.UserId = d.UserId AND p.Kind = ? AND p.Value = 1
-          WHERE d.IsActive = 1
-          ORDER BY (d.DeviceId = ?) DESC, d.DateLastActivity DESC
-          LIMIT 1`,
-      )
-      .get(IS_ADMINISTRATOR, SETUP_DEVICE_ID);
-    return session?.AccessToken ?? null;
-  } catch {
-    return null;
-  } finally {
-    db?.close();
+  if (config) {
+    let db: Database | undefined;
+    try {
+      db = new Database(config.localPath + DB_RELATIVE, { readonly: true });
+      return tokenIn(db);
+    } catch {
+      // Not written yet, or the dataset isn't visible from here
+    } finally {
+      db?.close();
+    }
   }
+  return tokenThroughDocker(ctx.appId, (config?.containerPath ?? "/config") + DB_RELATIVE);
 }
 
 interface JellyfinItem {
@@ -149,29 +240,38 @@ function artworkPath(item: JellyfinItem): string | undefined {
   return undefined;
 }
 
-/** A crop of the image filling `width` x `height`, as a data URI, or undefined when over the cap. */
+/** The platform's limit on a widget's data URI. */
+const IMAGE_LIMIT = 60_000;
+
+/**
+ * The crops to try in turn until one fits: near twice the card's size for a sharp picture, then
+ * softer, then smaller, down to the card's own size. The scrim over the artwork hides the loss.
+ */
+const ARTWORK_CROPS = [
+  { width: 660, height: 260, quality: 80 },
+  { width: 660, height: 260, quality: 60 },
+  { width: 560, height: 220, quality: 60 },
+  { width: 480, height: 190, quality: 60 },
+  { width: 330, height: 130, quality: 60 },
+];
+
+/** The image at one crop as a data URI, or undefined when the app doesn't give one. */
 async function fetchImage(
   base: string,
   headers: Record<string, string>,
   path: string,
-  width: number,
-  height: number,
+  { width, height, quality }: (typeof ARTWORK_CROPS)[number],
 ): Promise<string | undefined> {
-  const response = await fetch(`${base}${path}?fillWidth=${width}&fillHeight=${height}&quality=80&format=Jpg`, {
+  const response = await fetch(`${base}${path}?fillWidth=${width}&fillHeight=${height}&quality=${quality}&format=Jpg`, {
     headers,
   });
   if (!response.ok) return undefined;
   const type = response.headers.get("content-type") ?? "";
   if (!type.startsWith("image/")) return undefined;
-  const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
-  return uri.length <= 60_000 ? uri : undefined;
+  return `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
 }
 
-/**
- * The item's wide artwork as a size-capped data URI, for the app card's background while the
- * card shows this stream. Near twice the card's size for a sharp picture, then near its own size
- * when the sharp one is over the cap.
- */
+/** The item's wide artwork as a data URI, for the app card's background while the card shows this stream. */
 // A stream's artwork does not change while it plays, and the card asks every few seconds, so each
 // picture is fetched once and kept: the box reuses this module between runs until the script
 // changes. Only pictures that arrived are kept, so a failed one is tried again on the next run.
@@ -185,7 +285,7 @@ function rememberArtwork(key: string, image: string): void {
   if (artworkCache.size > ARTWORK_CACHE_SIZE && oldest !== undefined) artworkCache.delete(oldest);
 }
 
-async function fetchArtwork(
+export async function fetchArtwork(
   base: string,
   headers: Record<string, string>,
   item: JellyfinItem,
@@ -196,17 +296,21 @@ async function fetchArtwork(
   const kept = artworkCache.get(key);
   if (kept) return kept;
   try {
-    const image =
-      (await fetchImage(base, headers, path, 660, 260)) ?? (await fetchImage(base, headers, path, 480, 190));
-    if (image) rememberArtwork(key, image);
-    return image;
+    for (const crop of ARTWORK_CROPS) {
+      const image = await fetchImage(base, headers, path, crop);
+      if (!image) return undefined;
+      if (image.length > IMAGE_LIMIT) continue;
+      rememberArtwork(key, image);
+      return image;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
 }
 
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
-  const token = harvestToken(ctx);
+  const token = await harvestToken(ctx);
   if (!token) return { needsSetup: true, reason: SETUP_REASON };
 
   const base = `http://${ctx.host}:${ctx.port ?? 30013}`;
@@ -214,7 +318,10 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
 
   const response = await fetch(`${base}/Sessions?activeWithinSeconds=960`, { headers });
   // A session token dies when its device signs out; the next run picks another.
-  if (response.status === 401) return { needsSetup: true, reason: SETUP_REASON };
+  if (response.status === 401) {
+    dockerToken = null;
+    return { needsSetup: true, reason: SETUP_REASON };
+  }
   if (!response.ok) throw new Error(`Jellyfin sessions query failed (${response.status})`);
   const sessions = ((await response.json()) as JellyfinSession[]).filter(
     (session): session is JellyfinSession & { NowPlayingItem: JellyfinItem } => !!session.NowPlayingItem,

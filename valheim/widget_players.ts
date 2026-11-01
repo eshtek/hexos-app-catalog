@@ -28,10 +28,20 @@ import type { WidgetContext, WidgetFieldValue, WidgetMount, WidgetQueryResult } 
 //
 // The world. PRE_SERVER_RUN_HOOK also writes the world the server runs (its WORLD_NAME) to
 // /config/hexos-world.txt; a server started by script 1.1.0 or older has none, and reads "Valheim".
+//
+// Reading them. The files sit on the app's own dataset, and the HexOS container can't see that on
+// every box: a box whose app config predates the pool mounts sees only pool roots and shares, and
+// one without rslave has an empty folder in the dataset's place (a production box, 2026-10-31: the
+// server up with a code and a player on, and the card and the Settings tab blank). Docker can always
+// see them, so a file the mount doesn't give is read out of the app's container over the daemon
+// socket the HexOS container has for its host commands.
 
 const SESSION_FILE = "/hexos-session.txt";
 const PLAYERS_FILE = "/hexos-players.txt";
 const WORLD_FILE = "/hexos-world.txt";
+const DOCKER_SOCKET = "/var/run/docker.sock";
+/** Under the widget's 5 s timeout, so a stuck daemon reads as nothing rather than failing the card. */
+const DOCKER_TIMEOUT_MS = 2000;
 /** A dedicated Valheim server takes ten players. */
 const MAX_PLAYERS = 10;
 // Anchored at the end, or at the code itself, so a server name with "join code 12" in it is never read as one
@@ -86,20 +96,47 @@ export function playersLine(names: string[]): string {
   return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
 }
 
-function read(mount: WidgetMount | undefined, file: string): string {
-  if (!mount) return "";
-  try {
-    return readFileSync(mount.localPath + file, "utf-8");
-  } catch {
-    return ""; // not written yet
+/** The file in a tar from Docker's archive endpoint: a 512-byte header, then its bytes. */
+export function untar(tar: Uint8Array): string {
+  const text = new TextDecoder();
+  for (let at = 0; tar[at]; ) {
+    const size = Number.parseInt(text.decode(tar.subarray(at + 124, at + 136)), 8);
+    const type = tar[at + 156];
+    if (type === 0 || type === 48) return text.decode(tar.subarray(at + 512, at + 512 + size)); // a regular file
+    at += 512 + Math.ceil(size / 512) * 512; // a pax header ahead of the file
   }
+  return "";
+}
+
+async function readThroughDocker(appId: string, path: string): Promise<string> {
+  const url = `http://docker/containers/ix-${appId}-${appId}-1/archive?path=${encodeURIComponent(path)}`;
+  try {
+    const response = await fetch(url, { unix: DOCKER_SOCKET, signal: AbortSignal.timeout(DOCKER_TIMEOUT_MS) });
+    return response.ok ? untar(new Uint8Array(await response.arrayBuffer())) : "";
+  } catch {
+    return ""; // a box with no socket yet
+  }
+}
+
+async function read(ctx: WidgetContext, mount: WidgetMount | undefined, file: string): Promise<string> {
+  if (mount) {
+    try {
+      return readFileSync(mount.localPath + file, "utf-8");
+    } catch {
+      // Not written yet, or the dataset isn't visible from here
+    }
+  }
+  return readThroughDocker(ctx.appId, (mount?.containerPath ?? "/config") + file);
 }
 
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const config = configMount(ctx.mounts);
-  const names = players(read(config, PLAYERS_FILE));
-  const code = joinCode(read(config, SESSION_FILE));
-  const world = read(config, WORLD_FILE).trim() || "Valheim";
+  const [playersFile, sessionFile, worldFile] = await Promise.all(
+    [PLAYERS_FILE, SESSION_FILE, WORLD_FILE].map((file) => read(ctx, config, file)),
+  );
+  const names = players(playersFile);
+  const code = joinCode(sessionFile);
+  const world = worldFile.trim() || "Valheim";
   const fields: Record<string, WidgetFieldValue> = {
     // One entry while anyone's on: the world's name in bold, the players in the small line under it
     online: { type: "list", entries: names.length ? [{ title: world, subtitle: playersLine(names), image: CAMPFIRE }] : [] },

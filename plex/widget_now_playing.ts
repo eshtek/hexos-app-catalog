@@ -5,43 +5,90 @@ import { readFileSync } from "node:fs";
 import type { WidgetContext, WidgetQueryResult } from "../_lib/widget_context";
 
 const PREFS_RELATIVE = "/Library/Application Support/Plex Media Server/Preferences.xml";
+const DOCKER_SOCKET = "/var/run/docker.sock";
+/** Under the widget's 10 s timeout, so a stuck daemon reads as nothing rather than failing the card. */
+const DOCKER_TIMEOUT_MS = 2000;
 
-function harvestPlexToken(ctx: WidgetContext): string | null {
-  const config =
-    ctx.mounts.find((m) => m.containerPath === "/config") ??
-    ctx.mounts.find((m) => m.hostPath.endsWith("/plex/config"));
-  if (!config) return null;
+/** The file in a tar from Docker's archive endpoint: a 512-byte header, then its bytes. */
+export function untar(tar: Uint8Array): string {
+  const text = new TextDecoder();
+  for (let at = 0; tar[at]; ) {
+    const size = Number.parseInt(text.decode(tar.subarray(at + 124, at + 136)), 8);
+    const type = tar[at + 156];
+    if (type === 0 || type === 48) return text.decode(tar.subarray(at + 512, at + 512 + size)); // a regular file
+    at += 512 + Math.ceil(size / 512) * 512; // a pax header ahead of the file
+  }
+  return "";
+}
+
+async function readThroughDocker(appId: string, path: string): Promise<string> {
+  const url = `http://docker/containers/ix-${appId}-${appId}-1/archive?path=${encodeURIComponent(path)}`;
   try {
-    const xml = readFileSync(config.localPath + PREFS_RELATIVE, "utf-8");
-    return xml.match(/PlexOnlineToken="([^"]+)"/)?.[1] ?? null;
+    const response = await fetch(url, { unix: DOCKER_SOCKET, signal: AbortSignal.timeout(DOCKER_TIMEOUT_MS) });
+    return response.ok ? untar(new Uint8Array(await response.arrayBuffer())) : "";
   } catch {
-    return null;
+    return ""; // a box with no socket yet
   }
 }
 
-/** A Plex photo-transcoder crop of `path` as a data URI, or undefined when it is over the size cap. */
+/**
+ * Plex's preferences. They sit on the app's own dataset, which the HexOS container can't see on a
+ * box whose app config predates the pool mounts, so what the mount doesn't give is read out of the
+ * app's container over the daemon socket the HexOS container has for its host commands.
+ */
+async function readPreferences(ctx: WidgetContext, mount: WidgetContext["mounts"][number] | undefined): Promise<string> {
+  if (mount) {
+    try {
+      return readFileSync(mount.localPath + PREFS_RELATIVE, "utf-8");
+    } catch {
+      // Not written yet, or the dataset isn't visible from here
+    }
+  }
+  return readThroughDocker(ctx.appId, (mount?.containerPath ?? "/config") + PREFS_RELATIVE);
+}
+
+async function harvestPlexToken(ctx: WidgetContext): Promise<string | null> {
+  const config =
+    ctx.mounts.find((m) => m.containerPath === "/config") ??
+    ctx.mounts.find((m) => m.hostPath.endsWith("/plex/config"));
+  const xml = await readPreferences(ctx, config);
+  return xml.match(/PlexOnlineToken="([^"]+)"/)?.[1] ?? null;
+}
+
+/** The platform's limit on a widget's data URI. */
+const IMAGE_LIMIT = 60_000;
+
+/**
+ * The crops to try in turn until one fits: near twice the card's size for a sharp picture, then
+ * softer, then smaller, down to the card's own size. The scrim over the artwork hides the loss.
+ */
+const ARTWORK_CROPS = [
+  { width: 660, height: 260, quality: 80 },
+  { width: 660, height: 260, quality: 60 },
+  { width: 560, height: 220, quality: 60 },
+  { width: 480, height: 190, quality: 60 },
+  { width: 330, height: 130, quality: 60 },
+];
+
+/** A Plex photo-transcoder crop of `path` as a data URI, or undefined when Plex doesn't give one. */
 async function transcodeImage(
   base: string,
   token: string,
   path: string,
-  width: number,
-  height: number,
+  { width, height, quality }: (typeof ARTWORK_CROPS)[number],
 ): Promise<string | undefined> {
   const response = await fetch(
-    `${base}/photo/:/transcode?width=${width}&height=${height}&minSize=1&format=jpeg&url=${encodeURIComponent(path)}&X-Plex-Token=${token}`,
+    `${base}/photo/:/transcode?width=${width}&height=${height}&minSize=1&format=jpeg&quality=${quality}&url=${encodeURIComponent(path)}&X-Plex-Token=${token}`,
   );
   if (!response.ok) return undefined;
   const type = response.headers.get("content-type") ?? "";
   if (!type.startsWith("image/")) return undefined;
-  const uri = `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
-  return uri.length <= 60_000 ? uri : undefined;
+  return `data:${type};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
 }
 
 /**
- * The session's wide artwork as a size-capped data URI, for the app card's background while the
- * card shows this session. A card is about 330x130, so the transcoder is asked for a landscape
- * crop near twice that for a sharp picture, then near the card's own size when the sharp one is
- * over the cap. An item with no wide artwork falls back to its poster, cropped the same way.
+ * The session's wide artwork as a data URI, for the app card's background while the card shows
+ * this session. An item with no wide artwork falls back to its poster, cropped the same way.
  */
 // A stream's artwork does not change while it plays, and the card asks every few seconds, so each
 // picture is fetched once and kept: the box reuses this module between runs until the script
@@ -59,17 +106,21 @@ function rememberArtwork(key: string, image: string): void {
   if (artworkCache.size > ARTWORK_CACHE_SIZE && oldest !== undefined) artworkCache.delete(oldest);
 }
 
-async function fetchArtwork(base: string, token: string, session: PlexSession): Promise<string | undefined> {
+export async function fetchArtwork(base: string, token: string, session: PlexSession): Promise<string | undefined> {
   const path = session.art || session.grandparentArt || session.grandparentThumb || session.thumb;
   if (!path) return undefined;
   const key = `${base}${path}`;
   const kept = artworkCache.get(key);
   if (kept) return kept;
   try {
-    const image =
-      (await transcodeImage(base, token, path, 660, 260)) ?? (await transcodeImage(base, token, path, 480, 190));
-    if (image) rememberArtwork(key, image);
-    return image;
+    for (const crop of ARTWORK_CROPS) {
+      const image = await transcodeImage(base, token, path, crop);
+      if (!image) return undefined;
+      if (image.length > IMAGE_LIMIT) continue;
+      rememberArtwork(key, image);
+      return image;
+    }
+    return undefined;
   } catch {
     return undefined;
   }
@@ -160,7 +211,7 @@ function sessionMeta(session: PlexSession): string | undefined {
 }
 
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
-  const token = harvestPlexToken(ctx);
+  const token = await harvestPlexToken(ctx);
   if (!token) return { needsSetup: true, reason: "Sign in to Plex to see your library here" };
 
   const base = `http://${ctx.host}:${ctx.port ?? 32400}`;
