@@ -289,6 +289,15 @@ export interface HookContext {
    */
   restartApp?(): Promise<void>;
 
+  /**
+   * Change this app's own TrueNAS settings, for a value only an update can carry: `change` edits a
+   * copy of the app's current values, and the app is updated when anything differs, which restarts
+   * it. Resolves to whether it changed. The app's graphics card stays as it is. A later script
+   * update writes the script's own values back, so a link that uses this runs again after one.
+   * Missing on a box from before it.
+   */
+  updateAppValues?(change: (values: Record<string, unknown>) => void): Promise<boolean>;
+
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
 

@@ -6,31 +6,16 @@
     "changeLog": "Collabora edits documents inside Nextcloud on your home network."
   },
   "requirements": {
-    "locations": [
-      "ApplicationsPerformance"
-    ],
+    "locations": [],
     "specifications": [
       "2CORE",
       "2GBRAM"
     ],
-    "permissions": [
-      "READ_WRITE_LOCATIONS"
-    ],
+    "permissions": [],
     "ports": [
       9980
     ]
   },
-  "ensure_directories_exists": [
-    {
-      "path": "$LOCATION(ApplicationsPerformance)"
-    },
-    {
-      "path": "$LOCATION(ApplicationsPerformance)/collabora/settings",
-      "snapshot": {
-        "id": "settings"
-      }
-    }
-  ],
   "app_values": {
     "collabora": {
       "server_name": "$SERVER_LAN_IP:$PORT(9980)",
@@ -53,11 +38,6 @@
         "bind_mode": "published",
         "port_number": "$PORT(9980)"
       }
-    },
-    "storage": {
-      "additional_storage": [
-        "$MOUNTED_HOST_PATH($LOCATION(ApplicationsPerformance)/collabora/settings, /etc/coolwsd/conf.d)"
-      ]
     },
     "resources": {
       "limits": {

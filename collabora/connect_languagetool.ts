@@ -1,56 +1,40 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
-import { readFileSync, writeFileSync } from "node:fs";
-
 import type { HookContext } from "../_lib/hook_context";
 
 /**
- * Turns on spelling and grammar checks in Collabora through LanguageTool. Collabora reads its
- * settings at its start, from coolwsd.xml and then every file in /etc/coolwsd/conf.d, which is a
- * folder of HexOS's. So the link writes one file there and restarts Collabora, and running it again
- * changes nothing unless LanguageTool has moved. Read at Collabora 26.04.
+ * Turns on spelling and grammar checks in Collabora through LanguageTool. Collabora takes these
+ * settings only at its start, from its command line (no shell, no settings folder in its image), so
+ * the link puts them in the app's own extra_params and updates the app. Running it again changes
+ * nothing unless LanguageTool has moved. A script update writes the script's own list back, which
+ * this link's row on the Connections tab puts right. Read at Collabora 26.04.
  */
 
-const FOLDER = "/etc/coolwsd/conf.d";
-const FILE = "hexos-languagetool.xml";
-
-const settings = (url: string) => `<config>
-  <languagetool>
-    <enabled type="bool">true</enabled>
-    <base_url type="string">${url}/v2</base_url>
-    <ssl_verification type="bool">false</ssl_verification>
-    <rest_protocol type="string"></rest_protocol>
-  </languagetool>
-</config>
-`;
+const PREFIX = "--o:languagetool.";
 
 export async function run(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "locate", message: "Finding LanguageTool" },
-    { id: "restart", message: "Restarting Collabora to connect it" },
+    { id: "update", message: "Updating Collabora to connect it" },
     { id: "confirm", message: "Checking Collabora came back" },
   ]);
 
-  const mount = ctx.mounts.find((m) => m.containerPath === FOLDER);
-  if (!mount) ctx.fail("This Collabora can't connect to LanguageTool yet. Update its setup from the app's page, then try again.");
   const url = await ctx.getInstalledAppUrl("languagetool");
   if (!url) ctx.fail("LanguageTool isn't installed, or HexOS can't find its port");
   await ctx.emitCheckpoint("locate");
 
-  const path = `${mount.localPath}/${FILE}`;
-  let current: string | undefined;
-  try {
-    current = readFileSync(path, "utf-8");
-  } catch {}
-  const wanted = settings(url);
-  if (current === wanted) {
-    await ctx.skipCheckpoint("restart", "Collabora already uses this LanguageTool");
+  if (typeof ctx.updateAppValues !== "function") ctx.fail("This server's HexOS needs an update before it can connect Collabora. Try again after it updates.");
+  const wanted = [`${PREFIX}enabled=true`, `${PREFIX}base_url=${url}/v2`, `${PREFIX}ssl_verification=false`];
+  const changed = await ctx.updateAppValues((values) => {
+    const collabora = values.collabora as { extra_params?: string[] };
+    const others = (collabora.extra_params ?? []).filter((param) => !param.startsWith(PREFIX));
+    collabora.extra_params = [...others, ...wanted];
+  });
+  if (!changed) {
+    await ctx.skipCheckpoint("update", "Collabora already uses this LanguageTool");
     await ctx.skipCheckpoint("confirm");
     return;
   }
-  if (typeof ctx.restartApp !== "function") ctx.fail("This server's HexOS needs an update before it can connect Collabora. Try again after it updates.");
-  writeFileSync(path, wanted, { mode: 0o644 });
-  await ctx.restartApp();
-  await ctx.emitCheckpoint("restart");
+  await ctx.emitCheckpoint("update");
   await ctx.waitForApp("/hosting/discovery", { maxAttempts: 40 });
   await ctx.emitCheckpoint("confirm");
 }

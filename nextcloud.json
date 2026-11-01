@@ -169,6 +169,24 @@
       "retries": 0
     },
     {
+      "id": "configure-nextcloud",
+      "title": "Finish setting up Nextcloud",
+      "description": "Waits for Nextcloud to finish its first start, which takes a few minutes.",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
       "id": "connect-collabora",
       "title": "Connect to Collabora",
       "description": "Opens and edits documents in Nextcloud with Collabora.",

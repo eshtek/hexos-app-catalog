@@ -122,6 +122,27 @@ export async function seed(ctx: HookContext) {
   await ctx.emitCheckpoint("script");
 }
 
+// --- once it's up ------------------------------------------------------------
+
+/**
+ * Waits out Nextcloud's first start, which installs its database and takes minutes, so what comes
+ * next in a run finds it ready. For a Nextcloud that predates its start-up folder, or lost its
+ * script, this also puts the script back.
+ */
+export async function configure(ctx: HookContext) {
+  await ctx.registerCheckpoints([{ id: "ready", message: "Waiting for Nextcloud to finish starting" }]);
+  const mount = startMount(ctx.mounts);
+  if (mount) writeStartScript(mount);
+  for (let attempt = 0; attempt < 170; attempt++) {
+    if (await nextcloudUp(ctx)) {
+      await ctx.emitCheckpoint("ready");
+      return;
+    }
+    await ctx.sleep(5_000);
+  }
+  ctx.fail("Nextcloud didn't finish starting. Try again once it's running.");
+}
+
 // --- links -------------------------------------------------------------------
 
 const readText = (path: string) => {
