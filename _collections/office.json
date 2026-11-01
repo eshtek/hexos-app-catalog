@@ -4,7 +4,6 @@
   "internal": true,
   "name": "Office suite",
   "description": "Files, documents and passwords in one place, on your own server.",
-  "image": "_collections/media-management.jpg",
   "groups": [
     {
       "id": "suite",
@@ -29,7 +28,12 @@
         {
           "app": "vaultwarden",
           "summary": "Passwords",
-          "default": true
+          "default": true,
+          "answers": {
+            "domain": "https://$SERVER_LAN_IP:$PORT(30032)",
+            "admin_token": "",
+            "SIGNUPS_ALLOWED": "True"
+          }
         },
         {
           "app": "bentopdf",
