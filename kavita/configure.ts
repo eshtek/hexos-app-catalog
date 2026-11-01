@@ -93,6 +93,8 @@ export async function configure(ctx: HookContext) {
       continue;
     }
     try {
+      // Kavita refuses a library with no metadata provider, and which it takes depends on the type
+      const providers = await kavita<number[]>(ctx, `/library/metadata-providers?libraryType=${library.type}`, { token });
       await kavita(ctx, "/Library/create", {
         token,
         body: {
@@ -102,9 +104,18 @@ export async function configure(ctx: HookContext) {
           folders: [library.folder],
           folderWatching: true,
           includeInDashboard: true,
+          includeInRecommended: true,
           includeInSearch: true,
-          manageCollections: true,
-          manageReadingLists: true,
+          manageCollections: false,
+          manageReadingLists: false,
+          allowScrobbling: false,
+          allowMetadataMatching: true,
+          collapseSeriesRelationships: false,
+          enableMetadata: true,
+          removePrefixForSortName: false,
+          inheritWebLinksFromFirstChapter: false,
+          defaultLanguage: "",
+          metadataProvider: providers[0] ?? 0,
           fileGroupTypes: [1, 2, 3, 4],
           excludePatterns: [],
         },

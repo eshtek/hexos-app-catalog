@@ -477,6 +477,16 @@ export const deluge = (ctx: HookContext) =>
       }
     }
 
+    // Deluge makes these at its first download, and until then a manager's health check says the
+    // completed folder is missing
+    const downloads = mounts.find((m) => m.containerPath === "/downloads/deluge");
+    if (downloads) {
+      for (const folder of ["incomplete", "complete"]) {
+        const local = `${downloads.localPath}/${folder}`;
+        if (mkdirSync(local, { recursive: true })) chownSync(local, APPS_UID, APPS_UID);
+      }
+    }
+
     const signIn = { password };
     return {
       name: "Deluge",

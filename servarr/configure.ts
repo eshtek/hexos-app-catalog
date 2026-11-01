@@ -23,13 +23,15 @@ interface Library {
   format?: "ebook" | "audiobook";
 }
 
-const APPS: Record<string, { name: string; api: string; libraries?: Library[] }> = {
+const APPS: Record<string, { name: string; api: string; libraries?: Library[]; noAllowedHosts?: boolean }> = {
   radarr: { name: "Radarr", api: "v3", libraries: [{ path: "/movies", name: "Movies" }] },
   sonarr: { name: "Sonarr", api: "v3", libraries: [{ path: "/shows", name: "Shows" }] },
   lidarr: { name: "Lidarr", api: "v1", libraries: [{ path: "/music", name: "Music" }] },
   chaptarr: {
     name: "Chaptarr",
     api: "v1",
+    // Chaptarr takes "Disabled for Local Addresses" without a list, and keeps none in its file
+    noAllowedHosts: true,
     libraries: [
       { path: "/books", name: "Books", format: "ebook" },
       { path: "/audiobooks", name: "Audiobooks", format: "audiobook" },
@@ -271,7 +273,7 @@ async function setSignIn(
   const required = kept && host.authenticationRequired ? host.authenticationRequired : "disabledForLocalAddresses";
   const allowedHosts = host.allowedHosts ?? "";
   const standIn =
-    required === "disabledForLocalAddresses" && allowedHosts.trim() === "" ? new URL(api.base).hostname : undefined;
+    !app.noAllowedHosts && required === "disabledForLocalAddresses" && allowedHosts.trim() === "" ? new URL(api.base).hostname : undefined;
   try {
     await call(api, "/config/host", {
       method: "PUT",
@@ -342,7 +344,13 @@ async function ensureSignIn(ctx: HookContext, app: (typeof APPS)[string], config
     }
     // The apps keep usernames in lower case
     const named = (host.authenticationMethod === "forms" || host.authenticationMethod === "basic") && host.username === wanted.username.toLowerCase();
-    if (named && (await signsIn(ctx.baseUrl, wanted))) {
+    // Just started, an app can turn down the sign-in it was seeded with for a moment
+    let takes = false;
+    for (let attempt = 0; named && attempt < 5 && !takes; attempt++) {
+      takes = await signsIn(ctx.baseUrl, wanted);
+      if (!takes && attempt < 4) await ctx.sleep(2_000);
+    }
+    if (named && takes) {
       forgetDefault(config);
       await signedInAtHome();
       await ctx.skipCheckpoint("signIn", `${app.name} already uses the sign-in you chose`);

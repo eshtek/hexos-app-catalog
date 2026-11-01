@@ -283,6 +283,12 @@ export interface HookContext {
    */
   skipCheckpoint(id: string, message?: string): Promise<void>;
 
+  /**
+   * Restart this app, and only this app, for a setting it reads at start. Resolves once the app has
+   * been stopped and started; the app may still be coming up. Missing on a box from before it.
+   */
+  restartApp?(): Promise<void>;
+
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
 

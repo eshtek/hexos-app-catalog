@@ -1,0 +1,62 @@
+{
+  "type": "collection",
+  "version": 1,
+  "internal": true,
+  "name": "Office suite",
+  "description": "Files, documents and passwords in one place, on your own server.",
+  "image": "_collections/media-management.jpg",
+  "groups": [
+    {
+      "id": "suite",
+      "type": "fixed",
+      "title": "Your office",
+      "description": "Your files, with documents you can edit together in the browser.",
+      "options": [
+        {
+          "app": "nextcloud"
+        },
+        {
+          "app": "collabora"
+        }
+      ]
+    },
+    {
+      "id": "essentials",
+      "type": "multiple",
+      "title": "Everyday tools",
+      "description": "Handy on their own, and ready beside your documents.",
+      "options": [
+        {
+          "app": "vaultwarden",
+          "summary": "Passwords",
+          "default": true
+        },
+        {
+          "app": "bentopdf",
+          "summary": "PDF tools",
+          "default": true
+        }
+      ]
+    },
+    {
+      "id": "extras",
+      "type": "multiple",
+      "title": "More for your documents",
+      "description": "Add any of these now, or later from Nextcloud's Connections tab.",
+      "options": [
+        {
+          "app": "paperless-ngx",
+          "summary": "Scanned documents"
+        },
+        {
+          "app": "languagetool",
+          "summary": "Spelling and grammar"
+        },
+        {
+          "app": "drawio",
+          "summary": "Diagrams"
+        }
+      ]
+    }
+  ]
+}
