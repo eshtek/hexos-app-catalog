@@ -4,16 +4,19 @@ import { readFileSync } from "node:fs";
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
 /**
- * Adds Radarr, Sonarr or Lidarr to Prowlarr as an application with full sync, so every indexer added
+ * Adds Radarr, Sonarr, Lidarr or Sportarr to Prowlarr as an application with full sync, so every indexer added
  * to Prowlarr reaches the manager without being set up twice. Each manager is one hook
- * (connect-radarr, connect-sonarr, connect-lidarr); the application is built from Prowlarr's own
+ * (connect-radarr, connect-sonarr, connect-lidarr, connect-sportarr); the application is built from Prowlarr's own
  * schema and saved with Prowlarr's connection test.
  */
 
-const MANAGERS: Record<string, { name: string; implementation: string }> = {
+const MANAGERS: Record<string, { name: string; implementation: string; syncCategories?: number[] }> = {
   radarr: { name: "Radarr", implementation: "Radarr" },
   sonarr: { name: "Sonarr", implementation: "Sonarr" },
   lidarr: { name: "Lidarr", implementation: "Lidarr" },
+  // Sportarr answers Prowlarr's Sonarr application API, so Prowlarr sees it as a Sonarr. Sports are
+  // category 5060 (TV/Sport), which Prowlarr's Sonarr default leaves out (SonarrSettings.cs).
+  sportarr: { name: "Sportarr", implementation: "Sonarr", syncCategories: [5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5090] },
 };
 
 interface Field {
@@ -88,6 +91,8 @@ async function connect(ctx: HookContext, managerId: string) {
       (application) => application.implementation === manager.implementation,
     );
   if (!template) ctx.fail(`Prowlarr doesn't offer ${manager.name} as an application`);
+  // Only a new application gets HexOS's categories. A run again keeps the ones the owner chose.
+  if (manager.syncCategories && !existing) values.syncCategories = manager.syncCategories;
 
   const application: Application = {
     ...template,
@@ -112,3 +117,4 @@ async function connect(ctx: HookContext, managerId: string) {
 export const radarr = (ctx: HookContext) => connect(ctx, "radarr");
 export const sonarr = (ctx: HookContext) => connect(ctx, "sonarr");
 export const lidarr = (ctx: HookContext) => connect(ctx, "lidarr");
+export const sportarr = (ctx: HookContext) => connect(ctx, "sportarr");
