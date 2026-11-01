@@ -74,7 +74,7 @@ interface ActionResult {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function readText(path: string): string | undefined {
@@ -511,7 +511,7 @@ async function arrCall<T>(url: string, apiKey: string, path: string, init: Reque
 }
 
 async function connect(ctx: HookContext, managerId: ManagerId) {
-  const manager = MANAGERS[managerId];
+  const manager = { ...MANAGERS[managerId], name: ctx.linkedApp?.(managerId)?.displayName ?? MANAGERS[managerId].name };
   await ctx.registerCheckpoints([
     { id: "locate", message: `Finding ${manager.name}` },
     { id: "signin", message: "Signing in to Profilarr" },

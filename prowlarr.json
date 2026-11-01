@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.3.0",
-    "changeLog": "Uses the sign-in you choose, still opening without it on your home network. A Prowlarr you already have gets that sign-in too when you add it to a collection"
+    "version": "1.4.0",
+    "changeLog": "Prowlarr links to each copy of Radarr, Sonarr and Lidarr, by the name you gave it"
   },
   "sign_in": {
     "username": true
@@ -104,6 +104,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "prowlarr/connect_arr.ts",
       "entrypoint": "radarr",
       "timeout": 120,
@@ -132,6 +133,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "prowlarr/connect_arr.ts",
       "entrypoint": "sonarr",
       "timeout": 120,
@@ -160,6 +162,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "prowlarr/connect_arr.ts",
       "entrypoint": "lidarr",
       "timeout": 120,

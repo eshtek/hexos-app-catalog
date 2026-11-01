@@ -1,13 +1,20 @@
 {
   "version": 6,
   "script": {
-    "version": "1.3.0",
-    "changeLog": "Uses the sign-in you choose, still opening without it on your home network. A Sonarr you already have gets that sign-in too when you add it to a collection"
+    "version": "1.4.0",
+    "changeLog": "A server can run several copies of Sonarr, each with its own settings, library folder and download category"
   },
   "sign_in": {
     "username": true
   },
   "requirements": {
+    "instances": "many",
+    "shared_folders": [
+      "$LOCATION(Downloads)/qbittorrent"
+    ],
+    "copy_libraries": [
+      "Shows"
+    ],
     "locations": [
       "ApplicationsPerformance",
       "ApplicationsCapacity",
@@ -44,7 +51,7 @@
       "path": "$LOCATION(Downloads)/qbittorrent"
     },
     {
-      "path": "$LOCATION(ApplicationsPerformance)/sonarr/config",
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(sonarr)/config",
       "snapshot": {
         "id": "config"
       }
@@ -58,7 +65,7 @@
       }
     },
     "storage": {
-      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sonarr/config)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(sonarr)/config)",
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
         "$MOUNTED_HOST_PATH($LOCATION(Shows), /shows)",

@@ -45,6 +45,8 @@ export interface HookContext {
   readonly resourceType: string;
   /** The app/vm ID this hook is running for (e.g., "plex", "nextcloud") */
   readonly resourceId: string;
+  /** The catalog app this is. `resourceId` is `sonarr-2` on a later copy. Absent on older boxes. */
+  readonly catalogAppId?: string;
   /** The lifecycle event that triggered this hook */
   readonly event: "onBeforeInstall" | "onAfterInstall" | "onBeforeUpgrade" | "onAfterUpgrade" | string;
   /** Previous version (upgrade hooks only) */
@@ -159,6 +161,12 @@ export interface HookContext {
    * Empty when the app isn't installed or its mounts can't be read.
    */
   getInstalledAppMounts(appId: string): Promise<ContextMount[]>;
+  /**
+   * The copy of `appId` this link run works with, on a hook that says `copies`. Null on a run that
+   * names none, which works with the app's first copy. `getInstalledAppUrl` and
+   * `getInstalledAppMounts` already answer for this copy. Absent on older boxes.
+   */
+  linkedApp?(appId: string): { name: string; displayName: string } | null;
 
   /**
    * A request to a partner app's API, authenticated with the credential HexOS

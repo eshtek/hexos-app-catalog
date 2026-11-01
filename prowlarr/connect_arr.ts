@@ -36,7 +36,7 @@ interface Application {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function apiKeyIn(mounts: ContextMount[], appId: string): string | undefined {
@@ -67,7 +67,8 @@ async function prowlarrApi<T>(ctx: HookContext, apiKey: string, path: string, in
 }
 
 async function connect(ctx: HookContext, managerId: string) {
-  const manager = MANAGERS[managerId];
+  // A copy goes by the name its owner gave it, which also keeps two in Prowlarr apart
+  const manager = { ...MANAGERS[managerId], name: ctx.linkedApp?.(managerId)?.displayName ?? MANAGERS[managerId].name };
   await ctx.registerCheckpoints([
     { id: "locate", message: `Finding ${manager.name}` },
     { id: "configure", message: `Adding ${manager.name} to Prowlarr` },

@@ -92,7 +92,7 @@ interface Client {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function readText(path: string): string | undefined {
@@ -122,7 +122,7 @@ async function until(ctx: HookContext, check: () => Promise<boolean>, attempts: 
 }
 
 async function managerApi<T>(ctx: HookContext, apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
-  const manager = MANAGERS[ctx.resourceId as ManagerId];
+  const manager = MANAGERS[(ctx.catalogAppId ?? ctx.resourceId) as ManagerId];
   const response = await fetch(`${ctx.baseUrl}/api/${manager.api}${path}`, {
     ...init,
     headers: { "X-Api-Key": apiKey, "Content-Type": "application/json" },
@@ -156,7 +156,7 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
     { id: "configure", message: `Adding ${name} as a download client` },
   ]);
 
-  const managerId = ctx.resourceId as ManagerId;
+  const managerId = (ctx.catalogAppId ?? ctx.resourceId) as ManagerId;
   const manager = MANAGERS[managerId];
   if (!manager) ctx.fail(`HexOS can't add a download client to ${ctx.resourceId}`);
   const apiKey = readText(`${configMount(ctx.mounts, managerId)?.localPath}/config.xml`)?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
@@ -169,7 +169,8 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
     host: parsed.hostname,
     port: Number(parsed.port),
     managerName: manager.name,
-    category: CATEGORIES[appId][managerId],
+    // A later copy has a category of its own: a manager imports whatever lands in its category
+    category: `${CATEGORIES[appId][managerId]}${ctx.resourceId.slice(managerId.length)}`,
     mounts: await ctx.getInstalledAppMounts(appId),
   };
   await ctx.emitCheckpoint("locate");

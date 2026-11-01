@@ -4,6 +4,7 @@
   "internal": true,
   "name": "Local AI",
   "description": "Run AI models on your own graphics card, with chat and assistants that stay on your server.",
+  "image": "_collections/local-ai.jpg",
   "requirements": {
     "specifications": [
       "4GBVRAM"
@@ -182,12 +183,12 @@
       "options": [
         {
           "app": "open-webui",
-          "summary": "Chat, in your browser",
+          "summary": "A familiar chat app for everyone at home",
           "default": true
         },
         {
           "app": "anything-llm",
-          "summary": "Chat with your documents"
+          "summary": "Separate workspaces for each project and its files"
         }
       ]
     },
@@ -205,7 +206,7 @@
         },
         {
           "app": "openclaw",
-          "summary": "Connects to your chat apps",
+          "summary": "Takes real actions for you from your chat apps",
           "needsModel": "agent-ready"
         }
       ]
@@ -214,7 +215,7 @@
       "id": "coding",
       "type": "multiple",
       "title": "Coding",
-      "description": "A coding agent in your terminal or browser.",
+      "description": "Allows you to run a coding agent through a terminal or in a browser.",
       "options": [
         {
           "app": "opencode",
@@ -228,7 +229,7 @@
       "id": "extras",
       "type": "multiple",
       "title": "Extras",
-      "description": "Add any of these now, or later from their Connections tab.",
+      "description": "Add-ons that extend the capabilities of your AI agents.",
       "options": [
         {
           "app": "searxng",

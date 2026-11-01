@@ -24,9 +24,10 @@ const PROVIDERS = ["embeddedsubtitles", "gestdown", "yifysubtitles", "subtitleca
 
 const ENGLISH = "en";
 
-const MANAGERS: Record<"radarr" | "sonarr", { name: string; mappingSetting: string; mappings: Array<[string, string]> }> = {
-  radarr: { name: "Radarr", mappingSetting: "path_mappings_movie", mappings: [] },
-  sonarr: { name: "Sonarr", mappingSetting: "path_mappings", mappings: [["/shows", "/tv"]] },
+// `library` is where the manager keeps its library, and where Bazarr finds it
+const MANAGERS: Record<"radarr" | "sonarr", { name: string; mappingSetting: string; library: [string, string] }> = {
+  radarr: { name: "Radarr", mappingSetting: "path_mappings_movie", library: ["/movies", "/movies"] },
+  sonarr: { name: "Sonarr", mappingSetting: "path_mappings", library: ["/shows", "/tv"] },
 };
 
 type ManagerId = keyof typeof MANAGERS;
@@ -59,7 +60,7 @@ interface Settings {
 type Outcome = "made" | "kept" | "before";
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function readText(path: string): string | undefined {
@@ -304,7 +305,8 @@ export async function configure(ctx: HookContext) {
 }
 
 async function connect(ctx: HookContext, managerId: ManagerId) {
-  const manager = MANAGERS[managerId];
+  const copy = ctx.linkedApp?.(managerId);
+  const manager = { ...MANAGERS[managerId], name: copy?.displayName ?? MANAGERS[managerId].name };
   await ctx.registerCheckpoints([
     { id: "locate", message: `Finding ${manager.name}` },
     { id: "subtitles", message: "Choosing English subtitles" },
@@ -342,21 +344,24 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
     [`settings-${managerId}-base_url`]: "",
     [`settings-${managerId}-ssl`]: "false",
   });
-  if (manager.mappings.length > 0) {
-    // Bazarr replaces the whole list with the one it is sent, an entry "from,to" per mapping, so the
-    // owner's own mappings go back with this one; one they set for the same folder is theirs to keep
-    const saved = (await request<Settings>(ctx, bazarr, "HexOS couldn't read Bazarr's settings", "/system/settings")).general[
-      manager.mappingSetting
-    ];
-    const mappings = (Array.isArray(saved) ? saved : []).filter(
+  // A later copy keeps its library in a folder of its own, inside the one Bazarr mounts
+  const [from, base] = manager.library;
+  const to = copy && copy.name !== managerId ? `${base}/${copy.name}` : base;
+  const ours = (target: string) => target === base || target.startsWith(`${base}/${managerId}-`);
+  // Bazarr replaces the whole list with the one it is sent, an entry "from,to" per mapping, so the
+  // owner's own mappings go back with this one; one they set for the same folder is theirs to keep,
+  // and only one HexOS made for another copy gives way
+  const saved = (await request<Settings>(ctx, bazarr, "HexOS couldn't read Bazarr's settings", "/system/settings")).general[
+    manager.mappingSetting
+  ];
+  const mappings = (Array.isArray(saved) ? saved : [])
+    .filter(
       (entry): entry is [string, string] =>
         Array.isArray(entry) && entry.length === 2 && entry.every((part) => typeof part === "string"),
-    );
-    for (const mapping of manager.mappings) {
-      if (!mappings.some(([from]) => from === mapping[0])) mappings.push(mapping);
-    }
-    for (const [from, to] of mappings) form.append(`settings-general-${manager.mappingSetting}`, `${from},${to}`);
-  }
+    )
+    .filter(([source, target]) => source !== from || !ours(target));
+  if (from !== to && !mappings.some(([source]) => source === from)) mappings.push([from, to]);
+  for (const [source, target] of mappings) form.append(`settings-general-${manager.mappingSetting}`, `${source},${target}`);
   await request(ctx, bazarr, `Bazarr didn't accept ${manager.name}`, "/system/settings", form);
 
   // Bazarr reads the manager's library as soon as it reaches it, so it has to reach it

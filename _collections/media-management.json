@@ -86,20 +86,21 @@
       "id": "player",
       "type": "single",
       "title": "Media server",
-      "description": "The app you watch your movies and shows in.",
+      "description": "Your media server allows you to stream your media library to your connected devices. Each app can connect via your web browser, or through client apps installed on your phone, desktop, or smart TV.",
       "options": [
         {
           "app": "jellyfin",
-          "summary": "Free and open source",
+          "recommended": true,
+          "summary": "Free, open source and fully featured",
           "default": true
         },
         {
           "app": "plex",
-          "summary": "Needs a free Plex account"
+          "summary": "Apps for almost every device"
         },
         {
           "app": "emby",
-          "summary": "Some features need Emby Premiere"
+          "summary": "Flexible user and parental controls"
         }
       ]
     },

@@ -11,7 +11,8 @@ import { publishedPorts } from "./ports";
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
-const LOCATION_PATH = /\$LOCATION\(([^)]+)\)\/((?:\$INSTANCE\([^)]+\)|[^"$)])+)/g;
+// A comma ends a path: `$MOUNTED_HOST_PATH($LOCATION(x)/y, /in-the-app)`
+const LOCATION_PATH = /\$LOCATION\(([^)]+)\)\/((?:\$INSTANCE\([^)]+\)|[^"$),])+)/g;
 const INSTANCE = /\$INSTANCE\(([^)]+)\)/g;
 
 /** A copy's TrueNAS name is the id, a hyphen and a number, and TrueNAS allows 40 characters. */

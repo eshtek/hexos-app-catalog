@@ -71,7 +71,7 @@ interface Api {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function readText(path: string): string | undefined {
@@ -108,9 +108,10 @@ function keepDefault(config: ContextMount): SignIn {
 const forgetDefault = (config: ContextMount) => rmSync(signInPath(config), { force: true });
 
 function appOf(ctx: HookContext) {
-  const app = APPS[ctx.resourceId];
+  const catalogId = ctx.catalogAppId ?? ctx.resourceId;
+  const app = APPS[catalogId];
   if (!app) ctx.fail(`HexOS can't set up ${ctx.resourceId} this way`);
-  const config = configMount(ctx.mounts, ctx.resourceId);
+  const config = configMount(ctx.mounts, catalogId);
   if (!config) ctx.fail(`HexOS couldn't find ${app.name}'s settings folder`);
   return { app, config };
 }
@@ -244,7 +245,7 @@ async function signsIn(base: string, signIn: SignIn): Promise<boolean> {
   const response = await fetch(`${base}/login?returnUrl=%2F`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ username: signIn.username, password: signIn.password, rememberMe: "on" }),
+    body: new URLSearchParams({ username: signIn.username, password: signIn.password }),
     redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   }).catch(() => undefined);
@@ -442,7 +443,7 @@ async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: 
 
   const folder: Record<string, unknown> = { path: library.path };
   if (library.format) Object.assign(folder, await chaptarrFolder(ctx, api, library, library.format));
-  if (ctx.resourceId === "lidarr") {
+  if ((ctx.catalogAppId ?? ctx.resourceId) === "lidarr") {
     // Lidarr's Standard profiles when it has them: its form starts on "Any", which takes any bitrate
     // and never upgrades it. Never the empty "None" metadata profile.
     const pick = (profiles: Array<{ id: number; name: string }>) =>
