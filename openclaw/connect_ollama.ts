@@ -18,6 +18,16 @@ interface Settings {
   [key: string]: unknown;
 }
 
+/** The model Ollama is set to, which may still be downloading, else the first it has. */
+async function ollamaModel(ctx: HookContext, url: string): Promise<string | undefined> {
+  const hardware = await ctx.readLocalAiHardware?.().catch(() => undefined);
+  if (hardware?.ollama?.wanted) return hardware.ollama.wanted;
+  const tags = (await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(15_000) }).then((response) => response.json())) as {
+    models?: Array<{ name: string }>;
+  };
+  return tags.models?.[0]?.name;
+}
+
 export async function run(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "locate", message: "Finding Ollama" },
@@ -25,11 +35,8 @@ export async function run(ctx: HookContext) {
   ]);
   const url = await ctx.getInstalledAppUrl("ollama");
   if (!url) ctx.fail("Ollama isn't installed, or HexOS can't find its port");
-  const tags = (await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(15_000) }).then((response) => response.json())) as {
-    models?: Array<{ name: string }>;
-  };
-  const model = tags.models?.[0]?.name;
-  if (!model) ctx.fail("Ollama has no model yet. Run this again once its download has finished.");
+  const model = await ollamaModel(ctx, url);
+  if (!model) ctx.fail("Ollama has no model yet. Choose one on its Connections tab, then run this again.");
   const home = ctx.mounts.find((mount) => mount.containerPath === "/home/node") ?? ctx.mounts.find((mount) => mount.hostPath.endsWith("/openclaw/config"));
   if (!home) ctx.fail("HexOS couldn't find OpenClaw's settings folder");
   await ctx.emitCheckpoint("locate");

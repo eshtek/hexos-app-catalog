@@ -7,6 +7,16 @@ import type { HookContext } from "../_lib/hook_context";
  * refuses this, and the owner sets Ollama in its settings. Read at AnythingLLM 1.19.
  */
 
+/** The model Ollama is set to, which may still be downloading, else the first it has. */
+async function ollamaModel(ctx: HookContext, url: string): Promise<string | undefined> {
+  const hardware = await ctx.readLocalAiHardware?.().catch(() => undefined);
+  if (hardware?.ollama?.wanted) return hardware.ollama.wanted;
+  const tags = (await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(15_000) }).then((response) => response.json())) as {
+    models?: Array<{ name: string }>;
+  };
+  return tags.models?.[0]?.name;
+}
+
 export async function run(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "locate", message: "Finding Ollama" },
@@ -15,9 +25,7 @@ export async function run(ctx: HookContext) {
   const url = await ctx.getInstalledAppUrl("ollama");
   if (!url) ctx.fail("Ollama isn't installed, or HexOS can't find its port");
   await ctx.waitForApp("/api/ping", { maxAttempts: 60 });
-  const tags = (await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(15_000) }).then((response) => response.json())) as {
-    models?: Array<{ name: string }>;
-  };
+  const model = await ollamaModel(ctx, url);
   await ctx.emitCheckpoint("locate");
 
   const response = await fetch(`${ctx.baseUrl}/api/system/update-env`, {
@@ -26,7 +34,7 @@ export async function run(ctx: HookContext) {
     body: JSON.stringify({
       LLMProvider: "ollama",
       OllamaLLMBasePath: url,
-      ...(tags.models?.[0] ? { OllamaLLMModelPref: tags.models[0].name } : {}),
+      ...(model ? { OllamaLLMModelPref: model } : {}),
     }),
     signal: AbortSignal.timeout(30_000),
   });

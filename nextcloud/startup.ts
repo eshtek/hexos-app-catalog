@@ -105,12 +105,9 @@ function own(path: string) {
 /**
  * Put the script in place: a new one under another name and renamed, so a start never reads half.
  * The image runs these scripts as www-data, and a folder it can't enter stops the container, so the
- * folder is opened first. TrueNAS makes a new dataset 770 and root's, and its owner may be set back
- * at each start, so its mode is what lets www-data in.
+ * script's `start_mount` has HexOS give the folder to www-data before Nextcloud starts on it.
  */
 export function writeStartScript(mount: ContextMount) {
-  own(mount.localPath);
-  chmodSync(mount.localPath, 0o755);
   const state = `${mount.localPath}/${STATE_DIR}`;
   if (!existsSync(state)) mkdirSync(state, { recursive: true, mode: 0o750 });
   own(state);
@@ -148,7 +145,12 @@ export async function seed(ctx: HookContext) {
 export async function configure(ctx: HookContext) {
   await ctx.registerCheckpoints([{ id: "ready", message: "Waiting for Nextcloud to finish starting" }]);
   const mount = startMount(ctx.mounts);
-  if (mount) writeStartScript(mount);
+  if (mount) {
+    // A box that can't reach this folder still waits for Nextcloud, and a link says what's missing
+    try {
+      writeStartScript(mount);
+    } catch {}
+  }
   for (let attempt = 0; attempt < 170; attempt++) {
     if (await nextcloudUp(ctx)) {
       await ctx.emitCheckpoint("ready");

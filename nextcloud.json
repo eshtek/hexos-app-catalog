@@ -84,7 +84,8 @@
       },
       "snapshot": {
         "id": "startup"
-      }
+      },
+      "start_mount": "/docker-entrypoint-hooks.d/before-starting"
     }
   ],
   "app_values": {
@@ -136,10 +137,7 @@
     "storage": {
       "html": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nextcloud/html)",
       "data": "$HOST_PATH($LOCATION(ApplicationsCapacity)/nextcloud/data)",
-      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nextcloud/postgres_data)",
-      "additional_storage": [
-        "$MOUNTED_HOST_PATH($LOCATION(ApplicationsPerformance)/nextcloud/startup, /docker-entrypoint-hooks.d/before-starting)"
-      ]
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nextcloud/postgres_data)"
     },
     "network": {
       "web_port": {

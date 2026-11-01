@@ -122,6 +122,11 @@ export async function choose(ctx: HookContext) {
   );
   const picked = fits.find((choice) => choice.model === answers.model);
   if (!picked) ctx.fail("That model isn't one this card can run.");
+  const current = (await ctx.getAppValues?.()) as unknown as Values | undefined;
+  if (current?.ollama.additional_envs?.some((env) => env.name === WANTED && env.value === picked.model)) {
+    await ctx.skipCheckpoint("choose", `${picked.model} is already this Ollama's model. Download your model fetches it if it's missing.`);
+    return;
+  }
 
   await ctx.updateAppValues((raw) => {
     const values = raw as unknown as Values;

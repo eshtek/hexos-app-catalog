@@ -406,6 +406,12 @@ function validate(file: string, script: Record<string, unknown>) {
     if (entry.network_share !== undefined && typeof entry.network_share !== "boolean") {
       err(file, `${where}.network_share must be a boolean`);
     }
+    if (entry.start_mount !== undefined) {
+      if (typeof entry.start_mount !== "string" || !entry.start_mount.startsWith("/")) {
+        err(file, `${where}.start_mount must be an absolute path inside the app`);
+      }
+      if (entry.owner === undefined) err(file, `${where}.start_mount needs an owner to give the folder to`);
+    }
   }
 
   // --- app_values ---
