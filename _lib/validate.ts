@@ -40,7 +40,7 @@ import {
   preferredPort,
   type Finding,
 } from "./ports";
-import { instanceRules } from "./instances";
+import { instanceRules, linkCopyRules } from "./instances";
 
 type Problem = { file: string; message: string };
 
@@ -999,6 +999,9 @@ for (const appId of [...linkedApps].sort()) {
 for (const [appId, script] of parsedScripts) {
   report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script), ...instanceRules(appId, script)]);
 }
+const runsInCopies = (appId: string) =>
+  (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
+for (const [appId, script] of parsedScripts) report(`${appId}.json`, linkCopyRules(appId, script, runsInCopies));
 report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 
 const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));

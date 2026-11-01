@@ -94,3 +94,25 @@ export function instanceChangeProblems(base: Script, head: Script): string[] {
   }
   return problems;
 }
+
+/**
+ * A hook naming an app that runs in copies has to say how it treats them: left out, it only ever
+ * reaches the first copy, and a collection drops it for a later one.
+ */
+export function linkCopyRules(id: string, script: Script, allowsCopies: (appId: string) => boolean): Finding[] {
+  const hooks = Array.isArray(script.hooks) ? script.hooks.filter(isObject) : [];
+  return hooks.flatMap((hook) => {
+    const conditions = Array.isArray(hook.conditions) ? hook.conditions.filter(isObject) : [];
+    const named = [...new Set(conditions.map((condition) => condition.app))].filter(
+      (app): app is string => typeof app === "string" && app !== id,
+    );
+    const copied = named.filter(allowsCopies);
+    if (copied.length === 0 || hook.copies === "each" || hook.copies === "one") return [];
+    return [
+      {
+        level: "error" as const,
+        message: `hook "${String(hook.id)}" names ${copied.join(", ")}, which runs in copies: say how it treats them with "copies"`,
+      },
+    ];
+  });
+}
