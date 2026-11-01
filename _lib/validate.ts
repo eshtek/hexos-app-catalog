@@ -852,7 +852,8 @@ function validateCollection(file: string, collection: Record<string, unknown>, c
   const id = file.slice(COLLECTIONS_DIR.length + 1).replace(/\.json$/, "");
   if (!COLLECTION_ID.test(id)) err(file, "the file name must be the collection id: lowercase words joined by hyphens");
   if (collection.type !== "collection") err(file, 'type must be "collection"');
-  if (collection.version !== 1) err(file, "version must be 1");
+  if (collection.version !== 1 && collection.version !== 2) err(file, "version must be 1 or 2");
+  if (collection.version === 1 && collection.localAi !== undefined) err(file, "localAi needs a file of version 2");
   for (const field of ["name", "description"]) {
     if (typeof collection[field] !== "string" || !(collection[field] as string).trim()) err(file, `${field} is required`);
   }

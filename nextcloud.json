@@ -269,6 +269,34 @@
       "entrypoint": "paperless",
       "timeout": 600,
       "retries": 0
+    },
+    {
+      "id": "connect-ollama",
+      "title": "Connect to Ollama",
+      "description": "Lets Nextcloud's Assistant use the models on your graphics card.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "ollama",
+      "timeout": 600,
+      "retries": 0
     }
   ]
 }

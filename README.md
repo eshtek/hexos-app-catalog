@@ -85,9 +85,10 @@ For schema documentation, macros reference, and contribution guidelines, see [do
 | `{n}CORE` | Minimum CPU cores | `2CORE`, `4CORE`, `6CORE` |
 | `{n}MB` / `{n}GB` | Approximate storage needed for installation | `256MB`, `1GB`, `30GB` |
 | `{n}MBRAM` / `{n}GBRAM` | Minimum memory | `512MBRAM`, `8GBRAM` |
+| `{n}GBVRAM` | Minimum dedicated graphics memory | `4GBVRAM` |
 | `GPU` | GPU recommended | `GPU` |
 
-Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU` — anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
+Every value must match `^(\d+)(MBRAM|GBRAM|GBVRAM|MB|GB|CORE)$` or be the literal `GPU` — anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
 
 ```json
 "requirements": {

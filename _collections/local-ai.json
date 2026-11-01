@@ -165,7 +165,12 @@
       "description": "Runs your model on your graphics card.",
       "options": [
         {
-          "app": "ollama"
+          "app": "ollama",
+          "answers": {
+            "image": "image",
+            "context_length": "8192",
+            "model": ""
+          }
         }
       ]
     },

@@ -298,6 +298,15 @@ export interface HookContext {
    */
   updateAppValues?(change: (values: Record<string, unknown>) => void): Promise<boolean>;
 
+  /** This app's current TrueNAS values, to read a setting from. Missing on a box from before it. */
+  getAppValues?(): Promise<Record<string, unknown>>;
+
+  /** What this server's graphics cards can run, for a hook that offers models. Missing on a box from before it. */
+  readLocalAiHardware?(): Promise<{
+    cards: Array<{ pciSlot: string; name: string; memoryGB: number | null }>;
+    ollama?: { pciSlot?: string; models: string[] };
+  }>;
+
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
 
@@ -341,6 +350,8 @@ export type HookInputDeclaration =
         description?: string;
         placeholder?: string;
         default?: string | number | boolean;
+        /** A select question's choices. */
+        options?: Array<{ text: string; value: string }>;
       };
     }
   | {
