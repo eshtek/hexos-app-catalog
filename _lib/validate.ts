@@ -442,6 +442,29 @@ function validate(file: string, script: Record<string, unknown>) {
     }
   }
 
+  // --- generated_sign_in: a sign-in the app writes to one of its own folders ---
+  const generatedSignIn = script.generated_sign_in;
+  if (generatedSignIn !== undefined) {
+    if (!isObject(generatedSignIn)) {
+      err(file, "generated_sign_in must be an object");
+    } else {
+      for (const key of ["file", "username", "password"]) {
+        if (typeof generatedSignIn[key] !== "string") err(file, `generated_sign_in.${key} must be a string`);
+      }
+      const path = generatedSignIn.file;
+      if (typeof path === "string" && (path.split("/").length < 2 || path.split("/").some((part) => [".", "..", ""].includes(part)))) {
+        err(file, "generated_sign_in.file must start at one of the app's folders, with no . or .. in it");
+      }
+      const changeHook = generatedSignIn.change_hook;
+      const hook = ((script.hooks as unknown[]) ?? []).find((each) => isObject(each) && each.id === changeHook);
+      if (changeHook !== undefined && !isObject(hook)) {
+        err(file, `generated_sign_in.change_hook names no hook: ${String(changeHook)}`);
+      } else if (isObject(hook) && !(Array.isArray(hook.surfaces) && hook.surfaces.includes("settings"))) {
+        err(file, `generated_sign_in.change_hook "${String(changeHook)}" must have the settings surface`);
+      }
+    }
+  }
+
   // --- hooks (v5 and v6) ---
   const hookIds = new Set<string>();
   for (const [i, hook] of ((script.hooks as unknown[]) ?? []).entries()) {

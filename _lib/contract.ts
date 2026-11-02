@@ -96,7 +96,7 @@ export const HOOK_EVENT_SPECS = [
 export const HOOK_RERUNS = ["idempotent", "converge", "refuse"] as const;
 
 /** HookSurface — where a hook can appear. */
-export const HOOK_SURFACES = ["installPicker", "card", "fileBrowser", "widget"] as const;
+export const HOOK_SURFACES = ["installPicker", "card", "fileBrowser", "widget", "settings"] as const;
 
 /** Known hook condition types. Unknown types are accepted (fail closed at runtime). */
 export const HOOK_CONDITION_TYPES = [
