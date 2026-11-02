@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial curation, from catalog pull request 103 by Sportarr: every world gets its own folder and port"
@@ -73,5 +73,38 @@
         "memory": "$MEMORY(25%, 4096)"
       }
     }
-  }
+  },
+  "widgets": [
+    {
+      "id": "server",
+      "title": "Online now",
+      "description": "Who's playing on this server, how many ticks a second it runs, and its game mode.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "minecraft"
+        }
+      ],
+      "background": { "field": "online" },
+      "slots": [
+        { "type": "stat", "field": "count" },
+        { "type": "list", "field": "online", "rows": 1 }
+      ],
+      "slides": [
+        {
+          "title": "Server",
+          "slots": [
+            { "type": "stat", "field": "tps" },
+            { "type": "stat", "field": "mode" }
+          ]
+        }
+      ],
+      "script": "minecraft/widget_server.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
 }
