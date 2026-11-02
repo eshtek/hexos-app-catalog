@@ -135,6 +135,25 @@
       }
     },
     {
+      "id": "hardware-transcoding",
+      "title": "Set up transcoding and remote streaming",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "optional": true,
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "script": "jellyfin/hardware_transcoding.ts",
+      "entrypoint": "run",
+      "timeout": 300
+    },
+    {
       "id": "connect-seerr",
       "title": "Connect to Seerr",
       "description": "Sets Seerr up with this Jellyfin server, so you sign in to Seerr with your Jellyfin account.",
