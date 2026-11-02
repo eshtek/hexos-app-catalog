@@ -240,8 +240,8 @@ function artworkPath(item: JellyfinItem): string | undefined {
   return undefined;
 }
 
-/** The platform's limit on a widget's data URI. */
-const IMAGE_LIMIT = 60_000;
+/** The limit on a widget's data URI on a box too old to send its own. One over it fails the whole result. */
+const OLD_IMAGE_LIMIT = 60_000;
 
 /**
  * The crops to try in turn until one fits: near twice the card's size for a sharp picture, then
@@ -289,6 +289,7 @@ export async function fetchArtwork(
   base: string,
   headers: Record<string, string>,
   item: JellyfinItem,
+  limit = OLD_IMAGE_LIMIT,
 ): Promise<string | undefined> {
   const path = artworkPath(item);
   if (!path) return undefined;
@@ -299,7 +300,7 @@ export async function fetchArtwork(
     for (const crop of ARTWORK_CROPS) {
       const image = await fetchImage(base, headers, path, crop);
       if (!image) return undefined;
-      if (image.length > IMAGE_LIMIT) continue;
+      if (image.length > limit) continue;
       rememberArtwork(key, image);
       return image;
     }
@@ -330,7 +331,7 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   // The count reflects every active stream; the card steps through the first few, one dot each.
   const total = sessions.length;
   const shown = sessions.slice(0, 5);
-  const artwork = await Promise.all(shown.map((session) => fetchArtwork(base, headers, session.NowPlayingItem)));
+  const artwork = await Promise.all(shown.map((session) => fetchArtwork(base, headers, session.NowPlayingItem, ctx.imageLimit)));
 
   const entries: WidgetListEntry[] = shown.map((session, i) => {
     const item = session.NowPlayingItem;
