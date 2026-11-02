@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import type { WidgetContext } from "./widget_context";
-import { gameMode, online, playersLine, properties, rcon, run, ticksPerSecond } from "../minecraft/widget_server";
+import { ARTWORK, gameMode, online, playersLine, properties, rcon, run, ticksPerSecond } from "../minecraft/widget_server";
 
 // What a vanilla 26.3 server installed by HexOS answered on demeter on 2026-11-02, one player on
 const LIST = "There are 1 of a max of 20 players online: AverageCakeSlice";
@@ -128,6 +128,11 @@ describe("the console", () => {
 });
 
 describe("the card", () => {
+  test("its artwork is a WebP within the platform's cap on an image field", () => {
+    expect(ARTWORK.startsWith("data:image/webp;base64,")).toBe(true);
+    expect(ARTWORK.length).toBeLessThanOrEqual(60_000);
+  });
+
   const context = (dataDir: string): WidgetContext => ({
     appId: "minecraft-hexos-test-no-such-app",
     host: "10.0.0.49",
