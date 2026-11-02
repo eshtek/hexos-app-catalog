@@ -62,6 +62,9 @@ function apis(options: Options = {}) {
     if (url.hostname === "jf.test") {
       if (url.pathname === "/Users/AuthenticateByName")
         return json({ AccessToken: "jf-session", User: { Policy: { IsAdministrator: options.admin ?? true } } });
+      // As Jellyfin 12 does with EnableLegacyAuthorization off: a token counts only in Authorization
+      if (url.pathname === "/Auth/Keys" && call.headers.get("Authorization") !== 'MediaBrowser Token="jf-session"')
+        return json({}, 401);
       if (url.pathname === "/Auth/Keys" && call.method === "GET")
         return json({ Items: keyExists ? [{ AppName: "Jellystat", AccessToken: "jf-api-key" }] : [] });
       if (url.pathname === "/Auth/Keys" && call.method === "POST") {

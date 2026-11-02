@@ -131,7 +131,8 @@ async function jellyfinSignIn(baseUrl: string, username: string, password: strin
 }
 
 async function ensureApiKey(baseUrl: string, accessToken: string): Promise<string> {
-  const headers = { "X-Emby-Token": accessToken };
+  // Jellyfin 12 has EnableLegacyAuthorization off, which turns away a token in X-Emby-Token (401)
+  const headers = { Authorization: `MediaBrowser Token="${accessToken}"` };
   const findKey = async (): Promise<string | undefined> => {
     const response = await fetch(`${baseUrl}/Auth/Keys`, { headers });
     if (!response.ok) throw new Error(`Could not list Jellyfin API keys (${response.status})`);
