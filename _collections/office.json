@@ -13,10 +13,12 @@
       "description": "Your files, with documents you can edit together in the browser.",
       "options": [
         {
-          "app": "nextcloud"
+          "app": "nextcloud",
+          "core": true
         },
         {
-          "app": "collabora"
+          "app": "collabora",
+          "core": true
         }
       ]
     },

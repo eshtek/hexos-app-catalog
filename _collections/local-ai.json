@@ -167,6 +167,7 @@
       "options": [
         {
           "app": "ollama",
+          "core": true,
           "answers": {
             "image": "image",
             "context_length": "8192",
@@ -183,11 +184,13 @@
       "options": [
         {
           "app": "open-webui",
+          "core": true,
           "summary": "A familiar chat app for everyone at home",
           "default": true
         },
         {
           "app": "anything-llm",
+          "core": true,
           "summary": "Separate workspaces for each project and its files"
         }
       ]
