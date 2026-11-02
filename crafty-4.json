@@ -23,11 +23,11 @@
     {
       "path": "$LOCATION(ApplicationsCapacity)"
     },
-    { "path": "$LOCATION(ApplicationsCapacity)/crafty-4/backups", "owner": { "user": "apps" }, "snapshot": { "id": "backups" } },
-    { "path": "$LOCATION(ApplicationsPerformance)/crafty-4/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
-    { "path": "$LOCATION(ApplicationsPerformance)/crafty-4/import", "owner": { "user": "apps" }, "snapshot": { "id": "import" } },
-    { "path": "$LOCATION(ApplicationsPerformance)/crafty-4/logs", "owner": { "user": "apps" }, "snapshot": { "id": "logs" } },
-    { "path": "$LOCATION(ApplicationsCapacity)/crafty-4/servers", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
+    { "path": "$LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/backups", "owner": { "user": "apps" }, "snapshot": { "id": "backups" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/import", "owner": { "user": "apps" }, "snapshot": { "id": "import" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/logs", "owner": { "user": "apps" }, "snapshot": { "id": "logs" } },
+    { "path": "$LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/servers", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
   ],
   "app_values": {
     "crafty": {
@@ -61,11 +61,11 @@
       ]
     },
     "storage": {
-      "backups": "$HOST_PATH($LOCATION(ApplicationsCapacity)/crafty-4/backups)",
-      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/crafty-4/config)",
-      "import": "$HOST_PATH($LOCATION(ApplicationsPerformance)/crafty-4/import)",
-      "logs": "$HOST_PATH($LOCATION(ApplicationsPerformance)/crafty-4/logs)",
-      "servers": "$HOST_PATH($LOCATION(ApplicationsCapacity)/crafty-4/servers)"
+      "backups": "$HOST_PATH($LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/backups)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/config)",
+      "import": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/import)",
+      "logs": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/logs)",
+      "servers": "$HOST_PATH($LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/servers)"
     },
     "resources": {
       "limits": {
