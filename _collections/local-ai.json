@@ -122,6 +122,15 @@
         ]
       },
       "agents": {
+        "good": [
+          {
+            "model": "gemma4:12b-it-qat",
+            "sizeGB": 7.2,
+            "minVramGB": 10,
+            "contextK": 64,
+            "tools": true
+          }
+        ],
         "better": [
           {
             "model": "gemma4:26b-a4b-it-qat",
@@ -129,13 +138,6 @@
             "minVramGB": 16,
             "contextK": 64,
             "minRamGB": 32,
-            "tools": true
-          },
-          {
-            "model": "gemma4:12b-it-qat",
-            "sizeGB": 7.2,
-            "minVramGB": 10,
-            "contextK": 64,
             "tools": true
           }
         ],
@@ -180,7 +182,7 @@
       "id": "chat",
       "type": "single",
       "title": "Chat",
-      "description": "Where you talk to your model.",
+      "description": "A web interface that you can use to interact with your model.",
       "options": [
         {
           "app": "open-webui",
