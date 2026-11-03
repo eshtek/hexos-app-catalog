@@ -1,8 +1,8 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "2.0.0",
+    "changeLog": "Nextcloud can connect to Collabora, Draw.io, Paperless and Ollama from its Connections tab. Nothing changes until you connect one."
   },
   "requirements": {
     "locations": [
@@ -16,7 +16,9 @@
     "permissions": [
       "READ_WRITE_LOCATIONS"
     ],
-    "ports": [30027]
+    "ports": [
+      30027
+    ]
   },
   "installation_questions": [
     {
@@ -47,12 +49,44 @@
     {
       "path": "$LOCATION(ApplicationsPerformance)"
     },
-    { "path": "$LOCATION(ApplicationsPerformance)/nextcloud/html", "owner": { "user": "www-data" }, "snapshot": { "id": "html" } },
-    { "path": "$LOCATION(ApplicationsPerformance)/nextcloud/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/nextcloud/html",
+      "owner": {
+        "user": "www-data"
+      },
+      "snapshot": {
+        "id": "html"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/nextcloud/postgres_data",
+      "owner": {
+        "user": "netdata",
+        "group": "docker"
+      },
+      "snapshot": {
+        "id": "db"
+      }
+    },
     {
       "path": "$LOCATION(ApplicationsCapacity)"
     },
-    { "path": "$LOCATION(ApplicationsCapacity)/nextcloud/data", "snapshot": { "id": "data" } }
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/nextcloud/data",
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/nextcloud/startup",
+      "owner": {
+        "user": "www-data"
+      },
+      "snapshot": {
+        "id": "startup"
+      },
+      "start_mount": "/docker-entrypoint-hooks.d/before-starting"
+    }
   ],
   "app_values": {
     "nextcloud": {
@@ -108,7 +142,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30027
+        "port_number": "$PORT(30027)"
       }
     },
     "resources": {
@@ -117,5 +151,150 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "seed-startup",
+      "title": "Prepare Nextcloud's start-up folder",
+      "description": "Lets HexOS connect Nextcloud to your other apps.",
+      "events": [
+        "onBeforeInstall"
+      ],
+      "optional": true,
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "seed",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "configure-nextcloud",
+      "title": "Finish setting up Nextcloud",
+      "description": "Waits for Nextcloud to finish its first start, which takes a few minutes.",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-collabora",
+      "title": "Connect to Collabora",
+      "description": "Opens and edits documents in Nextcloud with Collabora.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "collabora"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "collabora"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "collabora",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-drawio",
+      "title": "Connect to Draw.io",
+      "description": "Opens and edits diagrams in Nextcloud with Draw.io.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "drawio"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "drawio"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "drawio",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-paperless-ngx",
+      "title": "Connect to Paperless",
+      "description": "Sends documents from Nextcloud to Paperless.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "paperless-ngx"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "paperless-ngx"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "paperless",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-ollama",
+      "title": "Connect to Ollama",
+      "description": "Lets Nextcloud's Assistant use the models on your graphics card.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "ollama",
+      "timeout": 600,
+      "retries": 0
+    }
+  ]
 }

@@ -25,7 +25,7 @@ type ManagerId = keyof typeof MANAGERS;
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
   return (
     mounts.find((m) => m.containerPath === "/config" || m.containerPath === "/app/config") ??
-    mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`))
+    mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath))
   );
 }
 
@@ -49,7 +49,7 @@ async function call<T>(url: string, apiKey: string, init: RequestInit = {}): Pro
 }
 
 async function connect(ctx: HookContext, managerId: ManagerId) {
-  const manager = MANAGERS[managerId];
+  const manager = { ...MANAGERS[managerId], name: ctx.linkedApp?.(managerId)?.displayName ?? MANAGERS[managerId].name };
   await ctx.registerCheckpoints([
     { id: "locate", message: `Finding ${manager.name}` },
     { id: "library", message: `Reading ${manager.name}'s profile and library` },
@@ -121,9 +121,8 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
 
   const seerrApi = `${ctx.baseUrl}/api/v1/settings/${manager.path}`;
   try {
-    const existing = (await call<Array<Record<string, unknown> & { id: number; hostname: string; port: number }>>(seerrApi, seerrKey)).find(
-      (entry) => entry.hostname === hostname && entry.port === Number(port),
-    );
+    const servers = await call<Array<Record<string, unknown> & { id: number; hostname: string; port: number }>>(seerrApi, seerrKey);
+    const existing = servers.find((entry) => entry.hostname === hostname && entry.port === Number(port));
     if (existing) {
       // What the owner chose in Seerr stays while the manager still has it
       const kept: Record<string, unknown> = { ...existing };
@@ -139,7 +138,8 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
       const connection = { hostname, port: Number(port), apiKey: managerKey, useSsl: false, baseUrl: "" };
       await call(`${seerrApi}/${existing.id}`, seerrKey, { method: "PUT", body: JSON.stringify({ ...kept, ...connection }) });
     } else {
-      await call(seerrApi, seerrKey, { method: "POST", body: JSON.stringify(service) });
+      // Saving a default takes it from the server that had it, so a second copy joins beside the first
+      await call(seerrApi, seerrKey, { method: "POST", body: JSON.stringify({ ...service, isDefault: servers.length === 0 }) });
     }
   } catch (error) {
     ctx.fail(`Seerr didn't accept ${manager.name}`, [

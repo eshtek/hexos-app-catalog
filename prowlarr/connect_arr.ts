@@ -4,16 +4,21 @@ import { readFileSync } from "node:fs";
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
 /**
- * Adds Radarr, Sonarr or Lidarr to Prowlarr as an application with full sync, so every indexer added
+ * Adds Radarr, Sonarr, Lidarr, Sportarr or Chaptarr to Prowlarr as an application with full sync, so every indexer added
  * to Prowlarr reaches the manager without being set up twice. Each manager is one hook
- * (connect-radarr, connect-sonarr, connect-lidarr); the application is built from Prowlarr's own
+ * (connect-radarr, connect-sonarr, connect-lidarr, connect-sportarr, connect-chaptarr); the application is built from Prowlarr's own
  * schema and saved with Prowlarr's connection test.
  */
 
-const MANAGERS: Record<string, { name: string; implementation: string }> = {
+const MANAGERS: Record<string, { name: string; implementation: string; syncCategories?: number[] }> = {
   radarr: { name: "Radarr", implementation: "Radarr" },
   sonarr: { name: "Sonarr", implementation: "Sonarr" },
   lidarr: { name: "Lidarr", implementation: "Lidarr" },
+  // Sportarr answers Prowlarr's Sonarr application API, so Prowlarr sees it as a Sonarr. Sports are
+  // category 5060 (TV/Sport), which Prowlarr's Sonarr default leaves out (SonarrSettings.cs).
+  sportarr: { name: "Sportarr", implementation: "Sonarr", syncCategories: [5000, 5010, 5020, 5030, 5040, 5045, 5050, 5060, 5090] },
+  // Chaptarr answers Prowlarr's Readarr application API, whose default categories cover books and audiobooks.
+  chaptarr: { name: "Chaptarr", implementation: "Readarr" },
 };
 
 interface Field {
@@ -31,7 +36,7 @@ interface Application {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function apiKeyIn(mounts: ContextMount[], appId: string): string | undefined {
@@ -62,7 +67,8 @@ async function prowlarrApi<T>(ctx: HookContext, apiKey: string, path: string, in
 }
 
 async function connect(ctx: HookContext, managerId: string) {
-  const manager = MANAGERS[managerId];
+  // A copy goes by the name its owner gave it, which also keeps two in Prowlarr apart
+  const manager = { ...MANAGERS[managerId], name: ctx.linkedApp?.(managerId)?.displayName ?? MANAGERS[managerId].name };
   await ctx.registerCheckpoints([
     { id: "locate", message: `Finding ${manager.name}` },
     { id: "configure", message: `Adding ${manager.name} to Prowlarr` },
@@ -88,6 +94,8 @@ async function connect(ctx: HookContext, managerId: string) {
       (application) => application.implementation === manager.implementation,
     );
   if (!template) ctx.fail(`Prowlarr doesn't offer ${manager.name} as an application`);
+  // Only a new application gets HexOS's categories. A run again keeps the ones the owner chose.
+  if (manager.syncCategories && !existing) values.syncCategories = manager.syncCategories;
 
   const application: Application = {
     ...template,
@@ -112,3 +120,5 @@ async function connect(ctx: HookContext, managerId: string) {
 export const radarr = (ctx: HookContext) => connect(ctx, "radarr");
 export const sonarr = (ctx: HookContext) => connect(ctx, "sonarr");
 export const lidarr = (ctx: HookContext) => connect(ctx, "lidarr");
+export const sportarr = (ctx: HookContext) => connect(ctx, "sportarr");
+export const chaptarr = (ctx: HookContext) => connect(ctx, "chaptarr");

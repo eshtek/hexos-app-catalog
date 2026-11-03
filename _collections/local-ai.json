@@ -1,0 +1,248 @@
+{
+  "type": "collection",
+  "version": 2,
+  "internal": true,
+  "name": "Local AI",
+  "description": "Run AI models on your own graphics card, with chat and assistants that stay on your server.",
+  "image": "_collections/local-ai.jpg",
+  "requirements": {
+    "specifications": [
+      "4GBVRAM"
+    ]
+  },
+  "localAi": {
+    "minVramGB": 4,
+    "uses": [
+      {
+        "id": "everyday",
+        "title": "Everyday chat and writing",
+        "models": "everyday"
+      },
+      {
+        "id": "documents",
+        "title": "Documents and research",
+        "models": "everyday"
+      },
+      {
+        "id": "coding",
+        "title": "Coding",
+        "models": "coding",
+        "minVramGB": 8
+      },
+      {
+        "id": "agents",
+        "title": "Agents and automation",
+        "models": "agents",
+        "minVramGB": 10
+      }
+    ],
+    "tiers": [
+      {
+        "id": "good",
+        "title": "Good"
+      },
+      {
+        "id": "better",
+        "title": "Better"
+      },
+      {
+        "id": "best",
+        "title": "Best"
+      }
+    ],
+    "rank": [
+      "agents",
+      "coding",
+      "everyday"
+    ],
+    "defaultModels": "everyday",
+    "models": {
+      "everyday": {
+        "good": [
+          {
+            "model": "qwen3.5:9b-q4_K_M",
+            "sizeGB": 6.6,
+            "minVramGB": 8,
+            "contextK": 16,
+            "tools": true
+          },
+          {
+            "model": "qwen3.5:4b-q4_K_M",
+            "sizeGB": 3.3,
+            "minVramGB": 4,
+            "contextK": 8
+          }
+        ],
+        "better": [
+          {
+            "model": "gemma4:12b-it-qat",
+            "sizeGB": 7.2,
+            "minVramGB": 10,
+            "contextK": 16,
+            "tools": true
+          }
+        ],
+        "best": [
+          {
+            "model": "qwen3.8:27b-q4_K_M",
+            "sizeGB": 18,
+            "minVramGB": 20,
+            "contextK": 32,
+            "tools": true
+          }
+        ]
+      },
+      "coding": {
+        "good": [
+          {
+            "model": "qwen3.5:9b-q4_K_M",
+            "sizeGB": 6.6,
+            "minVramGB": 8,
+            "contextK": 16,
+            "tools": true
+          }
+        ],
+        "better": [
+          {
+            "model": "qwen3.5:9b-q4_K_M",
+            "sizeGB": 6.6,
+            "minVramGB": 10,
+            "contextK": 16,
+            "tools": true
+          }
+        ],
+        "best": [
+          {
+            "model": "qwen3.8:27b-q4_K_M",
+            "sizeGB": 18,
+            "minVramGB": 20,
+            "contextK": 32,
+            "tools": true
+          }
+        ]
+      },
+      "agents": {
+        "better": [
+          {
+            "model": "gemma4:26b-a4b-it-qat",
+            "sizeGB": 16,
+            "minVramGB": 16,
+            "contextK": 64,
+            "minRamGB": 32,
+            "tools": true
+          },
+          {
+            "model": "gemma4:12b-it-qat",
+            "sizeGB": 7.2,
+            "minVramGB": 10,
+            "contextK": 64,
+            "tools": true
+          }
+        ],
+        "best": [
+          {
+            "model": "qwen3.8:27b-q4_K_M",
+            "sizeGB": 18,
+            "minVramGB": 24,
+            "contextK": 64,
+            "tools": true
+          },
+          {
+            "model": "gemma4:26b-a4b-it-qat",
+            "sizeGB": 16,
+            "minVramGB": 20,
+            "contextK": 64,
+            "tools": true
+          }
+        ]
+      }
+    }
+  },
+  "groups": [
+    {
+      "id": "engine",
+      "type": "fixed",
+      "title": "AI engine",
+      "description": "Runs your model on your graphics card.",
+      "options": [
+        {
+          "app": "ollama",
+          "core": true,
+          "answers": {
+            "image": "image",
+            "context_length": "8192",
+            "model": ""
+          }
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "single",
+      "title": "Chat",
+      "description": "Where you talk to your model.",
+      "options": [
+        {
+          "app": "open-webui",
+          "core": true,
+          "summary": "A familiar chat app for everyone at home",
+          "default": true
+        },
+        {
+          "app": "anything-llm",
+          "core": true,
+          "summary": "Separate workspaces for each project and its files"
+        }
+      ]
+    },
+    {
+      "id": "assistant",
+      "type": "single",
+      "optional": true,
+      "title": "Assistant",
+      "description": "An always-on assistant that runs tasks for you. It can reach the internet and Ollama, and nothing else at home.",
+      "options": [
+        {
+          "app": "hermes-agent",
+          "summary": "Learns as it works",
+          "needsModel": "agent-ready"
+        },
+        {
+          "app": "openclaw",
+          "summary": "Takes real actions for you from your chat apps",
+          "needsModel": "agent-ready"
+        }
+      ]
+    },
+    {
+      "id": "coding",
+      "type": "multiple",
+      "title": "Coding",
+      "description": "Allows you to run a coding agent through a terminal or in a browser.",
+      "options": [
+        {
+          "app": "opencode",
+          "summary": "Coding agent",
+          "needsModel": "agent-ready",
+          "minVramGB": 10
+        }
+      ]
+    },
+    {
+      "id": "extras",
+      "type": "multiple",
+      "title": "Extras",
+      "description": "Add-ons that extend the capabilities of your AI agents.",
+      "options": [
+        {
+          "app": "searxng",
+          "summary": "Private web search for your chat"
+        },
+        {
+          "app": "n8n",
+          "summary": "Automations that use your model"
+        }
+      ]
+    }
+  ]
+}

@@ -8,11 +8,14 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 
 | App | Description |
 |-----|-------------|
-| [AFFiNE](affine.json) | Knowledge base software |
 | [Actual Budget](actual-budget.json) | Financial planning software |
+| [AFFiNE](affine.json) | Knowledge base software |
+| [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
+| [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
+| [Collabora](collabora.json) | Documents you edit together in Nextcloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
 | [Donetick](dozzle.json) | Smart task manager |
@@ -22,21 +25,25 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
 | [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
+| [FlareSolverr](flaresolverr.json) | Lets Prowlarr reach indexers behind Cloudflare |
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |
 | [Jellyfin](jellyfin.json) | Free media server |
 | [Jellystat](jellystat.json) | Statistics App for Jellyfin |
+| [Kavita](kavita.json) | Reader for ebooks, comics and manga |
 | [Kodi](kodi.json) | Media player on the TV plugged into the server |
+| [LanguageTool](languagetool.json) | Spelling and grammar checks |
 | [Lidarr](lidarr.json) | Music collection manager |
 | [Linkwarden](linkwarden.json) | Webpage archiving utility |
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
+| [Minecraft](minecraft.json) | Minecraft Java Edition server |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
-| [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
+| [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
@@ -78,9 +85,10 @@ For schema documentation, macros reference, and contribution guidelines, see [do
 | `{n}CORE` | Minimum CPU cores | `2CORE`, `4CORE`, `6CORE` |
 | `{n}MB` / `{n}GB` | Approximate storage needed for installation | `256MB`, `1GB`, `30GB` |
 | `{n}MBRAM` / `{n}GBRAM` | Minimum memory | `512MBRAM`, `8GBRAM` |
+| `{n}GBVRAM` | Minimum dedicated graphics memory | `4GBVRAM` |
 | `GPU` | GPU recommended | `GPU` |
 
-Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU` â€” anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
+Every value must match `^(\d+)(MBRAM|GBRAM|GBVRAM|MB|GB|CORE)$` or be the literal `GPU` â€” anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
 
 ```json
 "requirements": {
@@ -90,7 +98,13 @@ Every value must match `^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$` or be the literal `GPU`
 
 ## The port players join on
 
-A game server names the port players connect to in `requirements.game_port`. The app's details pane shows it beside the app version, and, for a game with no web UI, Copy address in Launch's place copies the server's LAN address with that port. It must be one of `requirements.ports`, and `bun run validate` refuses one that isn't. It changes nothing a server runs: HexOS reads it from the catalog's current script, so changing it needs no new `script.version`. Palworld names `38211`.
+### Several copies of an app
+
+`requirements.instances: "many"` lets one server run several copies of an app, each with its own name, data and ports. The first copy's TrueNAS name is the app's id, later ones are `<id>-2`, `<id>-3`.
+
+Every private folder has to follow the copy. `$LOCATION(ApplicationsPerformance)/$INSTANCE(sonarr)/config` gives `sonarr` for the first copy and `sonarr-2` for the second, so servers that already have the app keep their folders, and writing it needs no new `script.version`. A folder every copy shares on purpose is listed in `requirements.shared_folders`, as the script writes it. Every published port has to be `$PORT`. `bun run validate` refuses a script that breaks either rule, and `script_bumps` refuses dropping `$INSTANCE` from any script, since later copies live under it. Taking `requirements.instances` off alone is the rollback: copies already installed keep working.
+
+A game server names the port players connect to in `requirements.game_port`. For a game with no web UI, Copy address in Launch's place copies the server's LAN address with that port. It must be one of `requirements.ports`, and `bun run validate` refuses one that isn't. It changes nothing a server runs: HexOS reads it from the catalog's current script, so changing it needs no new `script.version`. Palworld names `38211`.
 
 Leave it out when the owner picks the ports inside the app, as with each Minecraft server in Crafty 4, and when players can't join at the LAN address. Valheim names none: on crossplay, Valheim's server manual says a player joins with the join code, the public address or the server list, never a local address, so Copy address would hand out one that fails.
 
@@ -100,6 +114,48 @@ Leave it out when the owner picks the ports inside the app, as with each Minecra
   "game_port": 38211
 }
 ```
+
+## Ports
+
+A script states its ports twice. `requirements.ports` is the list HexOS reads, and its first entry is where HexOS reaches the app. The pins in `app_values` are what TrueNAS applies, so a port the script doesn't pin is published at the chart's default. `network` goes in `app_values`, under the chart's own keys; anywhere else it is never applied. A custom app runs on TrueNAS's `ix-app` chart, whose pins sit directly in `app_values`: `ports`, or `host_network` and `portals`.
+
+```json
+"requirements": {
+  "ports": [30146, 19132]
+},
+"app_values": {
+  "network": {
+    "web_port": { "bind_mode": "published", "port_number": "$PORT(30146)" },
+    "additional_ports": [{ "bind_mode": "published", "port_number": "$PORT(19132)", "container_port": 19132, "protocol": "udp" }]
+  }
+}
+```
+
+### Ports that can move
+
+A port is the first one HexOS tries. `"$PORT(30146)"` starts at 30146, and when that's taken HexOS moves the app to the nearest free port: upward, then back down from 30146 if it runs out. The owner never picks a port and never hears about a move, because Launch and Copy address follow it.
+
+- As a whole value it resolves to a number. Inside a longer string it resolves to digits, so an address follows the port: `"http://$SERVER_LAN_IP:$PORT(30111)"`.
+- Every `$PORT(n)` with the same `n` in a script resolves to the same port.
+- A range whose `start` and `end` are both `$PORT(...)` moves as one block, by the same offset.
+- `requirements.ports` stays a plain list of preferred numbers, and each `$PORT(n)` names one of them.
+
+Write every published port this way. A bare number is a port the protocol ties to one number, which means DNS, DHCP, NTP, SSDP, STUN, mDNS and Plex's GDM discovery, where moving it would give a clean install of something that doesn't work. It stays where it is, and the deck tells the owner what holds it. Don't ask the owner for a port in a question. A move happens only when a port is first placed, so an app that's installed keeps the ports its owner may have forwarded.
+
+### What the validator checks
+
+`bun run validate` compares port numbers alone, with every member of a range counted, because TrueNAS ignores protocol: `53/udp` and `53/tcp` clash.
+
+| Check | Result |
+|-------|--------|
+| `requirements.ports` and the pins match, both ways. List a range's members one by one. A pin that reads a question is compared at the question's default | Error |
+| A host-network app binds ports it doesn't pin, so its list must hold its pins and portals, and every other port it binds | Error |
+| `network` sits in `app_values` | Error |
+| Two apps in a collection want one port and at least one of them can't move. Options of one `single` group are never picked together | Error |
+| Every `$PORT(n)` is well formed and declared, and a range has both ends movable or neither | Error |
+| A port that isn't `$PORT(n)` is one a protocol ties to its number. An internal script is exempt | Error |
+| Two scripts in the catalog fix one port: the box refuses the second | Warning |
+| A `$PORT` number another script also wants: the box moves it, and if the other script fixes that port, the box refuses that one when the `$PORT` app got there first | Warning |
 
 ## Values on the Settings tab
 
@@ -154,9 +210,9 @@ Each app appears once in a collection. Apps install one after another, in the or
 
 The links between a collection's apps are the apps' own pairing hooks: a hook on one app whose conditions name another (Prowlarr's `connect-radarr`). HexOS runs each one whose apps are all in the collection once those apps are in, in the order the file lists the apps. A link out of an app waits for the links into it, since one may be what sets the app up: Jellyfin's `connect-seerr` signs Seerr in before Seerr's own links act as that account. Two links into the same app keep the file's order too, so list first the app whose link changes what a later one reads: Media library lists Profilarr before Seerr, so Radarr has Profilarr's profiles before Seerr picks its default one. A link that needs its own app set up first names that hook in `requiresHooks`; one that takes that setup's answers declares inputs with the same ids (Plex's `connect-seerr` takes the Plex sign-in Pre-configure Plex was given, `plex_login`), and, in a collection, the run goes back to that setup first when it didn't finish in the run (nobody signed in to Plex while it installed, or Plex was there before), asking again, so the link takes its answers; from the card, a link asks for them itself when that setup didn't run. A setup a link can go back to runs from the app's card too (`userAction`, `rerun: converge`), as Pre-configure Jellyfin, Emby and Plex do; Pre-configure Plex keeps the name of a server that was already claimed. A link that finds the owner skipped what it needs (Plex's sign-in, so Seerr was never set up) ends with `ctx.skip(message)` rather than `ctx.fail`: a collection skips it with the message instead of offering a Try again that can't help, and a run from the app's card fails with the same message. A box from before `ctx.skip` doesn't have it, so call it as `if (ctx.skip) ctx.skip(message);` followed by `ctx.fail(message);`. A hook reaches an app at the box's address and the app's `requirements.ports[0]`, so every app that runs a hook or is named by one pins its web port in `app_values.network` and declares that same port first: the port TrueNAS publishes, not the one inside the container. `bun run validate` refuses a mismatch and warns when nothing is pinned.
 
-An app a collection installs opens ready, with nothing left for the owner but their own accounts (indexers, Usenet servers). An app with a sign-in of its own declares `sign_in` (`{ "username": true }`; `false` for Deluge, whose page asks only for a password; `adds_user` for Jellyfin and Emby, which have users of their own), and the owner chooses that sign-in once, for every such app the install or collection sets up. Its hooks get it as `ctx.signIn` and set it before the app's first start where the app reads one from its settings (`seed-sign-in` for Radarr, Sonarr and Lidarr, `seed-webui` for qBittorrent and Deluge, `seed-settings` for SABnzbd), or from its setup hook once it is up (Prowlarr, NZBGet, Profilarr, Jellyfin, Emby), and the home network gets in without it wherever the app allows that (SABnzbd asks only from outside, with External internet access at its full web interface with a sign-in from outside; Profilarr 2.3 and Deluge always ask). Jellyfin's and Emby's administrator is that sign-in, and so is Seerr's through them, and Jellystat's. An app the owner already had gets the same sign-in when a collection brings it in: a new administrator where the app has users of its own (and, in Seerr, an administrator imported from the media server), the app's own sign-in replaced everywhere else (Profilarr keeps its username, since it can't rename its account). HexOS gets in with what it can read itself (an API key, the app's own settings file, an administrator's key in Jellyfin's or Emby's database, read-only) and asks the owner with `ctx.askForInputs` only when nothing works. The owner's password is never written to a file of HexOS's own; links that need a client's password take `ctx.signIn`, then the one the client's own settings hold (NZBGet), and ask last. With no sign-in chosen (a deck from before the choice), an app gets admin/admin (Profilarr's password is `adminadmin`, as it refuses one under 8 characters), kept in `hexos/` beside its settings so a later run knows it's HexOS's, and a run from the app's card leaves a sign-in as it is.
+An app a collection installs opens ready, with nothing left for the owner but their own accounts (indexers, Usenet servers). An app with a sign-in of its own declares `sign_in` (`{ "username": true }`; `false` for Deluge, whose page asks only for a password; `adds_user` for Jellyfin and Emby, which have users of their own), and the owner chooses that sign-in once, for every such app the install or collection sets up. Its hooks get it as `ctx.signIn` and set it before the app's first start where the app reads one from its settings (`seed-sign-in` for Radarr, Sonarr and Lidarr, `seed-webui` for qBittorrent and Deluge, `seed-settings` for SABnzbd), or from its setup hook once it is up (Prowlarr, NZBGet, Profilarr, Jellyfin, Emby, Sportarr), and the home network gets in without it wherever the app allows that (SABnzbd asks only from outside, with External internet access at its full web interface with a sign-in from outside; Profilarr 2.3, Deluge and Sportarr's web page always ask). Jellyfin's and Emby's administrator is that sign-in, and so is Seerr's through them, and Jellystat's. An app the owner already had gets the same sign-in when a collection brings it in: a new administrator where the app has users of its own (and, in Seerr, an administrator imported from the media server), the app's own sign-in replaced everywhere else (Profilarr keeps its username, since it can't rename its account). HexOS gets in with what it can read itself (an API key, the app's own settings file, an administrator's key in Jellyfin's or Emby's database, read-only) and asks the owner with `ctx.askForInputs` only when nothing works. The owner's password is never written to a file of HexOS's own; links that need a client's password take `ctx.signIn`, then the one the client's own settings hold (NZBGet), and ask last. With no sign-in chosen (a deck from before the choice), an app gets admin/admin (Profilarr's and Sportarr's password is `adminadmin`, as Profilarr refuses one under 8 characters and Sportarr one under 6), kept in `hexos/` beside its settings so a later run knows it's HexOS's, and a run from the app's card leaves a sign-in as it is.
 
-Each download client keeps its downloads in its own folder of the Downloads location, mounted in the client at the path Radarr, Sonarr and Lidarr see it at (they mount the whole location at `/downloads`, and qBittorrent's folder at `/config/Downloads` too), so the links add no remote path mapping, which would belong to the box's address rather than to one client. Deluge's and NZBGet's charts fix their own `/downloads` mount, so their folder is mounted again at `/downloads/<app>`, which leaves an empty folder of that name inside it. Every client keeps a download in progress apart from finished ones, inside its own folder: qBittorrent in `incomplete` and `complete`, Deluge in `incomplete` and `complete` (its own default and the managers' Download and Move Completed folders), SABnzbd in `incomplete` and `complete`, NZBGet in its stock `intermediate` and `completed`. A client the owner already had keeps folders they chose. Prowlarr gets each client too, for what the owner grabs in Prowlarr's own search, under a `prowlarr` category that no manager imports from, and qBittorrent hands it a new sign-in as it does the managers.
+Each download client keeps its downloads in its own folder of the Downloads location, mounted in the client at the path Radarr, Sonarr, Lidarr and Sportarr see it at (they mount the whole location at `/downloads`, and qBittorrent's folder at `/config/Downloads` too), so the links add no remote path mapping, which would belong to the box's address rather than to one client. Deluge's and NZBGet's charts fix their own `/downloads` mount, so their folder is mounted again at `/downloads/<app>`, which leaves an empty folder of that name inside it. Every client keeps a download in progress apart from finished ones, inside its own folder: qBittorrent in `incomplete` and `complete`, Deluge in `incomplete` and `complete` (its own default and the managers' Download and Move Completed folders), SABnzbd in `incomplete` and `complete`, NZBGet in its stock `intermediate` and `completed`. A client the owner already had keeps folders they chose. Prowlarr gets each client too, for what the owner grabs in Prowlarr's own search, under a `prowlarr` category that no manager imports from, and qBittorrent hands it a new sign-in as it does the managers.
 
 ## Jellyfin pairing actions
 

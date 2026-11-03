@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bumpProblem, droppedFolders, unanswerableQuestions, updateProblems, versionRaised } from "./script_bumps";
+import { bumpProblem, droppedFolders, runPart, unanswerableQuestions, updateProblems, versionRaised } from "./script_bumps";
 
 const kodi = (tag: string, version: string, extra: Record<string, unknown> = {}) => ({
   version: 6,
@@ -102,5 +102,17 @@ describe("what an update can carry", () => {
     const head = valheim([question("server_name"), question("admin_ids")], [], "1.0.1");
     expect(updateProblems(base, head)).toHaveLength(2);
     expect(updateProblems({ ...base, custom: undefined }, { ...head, custom: undefined })).toEqual([]);
+  });
+});
+
+describe("what doesn't change a server", () => {
+  test("$PORT and $INSTANCE read as what they give an installed app", () => {
+    const base = { custom: true, requirements: { ports: [1] }, app_values: { port: 2456, path: "x/valheim/y" } };
+    const head = {
+      custom: true,
+      requirements: { ports: [1], instances: "many", game_port: 1 },
+      app_values: { port: "$PORT(2456)", path: "x/$INSTANCE(valheim)/y" },
+    };
+    expect(runPart(head)).toBe(runPart(base));
   });
 });

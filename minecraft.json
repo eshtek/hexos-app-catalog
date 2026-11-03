@@ -1,0 +1,110 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation, from catalog pull request 103 by Sportarr: every world gets its own folder and port"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      25565
+    ],
+    "game_port": 25565,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "Accept the Minecraft EULA",
+      "description": "The server starts only after you accept Mojang's EULA at https://www.minecraft.net/eula.",
+      "type": "boolean",
+      "key": "eula",
+      "required": true
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(minecraft)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "minecraft": {
+      "eula": "$QUESTION(eula)",
+      "image_selector": "j25_image",
+      "motd": "Minecraft on HexOS",
+      "enable_rcon": false,
+      "additional_envs": [
+        {
+          "name": "MAX_MEMORY",
+          "value": "75%"
+        }
+      ]
+    },
+    "network": {
+      "server_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(25565)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(minecraft)/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      }
+    }
+  },
+  "widgets": [
+    {
+      "id": "server",
+      "title": "Online now",
+      "description": "Who's playing on this server, how many ticks a second it runs, and its game mode.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "minecraft"
+        }
+      ],
+      "background": { "field": "online" },
+      "slots": [
+        { "type": "stat", "field": "count" },
+        { "type": "list", "field": "online", "rows": 1 }
+      ],
+      "slides": [
+        {
+          "title": "Server",
+          "slots": [
+            { "type": "stat", "field": "tps" },
+            { "type": "stat", "field": "mode" }
+          ]
+        }
+      ],
+      "script": "minecraft/widget_server.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}
