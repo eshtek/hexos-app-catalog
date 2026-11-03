@@ -1,4 +1,5 @@
-import { chownSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { closeSync, constants, fchownSync, fstatSync, linkSync, openSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { HookContext } from "../_lib/hook_context";
@@ -20,33 +21,64 @@ export async function createAccount(ctx: HookContext) {
   const account = ctx.signIn;
   if (!account) ctx.fail("HexOS didn't provide The Lounge's sign-in. Retry installation and choose an account name and password.");
   const { username, password } = account;
-  if (!USERNAME.test(username)) ctx.fail("The Lounge account name must use letters, numbers, dots, underscores or hyphens, and start with a letter or number.");
+  if (typeof username !== "string" || !USERNAME.test(username)) ctx.fail("The Lounge account name must use letters, numbers, dots, underscores or hyphens, and start with a letter or number.");
+  if (typeof password !== "string" || password.length === 0) ctx.fail("Choose a non-empty password for The Lounge.");
   if (new TextEncoder().encode(password).length > 72) ctx.fail("The Lounge passwords must be at most 72 UTF-8 bytes. Choose a shorter password and retry.");
 
   await ctx.waitForApp("/", { maxAttempts: 12, initialDelayMs: 2000 });
   await ctx.emitCheckpoint("ready");
 
   const users = join(mount.localPath, "users");
-  const target = join(users, `${username}.json`);
-  const conflicting = readdirSync(users).find((file) => file.endsWith(".json") && file.toLowerCase() === `${username.toLowerCase()}.json` && file !== `${username}.json`);
-  if (conflicting) ctx.fail(`The Lounge already has an account named ${conflicting.slice(0, -5)}. Account names are case insensitive; choose a different name.`);
-  if (existsSync(target)) {
-    await ctx.skipCheckpoint("account", `${username} already exists; its password and chat history were kept`);
-    return;
-  }
-
-  // The Lounge uses bcryptjs at cost 11. Bun's bcrypt output has the same $2b format.
-  const hash = await Bun.password.hash(password, { algorithm: "bcrypt", cost: 11 });
-  mkdirSync(users, { recursive: true, mode: 0o700 });
-  chownSync(users, APP_UID, APP_UID);
-  const temporary = join(users, `${username}.json.tmp`);
+  // The Lounge creates users/ before it starts listening. Hold that directory open
+  // so the app cannot redirect a privileged file operation through a symlink.
+  let directory: number;
   try {
-    writeFileSync(temporary, JSON.stringify({ password: hash, log: true }, null, "\t"), { mode: 0o600, flag: "wx" });
-    chownSync(temporary, APP_UID, APP_UID);
-    renameSync(temporary, target);
-  } catch (error) {
-    rmSync(temporary, { force: true });
-    throw error;
+    directory = openSync(users, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  } catch {
+    ctx.fail("The Lounge's users directory is missing or is not a regular directory. Check the data mount and retry.");
   }
-  await ctx.emitCheckpoint("account", `${username} can now sign in to The Lounge`);
+  try {
+    const info = fstatSync(directory);
+    if (!info.isDirectory() || info.uid !== APP_UID || (info.mode & 0o077) !== 0) {
+      ctx.fail("The Lounge's users directory must be owned by apps (UID 568) and private (mode 0700).");
+    }
+
+    const dir = `/proc/self/fd/${directory}`;
+    const filename = `${username}.json`;
+    const names = readdirSync(dir);
+    const conflicting = names.find((file) => file.endsWith(".json") && file.toLowerCase() === filename.toLowerCase() && file !== filename);
+    if (conflicting) ctx.fail(`The Lounge already has an account named ${conflicting.slice(0, -5)}. Account names are case insensitive; choose a different name.`);
+    if (names.includes(filename)) {
+      await ctx.skipCheckpoint("account", `${username} already exists; its password and chat history were kept`);
+      return;
+    }
+
+    // The Lounge uses bcryptjs at cost 11. Bun's bcrypt output has the same $2b format.
+    const hash = await Bun.password.hash(password, { algorithm: "bcrypt", cost: 11 });
+    const temporary = join(dir, `.${username}.${randomUUID()}.tmp`);
+    const target = join(dir, filename);
+    const file = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    try {
+      try {
+        writeFileSync(file, JSON.stringify({ password: hash, log: true }, null, "\t"));
+        fchownSync(file, APP_UID, APP_UID);
+      } finally {
+        closeSync(file);
+      }
+      // Linking publishes a complete file and refuses to replace an account
+      // created while the hash was being calculated.
+      try {
+        linkSync(temporary, target);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        await ctx.skipCheckpoint("account", `${username} already exists; its password and chat history were kept`);
+        return;
+      }
+    } finally {
+      unlinkSync(temporary);
+    }
+    await ctx.emitCheckpoint("account", `${username} can now sign in to The Lounge`);
+  } finally {
+    closeSync(directory);
+  }
 }
