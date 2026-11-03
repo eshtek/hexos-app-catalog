@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { closeSync, constants, fchownSync, fstatSync, linkSync, openSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, constants, fchownSync, fstatSync, linkSync, lstatSync, openSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { HookContext } from "../_lib/hook_context";
@@ -38,25 +38,45 @@ export async function createAccount(ctx: HookContext) {
     ctx.fail("The Lounge's users directory is missing or is not a regular directory. Check the data mount and retry.");
   }
   try {
-    const info = fstatSync(directory);
-    if (!info.isDirectory() || info.uid !== APP_UID || (info.mode & 0o077) !== 0) {
-      ctx.fail("The Lounge's users directory must be owned by apps (UID 568) and private (mode 0700).");
-    }
+    const checkDirectory = () => {
+      const opened = fstatSync(directory);
+      let current: ReturnType<typeof lstatSync>;
+      try {
+        current = lstatSync(users);
+      } catch {
+        ctx.fail("The Lounge's users directory changed during account setup. Retry after checking the data folder.");
+      }
+      if (!current.isDirectory() || current.dev !== opened.dev || current.ino !== opened.ino) {
+        ctx.fail("The Lounge's users directory changed during account setup. Retry after checking the data folder.");
+      }
+      if (opened.uid !== APP_UID || (opened.mode & 0o077) !== 0) {
+        ctx.fail("The Lounge's users directory must be owned by apps (UID 568) and private (mode 0700).");
+      }
+    };
+    checkDirectory();
 
     const dir = `/proc/self/fd/${directory}`;
     const filename = `${username}.json`;
+    const target = join(dir, filename);
+    const checkExisting = () => {
+      const existing = lstatSync(target);
+      if (!existing.isFile() || existing.uid !== APP_UID || (existing.mode & 0o777) !== 0o600) {
+        ctx.fail(`The existing ${username} account is not a private, regular file owned by apps. Check its permissions before retrying.`);
+      }
+    };
     const names = readdirSync(dir);
     const conflicting = names.find((file) => file.endsWith(".json") && file.toLowerCase() === filename.toLowerCase() && file !== filename);
     if (conflicting) ctx.fail(`The Lounge already has an account named ${conflicting.slice(0, -5)}. Account names are case insensitive; choose a different name.`);
     if (names.includes(filename)) {
+      checkExisting();
       await ctx.skipCheckpoint("account", `${username} already exists; its password and chat history were kept`);
       return;
     }
 
     // The Lounge uses bcryptjs at cost 11. Bun's bcrypt output has the same $2b format.
     const hash = await Bun.password.hash(password, { algorithm: "bcrypt", cost: 11 });
+    checkDirectory();
     const temporary = join(dir, `.${username}.${randomUUID()}.tmp`);
-    const target = join(dir, filename);
     const file = openSync(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
     try {
       try {
@@ -71,12 +91,15 @@ export async function createAccount(ctx: HookContext) {
         linkSync(temporary, target);
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        checkExisting();
         await ctx.skipCheckpoint("account", `${username} already exists; its password and chat history were kept`);
         return;
       }
     } finally {
       unlinkSync(temporary);
     }
+    checkDirectory();
+    checkExisting();
     await ctx.emitCheckpoint("account", `${username} can now sign in to The Lounge`);
   } finally {
     closeSync(directory);
