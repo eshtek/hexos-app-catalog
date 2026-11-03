@@ -45,6 +45,8 @@ export interface HookContext {
   readonly resourceType: string;
   /** The app/vm ID this hook is running for (e.g., "plex", "nextcloud") */
   readonly resourceId: string;
+  /** The catalog app this is. `resourceId` is `sonarr-2` on a later copy. Absent on older boxes. */
+  readonly catalogAppId?: string;
   /** The lifecycle event that triggered this hook */
   readonly event: "onBeforeInstall" | "onAfterInstall" | "onBeforeUpgrade" | "onAfterUpgrade" | string;
   /** Previous version (upgrade hooks only) */
@@ -153,12 +155,31 @@ export interface HookContext {
    * actions; lifecycle hooks may receive null depending on platform version.
    */
   getInstalledAppUrl(appId: string): Promise<string | null>;
+
+  /**
+   * Readies the server's GPU for this app's hardware video. On a chip that needs firmware loaded at
+   * boot, sets that up for the next restart. A hook named in `rerunHook` runs again after it, and
+   * the owner is asked for that restart. Absent on a box whose image predates it.
+   */
+  prepareHardwareVideo?(options?: { rerunHook?: string }): Promise<{ restartNeeded: boolean }>;
   /**
    * Another installed app's live mounts, resolved as this hook's own `mounts` are: how a link
    * between two apps reads the other one's settings file (an *arr's config.xml for its API key).
    * Empty when the app isn't installed or its mounts can't be read.
    */
   getInstalledAppMounts(appId: string): Promise<ContextMount[]>;
+  /**
+   * The copy of `appId` this link run works with, on a hook that says `copies`. Null on a run that
+   * names none, which works with the app's first copy. `getInstalledAppUrl` and
+   * `getInstalledAppMounts` already answer for this copy. Absent on older boxes.
+   */
+  linkedApp?(appId: string): { name: string; displayName: string } | null;
+  /**
+   * The TrueNAS name of every installed copy of `appId`, first copy first, for a hook that has to
+   * reach them all. `getInstalledAppUrl` and `getInstalledAppMounts` take these names as they are.
+   * Absent on older boxes.
+   */
+  installedCopies?(appId: string): Promise<string[]>;
 
   /**
    * A request to a partner app's API, authenticated with the credential HexOS
@@ -283,6 +304,30 @@ export interface HookContext {
    */
   skipCheckpoint(id: string, message?: string): Promise<void>;
 
+  /**
+   * Restart this app, and only this app, for a setting it reads at start. Resolves once the app has
+   * been stopped and started; the app may still be coming up. Missing on a box from before it.
+   */
+  restartApp?(): Promise<void>;
+
+  /**
+   * Change this app's own TrueNAS settings, for a value only an update can carry: `change` edits a
+   * copy of the app's current values, and the app is updated when anything differs, which restarts
+   * it. Resolves to whether it changed. The app's graphics card stays as it is. A later script
+   * update writes the script's own values back, so a link that uses this runs again after one.
+   * Missing on a box from before it.
+   */
+  updateAppValues?(change: (values: Record<string, unknown>) => void): Promise<boolean>;
+
+  /** This app's current TrueNAS values, to read a setting from. Missing on a box from before it. */
+  getAppValues?(): Promise<Record<string, unknown>>;
+
+  /** What this server's graphics cards can run, for a hook that offers models. Missing on a box from before it. */
+  readLocalAiHardware?(): Promise<{
+    cards: Array<{ pciSlot: string; name: string; memoryGB: number | null }>;
+    ollama?: { pciSlot?: string; models: string[]; wanted?: string };
+  }>;
+
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
 
@@ -326,6 +371,8 @@ export type HookInputDeclaration =
         description?: string;
         placeholder?: string;
         default?: string | number | boolean;
+        /** A select question's choices. */
+        options?: Array<{ text: string; value: string }>;
       };
     }
   | {

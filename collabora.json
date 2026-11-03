@@ -1,0 +1,79 @@
+{
+  "version": 6,
+  "internal": true,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Collabora edits documents inside Nextcloud on your home network."
+  },
+  "requirements": {
+    "locations": [],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [],
+    "ports": [
+      9980
+    ]
+  },
+  "app_values": {
+    "collabora": {
+      "server_name": "$SERVER_LAN_IP:$PORT(9980)",
+      "enable_webui": false,
+      "aliasgroup1": [
+        "http://$SERVER_LAN_IP:[0-9]+"
+      ],
+      "extra_params": [
+        "--o:welcome.enable=false",
+        "--o:user_interface.mode=notebookbar",
+        "--o:ssl.termination=false",
+        "--o:ssl.enable=false",
+        "--o:net.proto=IPv4",
+        "--o:logging.level=warning",
+        "--o:logging.level_startup=warning"
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(9980)"
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "connect-languagetool",
+      "title": "Connect to LanguageTool",
+      "description": "Checks spelling and grammar in Collabora with LanguageTool.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "languagetool"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "languagetool"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "collabora"
+        }
+      ],
+      "rerun": "converge",
+      "script": "collabora/connect_languagetool.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

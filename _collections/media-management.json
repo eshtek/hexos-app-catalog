@@ -19,6 +19,7 @@
       "options": [
         {
           "app": "qbittorrent",
+          "core": true,
           "summary": "Torrents",
           "default": true,
           "vpnRecommended": true
@@ -30,6 +31,7 @@
         },
         {
           "app": "sabnzbd",
+          "core": true,
           "summary": "Usenet",
           "vpnRecommended": true
         },
@@ -49,17 +51,27 @@
       "options": [
         {
           "app": "radarr",
+          "core": true,
           "summary": "Movies",
           "default": true
         },
         {
           "app": "sonarr",
+          "core": true,
           "summary": "TV shows",
           "default": true
         },
         {
           "app": "lidarr",
           "summary": "Music"
+        },
+        {
+          "app": "sportarr",
+          "summary": "Sports"
+        },
+        {
+          "app": "chaptarr",
+          "summary": "Books and audiobooks"
         }
       ]
     },
@@ -70,7 +82,8 @@
       "description": "Finds releases for every media manager you pick.",
       "options": [
         {
-          "app": "prowlarr"
+          "app": "prowlarr",
+          "core": true
         }
       ]
     },
@@ -78,20 +91,23 @@
       "id": "player",
       "type": "single",
       "title": "Media server",
-      "description": "The app you watch your movies and shows in.",
+      "description": "Your media server allows you to stream your media library to your connected devices. Each app can connect via your web browser, or through client apps installed on your phone, desktop, or smart TV.",
       "options": [
         {
           "app": "jellyfin",
-          "summary": "Free and open source",
+          "core": true,
+          "recommended": true,
+          "summary": "Free, open source and fully featured",
           "default": true
         },
         {
           "app": "plex",
-          "summary": "Needs a free Plex account"
+          "core": true,
+          "summary": "Apps for almost every device"
         },
         {
           "app": "emby",
-          "summary": "Some features need Emby Premiere"
+          "summary": "Flexible user and parental controls"
         }
       ]
     },
@@ -144,6 +160,31 @@
           "answers": {
             "is_emby_api": "false"
           }
+        },
+        {
+          "app": "audiobookshelf",
+          "summary": "Audiobook player",
+          "requires": [
+            "chaptarr"
+          ]
+        },
+        {
+          "app": "kavita",
+          "summary": "Ebook reader",
+          "requires": [
+            "chaptarr"
+          ]
+        },
+        {
+          "app": "flaresolverr",
+          "summary": "Reaches indexers behind Cloudflare",
+          "requiresAny": [
+            "radarr",
+            "sonarr",
+            "lidarr",
+            "sportarr",
+            "chaptarr"
+          ]
         }
       ]
     }

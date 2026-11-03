@@ -54,35 +54,38 @@ interface DownloadClient {
 async function shareSignIn(ctx: HookContext, signIn: SignIn) {
   const self = new URL(ctx.baseUrl);
   for (const [managerId, api] of Object.entries(MANAGERS)) {
-    const url = await ctx.getInstalledAppUrl(managerId);
-    if (!url) continue;
-    try {
-      const mounts = await ctx.getInstalledAppMounts(managerId);
-      const config = mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${managerId}/config`));
-      const apiKey = config && readFileSync(`${config.localPath}/config.xml`, "utf-8").match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
-      if (!apiKey) continue;
-      const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
-      const listed = await fetch(`${url}/api/${api}/downloadclient`, { headers, signal: AbortSignal.timeout(30_000) });
-      if (!listed.ok) throw new Error(`${listed.status} ${listed.statusText}`);
-      for (const client of (await listed.json()) as DownloadClient[]) {
-        const field = (name: string) => client.fields.find((f) => f.name === name)?.value;
-        // Another qBittorrent, or one the owner reaches with its API key instead, is left as it is
-        if (client.implementation !== "QBittorrent" || field("apiKey")) continue;
-        if (field("host") !== self.hostname || Number(field("port")) !== Number(self.port)) continue;
-        const fields = client.fields.map((f) =>
-          f.name === "username" ? { ...f, value: signIn.username } : f.name === "password" ? { ...f, value: signIn.password } : f,
-        );
-        const saved = await fetch(`${url}/api/${api}/downloadclient/${client.id}?forceSave=true`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ ...client, fields }),
-          signal: AbortSignal.timeout(30_000),
-        });
-        await saved.body?.cancel();
-        if (!saved.ok) throw new Error(`${saved.status} ${saved.statusText}`);
+    // Each copy of a manager holds its own entry for this client
+    for (const copy of (await ctx.installedCopies?.(managerId)) ?? [managerId]) {
+      const url = await ctx.getInstalledAppUrl(copy);
+      if (!url) continue;
+      try {
+        const mounts = await ctx.getInstalledAppMounts(copy);
+        const config = mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${managerId}(-\\d+)?/config$`).test(m.hostPath));
+        const apiKey = config && readFileSync(`${config.localPath}/config.xml`, "utf-8").match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
+        if (!apiKey) continue;
+        const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
+        const listed = await fetch(`${url}/api/${api}/downloadclient`, { headers, signal: AbortSignal.timeout(30_000) });
+        if (!listed.ok) throw new Error(`${listed.status} ${listed.statusText}`);
+        for (const client of (await listed.json()) as DownloadClient[]) {
+          const field = (name: string) => client.fields.find((f) => f.name === name)?.value;
+          // Another qBittorrent, or one the owner reaches with its API key instead, is left as it is
+          if (client.implementation !== "QBittorrent" || field("apiKey")) continue;
+          if (field("host") !== self.hostname || Number(field("port")) !== Number(self.port)) continue;
+          const fields = client.fields.map((f) =>
+            f.name === "username" ? { ...f, value: signIn.username } : f.name === "password" ? { ...f, value: signIn.password } : f,
+          );
+          const saved = await fetch(`${url}/api/${api}/downloadclient/${client.id}?forceSave=true`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({ ...client, fields }),
+            signal: AbortSignal.timeout(30_000),
+          });
+          await saved.body?.cancel();
+          if (!saved.ok) throw new Error(`${saved.status} ${saved.statusText}`);
+        }
+      } catch (error) {
+        ctx.log(`${copy} keeps the qBittorrent sign-in it had: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      ctx.log(`${managerId} keeps the qBittorrent sign-in it had: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }

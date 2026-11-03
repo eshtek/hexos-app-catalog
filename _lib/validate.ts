@@ -29,6 +29,18 @@ import {
   WIDGET_MIN_REFRESH_S,
   WIDGET_SLOT_TYPES,
 } from "./contract";
+import {
+  catalogFixedPortClashes,
+  catalogPreferredPortClashes,
+  collectionPortClashes,
+  declaredPortsMatchPins,
+  networkInsideAppValues,
+  portMacrosWellFormed,
+  portsCanMove,
+  preferredPort,
+  type Finding,
+} from "./ports";
+import { instanceRules, linkCopyRules } from "./instances";
 
 type Problem = { file: string; message: string };
 
@@ -37,6 +49,9 @@ const warnings: Problem[] = [];
 
 const err = (file: string, message: string) => errors.push({ file, message });
 const warn = (file: string, message: string) => warnings.push({ file, message });
+const report = (file: string, findings: Finding[]) => {
+  for (const { level, message } of findings) (level === "error" ? err : warn)(file, message);
+};
 
 /** A question key that names a secret: an API key, a token, a password. */
 const SECRET_KEY = /token|secret|passw(or)?d|api_?key/i;
@@ -391,6 +406,12 @@ function validate(file: string, script: Record<string, unknown>) {
     if (entry.network_share !== undefined && typeof entry.network_share !== "boolean") {
       err(file, `${where}.network_share must be a boolean`);
     }
+    if (entry.start_mount !== undefined) {
+      if (typeof entry.start_mount !== "string" || !entry.start_mount.startsWith("/")) {
+        err(file, `${where}.start_mount must be an absolute path inside the app`);
+      }
+      if (entry.owner === undefined) err(file, `${where}.start_mount needs an owner to give the folder to`);
+    }
   }
 
   // --- app_values ---
@@ -418,6 +439,29 @@ function validate(file: string, script: Record<string, unknown>) {
     }
     if (isObject(scriptMeta) && typeof scriptMeta.version === "string" && !/^\d+\.\d+\.\d+$/.test(scriptMeta.version)) {
       err(file, `script.version "${scriptMeta.version}" must be x.y.z: servers compare it with semver to offer the update`);
+    }
+  }
+
+  // --- generated_sign_in: a sign-in the app writes to one of its own folders ---
+  const generatedSignIn = script.generated_sign_in;
+  if (generatedSignIn !== undefined) {
+    if (!isObject(generatedSignIn)) {
+      err(file, "generated_sign_in must be an object");
+    } else {
+      for (const key of ["file", "username", "password"]) {
+        if (typeof generatedSignIn[key] !== "string") err(file, `generated_sign_in.${key} must be a string`);
+      }
+      const path = generatedSignIn.file;
+      if (typeof path === "string" && (path.split("/").length < 2 || path.split("/").some((part) => [".", "..", ""].includes(part)))) {
+        err(file, "generated_sign_in.file must start at one of the app's folders, with no . or .. in it");
+      }
+      const changeHook = generatedSignIn.change_hook;
+      const hook = ((script.hooks as unknown[]) ?? []).find((each) => isObject(each) && each.id === changeHook);
+      if (changeHook !== undefined && !isObject(hook)) {
+        err(file, `generated_sign_in.change_hook names no hook: ${String(changeHook)}`);
+      } else if (isObject(hook) && !(Array.isArray(hook.surfaces) && hook.surfaces.includes("settings"))) {
+        err(file, `generated_sign_in.change_hook "${String(changeHook)}" must have the settings surface`);
+      }
     }
   }
 
@@ -837,7 +881,8 @@ function validateCollection(file: string, collection: Record<string, unknown>, c
   const id = file.slice(COLLECTIONS_DIR.length + 1).replace(/\.json$/, "");
   if (!COLLECTION_ID.test(id)) err(file, "the file name must be the collection id: lowercase words joined by hyphens");
   if (collection.type !== "collection") err(file, 'type must be "collection"');
-  if (collection.version !== 1) err(file, "version must be 1");
+  if (collection.version !== 1 && collection.version !== 2) err(file, "version must be 1 or 2");
+  if (collection.version === 1 && collection.localAi !== undefined) err(file, "localAi needs a file of version 2");
   for (const field of ["name", "description"]) {
     if (typeof collection[field] !== "string" || !(collection[field] as string).trim()) err(file, `${field} is required`);
   }
@@ -936,8 +981,8 @@ for (const file of files) {
 
 // A hook reaches an app at the box's LAN IP and the app's requirements.ports[0] (getInstalledAppUrl,
 // ctx.baseUrl), so an app a hook runs on or names must publish its web UI on that port, pinned in
-// app_values.network (web_port, or http_port for Emby). A container's own port (Radarr's 7878) is not
-// where TrueNAS publishes it.
+// app_values.network (web_port, or http_port for Emby), as a number or $PORT(n). A container's own port
+// (Radarr's 7878) is not where TrueNAS publishes it.
 const parsedScripts = new Map<string, Record<string, unknown>>();
 for (const file of files) {
   try {
@@ -964,7 +1009,7 @@ for (const appId of [...linkedApps].sort()) {
   const network = isObject(appValues.network) ? appValues.network : {};
   const pinned = Object.values(network)
     .filter(isObject)
-    .map((port) => port.port_number)
+    .map((port) => preferredPort(port.port_number))
     .filter((port) => port !== undefined);
   if (pinned.length === 0) {
     warn(`${appId}.json`, `takes part in a hook, so pin its web port in app_values.network (requirements.ports[0] is ${declared ?? "missing"})`);
@@ -972,6 +1017,15 @@ for (const appId of [...linkedApps].sort()) {
     err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in app_values.network (${pinned.join(", ")})`);
   }
 }
+
+// What each script publishes, and what scripts would fight over on one box (see ports.ts)
+for (const [appId, script] of parsedScripts) {
+  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script), ...instanceRules(appId, script)]);
+}
+const runsInCopies = (appId: string) =>
+  (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
+for (const [appId, script] of parsedScripts) report(`${appId}.json`, linkCopyRules(appId, script, runsInCopies));
+report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 
 const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));
 const collectionFiles = existsSync(COLLECTIONS_DIR)
@@ -993,6 +1047,7 @@ for (const file of collectionFiles) {
     continue;
   }
   validateCollection(file, parsed, catalogApps);
+  report(file, collectionPortClashes(parsed, parsedScripts));
 }
 
 // Assets are cheap to orphan and invisible when they rot, so name the ones
