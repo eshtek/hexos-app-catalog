@@ -54,7 +54,7 @@
     {
       "id": "seed-sign-in",
       "title": "Set Prowlarr's sign-in",
-      "description": "Sets Prowlarr's sign-in, so it opens without one on your home network",
+      "description": "Creating admin account",
       "events": [
         "onBeforeInstall"
       ],
