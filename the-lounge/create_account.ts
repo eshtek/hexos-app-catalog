@@ -9,10 +9,7 @@ const USERNAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 /** The Lounge 4.5.2 stores each account in users/<name>.json and watches that directory. */
 export async function createAccount(ctx: HookContext) {
-  await ctx.registerCheckpoints([
-    { id: "ready", message: "Waiting for The Lounge to start" },
-    { id: "account", message: "Creating your private account" },
-  ]);
+  await ctx.registerCheckpoints([{ id: "account", message: "Setting up admin account" }]);
 
   const mount = ctx.mounts.find((item) => item.containerPath === "/var/opt/thelounge")
     ?? ctx.mounts.find((item) => item.hostPath.endsWith("/the-lounge/data"));
@@ -26,7 +23,6 @@ export async function createAccount(ctx: HookContext) {
   if (new TextEncoder().encode(password).length > 72) ctx.fail("The Lounge passwords must be at most 72 UTF-8 bytes. Choose a shorter password and retry.");
 
   await ctx.waitForApp("/", { maxAttempts: 12, initialDelayMs: 2000 });
-  await ctx.emitCheckpoint("ready");
 
   const users = join(mount.localPath, "users");
   // The Lounge creates users/ before it starts listening. Hold that directory open
@@ -100,7 +96,7 @@ export async function createAccount(ctx: HookContext) {
     }
     checkDirectory();
     checkExisting();
-    await ctx.emitCheckpoint("account", `${username} can now sign in to The Lounge`);
+    await ctx.emitCheckpoint("account", "Set up admin account");
   } finally {
     closeSync(directory);
   }

@@ -78,7 +78,7 @@
     {
       "id": "create-account",
       "title": "Create The Lounge account",
-      "description": "Creates your private sign-in after The Lounge starts.",
+      "description": "Set up admin account",
       "events": ["onAfterInstall"],
       "script": "the-lounge/create_account.ts",
       "entrypoint": "createAccount",
