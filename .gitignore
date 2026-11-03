@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *.DS_Store
 node_modules/
+the-lounge/the-lounge-custom-install.json

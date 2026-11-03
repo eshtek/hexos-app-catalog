@@ -12,7 +12,7 @@ The HexOS sign-in must have a username made of letters, numbers, dots, underscor
 
 ## Server verification before merge
 
-1. Load `the-lounge.json` as a custom install script in HexOS and choose a test sign-in.
+1. Before the hook file is available in the upstream catalog, run `bun the-lounge/make-custom-install.ts > the-lounge/the-lounge-custom-install.json` from the catalog checkout. Paste the generated JSON into HexOS Custom Install (Expert Mode) and choose a test sign-in. This embeds the same hook in `scriptContent` so the test does not depend on HexOS fetching a hook file from the unpublished PR branch. The generated file is ignored by Git.
 2. Confirm that the account-creation hook completes and Launch opens the login page on the published port.
 3. Sign in, join a test IRC network, send a message, then restart the app and confirm the account, network, and history remain.
 4. Confirm the container runs as UID/GID 568 and that the data folder and its account file are owned by 568:568. Check that the account file is mode 0600.
