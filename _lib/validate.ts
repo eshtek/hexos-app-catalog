@@ -281,7 +281,11 @@ function validate(file: string, script: Record<string, unknown>) {
       if (signIn.adds_user !== undefined && typeof signIn.adds_user !== "boolean") {
         err(file, "sign_in.adds_user must be true or false");
       }
-      const extra = Object.keys(signIn).filter((key) => key !== "username" && key !== "adds_user");
+      // An app whose first account takes the owner's email: only then does HexOS ask for one
+      if (signIn.email !== undefined && typeof signIn.email !== "boolean") {
+        err(file, "sign_in.email must be true or false");
+      }
+      const extra = Object.keys(signIn).filter((key) => !["username", "adds_user", "email"].includes(key));
       if (extra.length > 0) err(file, `sign_in: unknown keys ${extra.join(", ")}`);
     }
     // The sign-in is set by a hook; a script with none would promise the owner one it never gets
