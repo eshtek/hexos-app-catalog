@@ -38,6 +38,7 @@ import {
   portMacrosWellFormed,
   portsCanMove,
   preferredPort,
+  publishedPorts,
   type Finding,
 } from "./ports";
 import { instanceRules, linkCopyRules } from "./instances";
@@ -981,8 +982,8 @@ for (const file of files) {
 
 // A hook reaches an app at the box's LAN IP and the app's requirements.ports[0] (getInstalledAppUrl,
 // ctx.baseUrl), so an app a hook runs on or names must publish its web UI on that port, pinned in
-// app_values.network (web_port, or http_port for Emby), as a number or $PORT(n). A container's own port
-// (Radarr's 7878) is not where TrueNAS publishes it.
+// app_values.network (web_port, or http_port for Emby), or a custom app's app_values.ports,
+// as a number or $PORT(n). A container's own port (Radarr's 7878) is not where TrueNAS publishes it.
 const parsedScripts = new Map<string, Record<string, unknown>>();
 for (const file of files) {
   try {
@@ -1007,14 +1008,19 @@ for (const appId of [...linkedApps].sort()) {
   const declared = Array.isArray(requirements.ports) ? requirements.ports[0] : undefined;
   const appValues = isObject(script.app_values) ? script.app_values : {};
   const network = isObject(appValues.network) ? appValues.network : {};
-  const pinned = Object.values(network)
+  const namedPins = Object.values(network)
     .filter(isObject)
     .map((port) => preferredPort(port.port_number))
     .filter((port) => port !== undefined);
+  const customPins = script.custom === true
+    ? publishedPorts(script).flatMap((pin) => "port" in pin && pin.path.startsWith("app_values.ports[") ? [pin.port] : [])
+    : [];
+  const pinned = [...namedPins, ...customPins];
+  const pinLocation = script.custom === true ? "app_values.ports" : "app_values.network";
   if (pinned.length === 0) {
-    warn(`${appId}.json`, `takes part in a hook, so pin its web port in app_values.network (requirements.ports[0] is ${declared ?? "missing"})`);
+    warn(`${appId}.json`, `takes part in a hook, so pin its web port in ${pinLocation} (requirements.ports[0] is ${declared ?? "missing"})`);
   } else if (!pinned.includes(declared)) {
-    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in app_values.network (${pinned.join(", ")})`);
+    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in ${pinLocation} (${pinned.join(", ")})`);
   }
 }
 
