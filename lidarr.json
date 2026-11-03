@@ -83,7 +83,7 @@
     {
       "id": "seed-sign-in",
       "title": "Set Lidarr's sign-in",
-      "description": "Sets Lidarr's sign-in, so it opens without one on your home network",
+      "description": "Creating admin account",
       "events": [
         "onBeforeInstall"
       ],

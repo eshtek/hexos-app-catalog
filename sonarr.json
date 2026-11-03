@@ -83,7 +83,7 @@
     {
       "id": "seed-sign-in",
       "title": "Set Sonarr's sign-in",
-      "description": "Sets Sonarr's sign-in, so it opens without one on your home network",
+      "description": "Creating admin account",
       "events": [
         "onBeforeInstall"
       ],

@@ -80,7 +80,7 @@
     {
       "id": "seed-sign-in",
       "title": "Set Chaptarr's sign-in",
-      "description": "Gives Chaptarr the sign-in you chose before it first starts.",
+      "description": "Creating admin account",
       "events": [
         "onBeforeInstall"
       ],
