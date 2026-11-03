@@ -5,6 +5,12 @@ import { join } from "node:path";
 import type { HookContext } from "../_lib/hook_context";
 
 const APP_UID = 568;
+// HexOS folders carry an inherited NFSv4 ACL, so what The Lounge makes reads as 0770 to apps and
+// root whatever mode it asked for. Only a stranger's access is refused: anyone else, or a group
+// other than root's and apps'.
+const TRUSTED_GROUPS = new Set([0, APP_UID]);
+export const privateToApp = (stat: { uid: number; gid: number; mode: number }) =>
+  stat.uid === APP_UID && (stat.mode & 0o007) === 0 && ((stat.mode & 0o070) === 0 || TRUSTED_GROUPS.has(stat.gid));
 const USERNAME = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
 /** The Lounge 4.5.2 stores each account in users/<name>.json and watches that directory. */
@@ -45,8 +51,8 @@ export async function createAccount(ctx: HookContext) {
       if (!current.isDirectory() || current.dev !== opened.dev || current.ino !== opened.ino) {
         ctx.fail("The Lounge's users directory changed during account setup. Retry after checking the data folder.");
       }
-      if (opened.uid !== APP_UID || (opened.mode & 0o077) !== 0) {
-        ctx.fail("The Lounge's users directory must be owned by apps (UID 568) and private (mode 0700).");
+      if (!privateToApp(opened)) {
+        ctx.fail("The Lounge's users directory must be owned by apps (UID 568) and closed to other users.");
       }
     };
     checkDirectory();
@@ -56,7 +62,7 @@ export async function createAccount(ctx: HookContext) {
     const target = join(dir, filename);
     const checkExisting = () => {
       const existing = lstatSync(target);
-      if (!existing.isFile() || existing.uid !== APP_UID || (existing.mode & 0o777) !== 0o600) {
+      if (!existing.isFile() || !privateToApp(existing)) {
         ctx.fail(`The existing ${username} account is not a private, regular file owned by apps. Check its permissions before retrying.`);
       }
     };
