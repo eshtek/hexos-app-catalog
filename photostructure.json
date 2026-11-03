@@ -1,14 +1,21 @@
 {
   "version": 6,
   "script": {
-    "version": "1.2.0",
-    "changeLog": "Photos is mounted at /ps/originals as PhotoStructure's originals folder, with the host-path map; a per-install token guards the preview route; the EULA and the photo and video tools are install questions, off by default, in place of the first-run hooks; file browser previews are declared through PhotoStructure's preview route."
+    "version": "1.4.0",
+    "changeLog": "The other default folders (Downloads, Documents, Media, Music, Movies, Shows, Videos) are mounted under PhotoStructure's no-import root, so the file browser gets their thumbnails and each has Show in file browser, while PhotoStructure imports Photos alone and writes nothing there. The file browser's right-click menu gets Open in PhotoStructure for a photo or video under Photos, the folder PhotoStructure imports, and PhotoStructure's Show in file browser opens the folder on this server's own deck by the Folder's name; the licence and the tools questions link their pages. Photos is mounted at /ps/originals as PhotoStructure's originals folder, with the host-path map; a per-install token guards the preview route; the EULA and the photo and video tools are install questions, off by default, in place of the first-run hooks; file browser previews are declared through PhotoStructure's preview route; an attach anchor under the app's no-import root takes any other Folder the owner grants, bound by HexOS without a restart."
   },
   "requirements": {
     "locations": [
       "ApplicationsPerformance",
       "ApplicationsCapacity",
-      "Photos"
+      "Photos",
+      "Downloads",
+      "Documents",
+      "Media",
+      "Music",
+      "Movies",
+      "Shows",
+      "Videos"
     ],
     "specifications": [
       "2CORE",
@@ -38,7 +45,11 @@
         }
       ],
       "default": "false",
-      "description": "PhotoStructure finishes its first-run setup on its own when you accept; otherwise it asks you when you first open it. The agreement is at https://photostructure.com/legal/eula/"
+      "description": "PhotoStructure finishes its first-run setup on its own when you accept; otherwise it asks you when you first open it.",
+      "link": {
+        "url": "https://photostructure.com/legal/eula/",
+        "label": "Read the agreement"
+      }
     },
     {
       "question": "Install the photo and video tools?",
@@ -56,7 +67,11 @@
         }
       ],
       "default": "false",
-      "description": "Needed for HEIC photos and for videos, including their thumbnails in the file browser. These third-party tools aren't part of PhotoStructure, which doesn't distribute, warrant, or support them. They may require patent licenses depending on where and how you use them. You're responsible for compliance."
+      "description": "Needed for HEIC photos and for videos, including their thumbnails in the file browser. These third-party tools aren't part of PhotoStructure, which doesn't distribute, warrant, or support them. They may require patent licenses depending on where and how you use them. You're responsible for compliance.",
+      "link": {
+        "url": "https://photostructure.com/getting-started/media-codec-support/",
+        "label": "Learn more"
+      }
     }
   ],
   "ensure_directories_exists": [
@@ -68,6 +83,34 @@
     },
     {
       "path": "$LOCATION(Photos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Documents)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Music)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Movies)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Shows)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Videos)",
       "network_share": true
     },
     {
@@ -104,7 +147,11 @@
         },
         {
           "name": "PS_HOST_PATHS",
-          "value": "{\"$LOCATION(Photos)\":\"/ps/originals\"}"
+          "value": "{\"$LOCATION(Photos)\":\"/ps/originals\",\"$LOCATION(Downloads)\":\"/ps/no-import/downloads\",\"$LOCATION(Documents)\":\"/ps/no-import/documents\",\"$LOCATION(Media)\":\"/ps/no-import/media\",\"$LOCATION(Music)\":\"/ps/no-import/music\",\"$LOCATION(Movies)\":\"/ps/no-import/movies\",\"$LOCATION(Shows)\":\"/ps/no-import/shows\",\"$LOCATION(Videos)\":\"/ps/no-import/videos\",\"/mnt\":\"/ps/no-import/hexos/mnt\"}"
+        },
+        {
+          "name": "PS_FILE_BROWSER_URLS",
+          "value": "{\"$LOCATION(Photos)\":\"$DECK_FOLDER_URL(Photos)\",\"$LOCATION(Downloads)\":\"$DECK_FOLDER_URL(Downloads)\",\"$LOCATION(Documents)\":\"$DECK_FOLDER_URL(Documents)\",\"$LOCATION(Media)\":\"$DECK_FOLDER_URL(Media)\",\"$LOCATION(Music)\":\"$DECK_FOLDER_URL(Music)\",\"$LOCATION(Movies)\":\"$DECK_FOLDER_URL(Movies)\",\"$LOCATION(Shows)\":\"$DECK_FOLDER_URL(Shows)\",\"$LOCATION(Videos)\":\"$DECK_FOLDER_URL(Videos)\"}"
         },
         {
           "name": "PS_PREVIEW_API_TOKEN",
@@ -129,7 +176,15 @@
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/photostructure/config)",
       "cache": "$HOST_PATH($LOCATION(ApplicationsPerformance)/photostructure/cache)",
       "additional_storage": [
-        "$MOUNTED_HOST_PATH($LOCATION(Photos), /ps/originals)"
+        "$MOUNTED_HOST_PATH($LOCATION(Photos), /ps/originals)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /ps/no-import/downloads)",
+        "$MOUNTED_HOST_PATH($LOCATION(Documents), /ps/no-import/documents)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media), /ps/no-import/media)",
+        "$MOUNTED_HOST_PATH($LOCATION(Music), /ps/no-import/music)",
+        "$MOUNTED_HOST_PATH($LOCATION(Movies), /ps/no-import/movies)",
+        "$MOUNTED_HOST_PATH($LOCATION(Shows), /ps/no-import/shows)",
+        "$MOUNTED_HOST_PATH($LOCATION(Videos), /ps/no-import/videos)",
+        "$MOUNTED_HOST_PATH($LOCATION(ApplicationsPerformance)/.hexos-attach/photostructure, /ps/no-import/hexos)"
       ]
     },
     "network": {
@@ -145,6 +200,48 @@
       }
     }
   },
+  "links": [
+    {
+      "id": "open",
+      "title": "Open in PhotoStructure",
+      "description": "Shows the photo or video in PhotoStructure. Offered under Photos, the folder PhotoStructure imports.",
+      "kind": "file.link",
+      "surfaces": [
+        "fileBrowser"
+      ],
+      "target": {
+        "type": "files",
+        "accepts": [
+          ".jpg",
+          ".jpeg",
+          ".png",
+          ".gif",
+          ".webp",
+          ".bmp",
+          ".tif",
+          ".tiff",
+          ".heic",
+          ".heif",
+          ".avif",
+          ".mp4",
+          ".m4v",
+          ".mov",
+          ".mkv",
+          ".webm",
+          ".avi",
+          ".mpg",
+          ".mpeg",
+          ".wmv",
+          ".ts",
+          ".3gp"
+        ]
+      },
+      "mounts": [
+        "/ps/originals"
+      ],
+      "url": "/open?path={hostPath}"
+    }
+  ],
   "previewsSchema": 1,
   "previews": [
     {
@@ -185,10 +282,40 @@
       "outputs": [
         "image/jpeg"
       ],
-      "mounts": {
-        "containerRoot": "/ps/originals",
-        "descendants": false
-      },
+      "mounts": [
+        {
+          "containerRoot": "/ps/originals",
+          "descendants": false
+        },
+        {
+          "containerRoot": "/ps/no-import/downloads",
+          "descendants": false
+        },
+        {
+          "containerRoot": "/ps/no-import/documents",
+          "descendants": false
+        },
+        {
+          "containerRoot": "/ps/no-import/media",
+          "descendants": false
+        },
+        {
+          "containerRoot": "/ps/no-import/music",
+          "descendants": false
+        },
+        {
+          "containerRoot": "/ps/no-import/movies",
+          "descendants": false
+        },
+        {
+          "containerRoot": "/ps/no-import/shows",
+          "descendants": false
+        },
+        {
+          "containerRoot": "/ps/no-import/videos",
+          "descendants": false
+        }
+      ],
       "credentials": [
         {
           "id": "token",
