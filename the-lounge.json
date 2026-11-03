@@ -10,7 +10,7 @@
     "keywords": ["irc", "chat", "thelounge", "bouncer"],
     "homepage": "https://thelounge.chat",
     "sources": ["https://github.com/thelounge/thelounge", "https://github.com/thelounge/thelounge-docker"],
-    "screenshots": []
+    "screenshots": ["the-lounge/screenshot-chat.png", "the-lounge/screenshot-login.png"]
   },
   "script": {
     "version": "1.0.0",

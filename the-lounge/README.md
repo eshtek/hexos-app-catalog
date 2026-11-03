@@ -19,3 +19,5 @@ The HexOS sign-in must have a username made of letters, numbers, dots, underscor
 5. Test a second install or update over existing data and confirm the hook does not replace the existing account or history.
 
 Icon: The Lounge's `client/public/img/logo-grey-bg.svg` from the MIT-licensed [v4.5.2 source](https://github.com/thelounge/thelounge/tree/v4.5.2).
+
+Catalog screenshots were captured from the official 4.5.2 Docker image running locally with a disposable account. The chat screenshot uses sample messages from a local IRC server. They show The Lounge's UI, not a HexOS installation or Launch test.
