@@ -9,6 +9,7 @@ import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
   CALL_MACROS,
+  LINK_PATH_PLACEHOLDER,
   HOOK_CONDITION_ROLES,
   HOOK_CONDITION_TYPES,
   HOOK_EVENT_SPECS,
@@ -173,6 +174,33 @@ function checkWidgetSlots(file: string, where: string, slots: unknown) {
   }
 }
 
+/**
+ * A container root as the platform takes it (packages/shared/eshtek/filePreviews.ts and appLinks.ts): one
+ * or more non-empty segments, so neither "/" (every mount) nor "//x" nor a trailing slash.
+ */
+const CONTAINER_ROOT = /^(?:\/[^/]+)+$/;
+
+/**
+ * A link's path stays on the app (packages/shared/eshtek/appLinks.ts, isLinkPath): one leading slash,
+ * no second slash or backslash there, no control or space character the URL parser would drop.
+ */
+const LINK_PATH = /^\/(?![/\\])[^\\\s\p{Cc}]*$/u;
+
+/**
+ * A web address as the platform's question-link schema takes it: written with its scheme and slashes
+ * (the deck binds the text as it is, so "https:example.com" would resolve against the deck's page)
+ * and parsing as a URL with a host.
+ */
+function isWebAddress(value: string): boolean {
+  if (!/^https?:\/\//.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function checkMacros(file: string, script: unknown, questionKeys: Set<string>) {
   const raw = JSON.stringify(script);
 
@@ -223,11 +251,11 @@ function checkMacros(file: string, script: unknown, questionKeys: Set<string>) {
   }
 
   // replaceLocation() throws PROCESS_INSTALL_SCRIPT_UNKNOWN_LOCATION on any
-  // name outside LocationPreferenceId, which aborts the whole install.
-  for (const match of raw.matchAll(/\$LOCATION\(([^)]+)\)/g)) {
-    const name = match[1].trim();
+  // name outside LocationPreferenceId, which aborts the whole install; $DECK_FOLDER_URL takes the same names.
+  for (const match of raw.matchAll(/\$(LOCATION|DECK_FOLDER_URL)\(([^)]+)\)/g)) {
+    const name = match[2].trim();
     if (!(LOCATIONS as readonly string[]).includes(name)) {
-      err(file, `$LOCATION(${name}) is not a known location`);
+      err(file, `$${match[1]}(${name}) is not a known location`);
     }
   }
 
@@ -376,6 +404,12 @@ function validate(file: string, script: Record<string, unknown>) {
     // The app's Settings tab shows a text answer as it is and hides a password until asked
     if (q.type === "text" && SECRET_KEY.test(key)) {
       err(file, `${where}: question "${key}" names a secret, so make its type "password"`);
+    }
+    // A link beside the description: the page it opens (a web address the platform's URL check takes) and the words on it
+    if (q.link !== undefined) {
+      if (!isObject(q.link) || typeof q.link.url !== "string" || !isWebAddress(q.link.url) || typeof q.link.label !== "string" || !q.link.label.trim()) {
+        err(file, `${where}: question "${key}" link must be { "url": "https://...", "label": "..." }`);
+      }
     }
   };
 
@@ -714,19 +748,24 @@ function validate(file: string, script: Record<string, unknown>) {
         if (!Array.isArray(preview.outputs) || preview.outputs.length === 0 || preview.outputs.some((o) => !(PREVIEW_OUTPUT_TYPES as readonly string[]).includes(o as string))) {
           err(file, `${where}: outputs must be a non-empty list from ${PREVIEW_OUTPUT_TYPES.join(", ")}`);
         }
-        const mounts = preview.mounts;
-        if (!isObject(mounts)) {
-          err(file, `${where}.mounts: an object with containerRoot, and storage when the chart keeps the folder under a key`);
-        } else {
+        // One mount or a list of them, each the container root of a folder the app serves
+        const mountList = Array.isArray(preview.mounts) ? preview.mounts : [preview.mounts];
+        if (Array.isArray(preview.mounts) && preview.mounts.length === 0) err(file, `${where}.mounts: a list of mounts holds at least one`);
+        for (const [m, mounts] of mountList.entries()) {
+          const at = Array.isArray(preview.mounts) ? `${where}.mounts[${m}]` : `${where}.mounts`;
+          if (!isObject(mounts)) {
+            err(file, `${at}: an object with containerRoot, and storage when the chart keeps the folder under a key`);
+            continue;
+          }
           // storage names the chart's storage entry for the served folder; absent, the folder is the mount at the container root itself
           if (mounts.storage !== undefined && (typeof mounts.storage !== "string" || !mounts.storage.trim())) {
-            err(file, `${where}.mounts: storage, when given, names the chart's storage entry the app serves`);
+            err(file, `${at}: storage, when given, names the chart's storage entry the app serves`);
           }
-          if (typeof mounts.containerRoot !== "string" || !/^\/(?!.*\/\/)(?!.*\/$)/.test(mounts.containerRoot)) {
-            err(file, `${where}.mounts: containerRoot is an absolute path without a trailing slash`);
+          if (typeof mounts.containerRoot !== "string" || !CONTAINER_ROOT.test(mounts.containerRoot)) {
+            err(file, `${at}: containerRoot is an absolute container path of one or more segments, no empty segment and no trailing slash`);
           }
           if (mounts.descendants !== undefined && typeof mounts.descendants !== "boolean") {
-            err(file, `${where}.mounts: descendants, when given, is true or false`);
+            err(file, `${at}: descendants, when given, is true or false`);
           }
         }
         if (!Array.isArray(preview.credentials)) {
@@ -779,6 +818,58 @@ function validate(file: string, script: Record<string, unknown>) {
         }
         if (preview.conditions !== undefined) {
           err(file, `${where}: conditions are not part of previewsSchema ${SUPPORTED_PREVIEWS_SCHEMA}; the app must be running, which the platform checks itself`);
+        }
+      }
+    }
+  }
+
+  // --- links (v6): a page of the app's web UI the file browser's right-click menu opens for a file ---
+  if (script.links !== undefined) {
+    if (version !== 6) err(file, "links require version 6");
+    if (!Array.isArray(script.links)) {
+      err(file, "links must be an array");
+    } else {
+      const linkIds = new Set<string>();
+      for (const [i, link] of script.links.entries()) {
+        const where = `links[${i}]`;
+        if (!isObject(link)) {
+          err(file, `${where}: must be an object`);
+          continue;
+        }
+        const lid = link.id;
+        if (typeof lid !== "string" || !/^[a-z0-9_-]+$/.test(lid)) {
+          err(file, `${where}: id must be lowercase alphanumeric with hyphens/underscores`);
+        } else {
+          if (linkIds.has(lid)) err(file, `${where}: duplicate link id "${lid}"`);
+          // The deck keys an app's rows and their Settings switches by one id space
+          if (hookIds.has(lid)) err(file, `${where}: link id "${lid}" is also a hook id`);
+          linkIds.add(lid);
+        }
+        if (typeof link.title !== "string" || !link.title.trim()) err(file, `${where}: title is missing`);
+        if (link.description !== undefined && typeof link.description !== "string") err(file, `${where}: description must be a string`);
+        if (link.kind !== "file.link") err(file, `${where}: kind must be "file.link"`);
+        if (!Array.isArray(link.surfaces) || link.surfaces.length === 0 || link.surfaces.some((s) => s !== "fileBrowser")) {
+          err(file, `${where}: surfaces must be a non-empty array of "fileBrowser"`);
+        }
+        const target = link.target;
+        if (!isObject(target) || target.type !== "files") {
+          err(file, `${where}: target must be { "type": "files", "accepts": [".ext", ...] }`);
+        } else if (!Array.isArray(target.accepts) || target.accepts.length === 0 || target.accepts.some((e) => typeof e !== "string" || !/^\.[a-z0-9]+$/i.test(e))) {
+          err(file, `${where}.target.accepts: a non-empty list of dot-prefixed extensions`);
+        } else if (target.maxFiles !== undefined) {
+          err(file, `${where}.target: a link opens one file; maxFiles is not part of a link`);
+        }
+        // The container roots the link applies to, when it applies to some of the app's folders only
+        if (link.mounts !== undefined) {
+          if (!Array.isArray(link.mounts) || link.mounts.length === 0 || link.mounts.some((root) => typeof root !== "string" || !CONTAINER_ROOT.test(root))) {
+            err(file, `${where}.mounts: a non-empty list of absolute container roots, each one or more segments, no empty segment and no trailing slash`);
+          }
+        }
+        if (typeof link.url !== "string" || !LINK_PATH.test(link.url) || !link.url.includes(LINK_PATH_PLACEHOLDER)) {
+          err(file, `${where}: url is a path on the app starting with / and carrying ${LINK_PATH_PLACEHOLDER}, with no second slash, backslash, space or control character`);
+        }
+        if (link.conditions !== undefined) {
+          err(file, `${where}: conditions are not part of a link; the app must be running, which the platform checks itself`);
         }
       }
     }
@@ -927,7 +1018,7 @@ function validate(file: string, script: Record<string, unknown>) {
   // resolves — but HexOS never prompts for it, so the requirements screen and
   // the permission grant are both wrong.
   const used = new Set(
-    [...JSON.stringify(script).matchAll(/\$LOCATION\(([^)]+)\)/g)].map((m) => m[1].trim()),
+    [...JSON.stringify(script).matchAll(/\$(?:LOCATION|DECK_FOLDER_URL)\(([^)]+)\)/g)].map((m) => m[1].trim()),
   );
   for (const loc of used) {
     if ((LOCATIONS as readonly string[]).includes(loc) && !declaredLocations.has(loc)) {

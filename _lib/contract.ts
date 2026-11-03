@@ -66,6 +66,9 @@ export const CALL_MACROS = [
   "DISPLAY_GPU_PCI",
   "DISPLAY_GPU_CONFIG",
   "DISPLAY_PORT",
+  // The address of a location's Folder page on the box's own deck (<deck>/folders/<share name>/files),
+  // for an app that links back to the deck. The argument is a location name, as $LOCATION takes.
+  "DECK_FOLDER_URL",
 ] as const;
 
 /** Macros substituted as bare tokens, with no argument list. */
@@ -117,6 +120,12 @@ export const SUPPORTED_WIDGETS_SCHEMA = 3;
 
 /** The previews schema the backend parses (packages/shared/eshtek/filePreviews.ts). */
 export const SUPPORTED_PREVIEWS_SCHEMA = 1;
+
+/**
+ * The placeholder a link's url carries for the file's URL-encoded host path. Links ride the version 6
+ * script (packages/shared/eshtek/appLinks.ts): a `links` list beside the hooks, no schema key of its own.
+ */
+export const LINK_PATH_PLACEHOLDER = "{hostPath}";
 
 /** The raster types a preview may come back as; nothing that can carry a script or a reference. */
 export const PREVIEW_OUTPUT_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif", "image/bmp"] as const;
