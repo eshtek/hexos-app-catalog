@@ -22,7 +22,7 @@ const signInContext = (credentials: Record<string, string>): PreviewSignInContex
 const pictureContext = (size: number): PreviewPictureContext => ({
   app,
   path: "2024/a b/IMG_0001.heic",
-  hostPath: "/mnt/HDDs-2/Photos/2024/a b/IMG_0001.heic",
+  hostPath: "/mnt/HDDs/Photos/2024/a b/IMG_0001.heic",
   kind: "image",
   extension: "heic",
   size,
@@ -40,10 +40,10 @@ describe("the PhotoStructure previews adapter", () => {
 
   test("names the preview route with the file's path on the server, encoded whole, at the long edge for the ask", async () => {
     expect(await picture(pictureContext(320))).toEqual({
-      path: "/api/preview?path=%2Fmnt%2FHDDs-2%2FPhotos%2F2024%2Fa%20b%2FIMG_0001.heic&size=480",
+      path: "/api/preview?path=%2Fmnt%2FHDDs%2FPhotos%2F2024%2Fa%20b%2FIMG_0001.heic&size=480",
     });
     expect(await picture(pictureContext(1080))).toEqual({
-      path: "/api/preview?path=%2Fmnt%2FHDDs-2%2FPhotos%2F2024%2Fa%20b%2FIMG_0001.heic&size=1620",
+      path: "/api/preview?path=%2Fmnt%2FHDDs%2FPhotos%2F2024%2Fa%20b%2FIMG_0001.heic&size=1620",
     });
   });
 
