@@ -1,8 +1,14 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial"
+    "version": "1.1.0",
+    "changeLog": "Shows Crafty's sign-in in the Settings tab, and changes its password from there"
+  },
+  "generated_sign_in": {
+    "file": "config/default-creds.txt",
+    "username": "username",
+    "password": "password",
+    "change_hook": "change-password"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
@@ -67,5 +73,37 @@
         "memory": 4096
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "change-password",
+      "title": "Change Crafty's password",
+      "description": "Sets a new password for Crafty's admin sign-in",
+      "events": ["userAction"],
+      "surfaces": ["settings"],
+      "rerun": "idempotent",
+      "inputs": [
+        {
+          "type": "question",
+          "id": "password",
+          "question": {
+            "question": "New password (at least 8 characters)",
+            "type": "password",
+            "key": "password",
+            "required": true
+          }
+        }
+      ],
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "crafty-4"
+        }
+      ],
+      "script": "crafty-4/change_password.ts",
+      "entrypoint": "run",
+      "timeout": 900
+    }
+  ]
 }

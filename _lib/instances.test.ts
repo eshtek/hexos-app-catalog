@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { asFirstCopy, instanceChangeProblems, instanceRules } from "./instances";
+import { asFirstCopy, instanceChangeProblems, instanceRules, linkCopyRules } from "./instances";
 
 const script = (requirements: Record<string, unknown>, folders: string[], port: unknown = "$PORT(30100)") => ({
   requirements: { ports: [30100], ...requirements },
@@ -72,5 +72,30 @@ describe("instanceChangeProblems", () => {
 
   test("a new script has nothing to keep", () => {
     expect(instanceChangeProblems({}, macro)).toEqual([]);
+  });
+});
+
+describe("linkCopyRules", () => {
+  const hook = (extra: Record<string, unknown> = {}) => ({
+    id: "connect-sonarr",
+    conditions: [
+      { role: "visibility", type: "appInstalled", app: "sonarr" },
+      { role: "availability", type: "appRunning", app: "prowlarr" },
+    ],
+    ...extra,
+  });
+  const copies = (app: string) => app === "sonarr";
+
+  test("a link to an app with copies has to say how it treats them", () => {
+    expect(linkCopyRules("prowlarr", { hooks: [hook()] }, copies).map((f) => f.message)).toEqual([
+      'hook "connect-sonarr" names sonarr, which runs in copies: say how it treats them with "copies"',
+    ]);
+    expect(linkCopyRules("prowlarr", { hooks: [hook({ copies: "each" })] }, copies)).toEqual([]);
+    expect(linkCopyRules("prowlarr", { hooks: [hook({ copies: "one" })] }, copies)).toEqual([]);
+  });
+
+  test("an app's own hooks and links to other apps are left alone", () => {
+    expect(linkCopyRules("sonarr", { hooks: [hook()] }, copies)).toEqual([]);
+    expect(linkCopyRules("prowlarr", { hooks: [hook()] }, () => false)).toEqual([]);
   });
 });

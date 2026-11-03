@@ -25,7 +25,7 @@ export const LOCATIONS = [
 ] as const;
 
 /** APP_SPEC_REGEX. DISPLAY: the app draws on a TV or monitor plugged into the server. */
-export const SPEC_REGEX = /^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$|^GPU$|^DISPLAY$/;
+export const SPEC_REGEX = /^(\d+)(MBRAM|GBRAM|GBVRAM|MB|GB|CORE)$|^GPU$|^DISPLAY$/;
 
 /** AppPermission. */
 export const PERMISSIONS = ["READ_WRITE_LOCATIONS"] as const;
@@ -96,7 +96,7 @@ export const HOOK_EVENT_SPECS = [
 export const HOOK_RERUNS = ["idempotent", "converge", "refuse"] as const;
 
 /** HookSurface — where a hook can appear. */
-export const HOOK_SURFACES = ["installPicker", "card", "fileBrowser", "widget"] as const;
+export const HOOK_SURFACES = ["installPicker", "card", "fileBrowser", "widget", "settings"] as const;
 
 /** Known hook condition types. Unknown types are accepted (fail closed at runtime). */
 export const HOOK_CONDITION_TYPES = [

@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.3.0",
-    "changeLog": "Uses the sign-in you choose, still opening without it on your home network. A Prowlarr you already have gets that sign-in too when you add it to a collection"
+    "version": "1.4.0",
+    "changeLog": "Prowlarr links to each copy of Radarr, Sonarr and Lidarr, by the name you gave it"
   },
   "sign_in": {
     "username": true
@@ -54,7 +54,7 @@
     {
       "id": "seed-sign-in",
       "title": "Set Prowlarr's sign-in",
-      "description": "Sets Prowlarr's sign-in, so it opens without one on your home network",
+      "description": "Creating admin account",
       "events": [
         "onBeforeInstall"
       ],
@@ -104,6 +104,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "prowlarr/connect_arr.ts",
       "entrypoint": "radarr",
       "timeout": 120,
@@ -132,6 +133,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "prowlarr/connect_arr.ts",
       "entrypoint": "sonarr",
       "timeout": 120,
@@ -160,8 +162,37 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "prowlarr/connect_arr.ts",
       "entrypoint": "lidarr",
+      "timeout": 120,
+      "retries": 0
+    },
+    {
+      "id": "connect-sportarr",
+      "title": "Connect to Sportarr",
+      "description": "Keeps Sportarr's indexers in sync with Prowlarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "prowlarr/connect_arr.ts",
+      "entrypoint": "sportarr",
       "timeout": 120,
       "retries": 0
     },
@@ -275,6 +306,62 @@
       "script": "servarr/connect_download_client.ts",
       "entrypoint": "nzbget",
       "timeout": 120,
+      "retries": 0
+    },
+    {
+      "id": "connect-chaptarr",
+      "title": "Connect to Chaptarr",
+      "description": "Keeps Chaptarr's indexers in sync with Prowlarr.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "prowlarr/connect_arr.ts",
+      "entrypoint": "chaptarr",
+      "timeout": 120,
+      "retries": 0
+    },
+    {
+      "id": "connect-flaresolverr",
+      "title": "Connect to FlareSolverr",
+      "description": "Lets Prowlarr reach indexers behind Cloudflare.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "flaresolverr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "flaresolverr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "prowlarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "prowlarr/connect_flaresolverr.ts",
+      "entrypoint": "run",
+      "timeout": 180,
       "retries": 0
     }
   ]

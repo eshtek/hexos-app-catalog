@@ -40,7 +40,7 @@ import {
   preferredPort,
   type Finding,
 } from "./ports";
-import { instanceRules } from "./instances";
+import { instanceRules, linkCopyRules } from "./instances";
 
 type Problem = { file: string; message: string };
 
@@ -406,6 +406,12 @@ function validate(file: string, script: Record<string, unknown>) {
     if (entry.network_share !== undefined && typeof entry.network_share !== "boolean") {
       err(file, `${where}.network_share must be a boolean`);
     }
+    if (entry.start_mount !== undefined) {
+      if (typeof entry.start_mount !== "string" || !entry.start_mount.startsWith("/")) {
+        err(file, `${where}.start_mount must be an absolute path inside the app`);
+      }
+      if (entry.owner === undefined) err(file, `${where}.start_mount needs an owner to give the folder to`);
+    }
   }
 
   // --- app_values ---
@@ -433,6 +439,29 @@ function validate(file: string, script: Record<string, unknown>) {
     }
     if (isObject(scriptMeta) && typeof scriptMeta.version === "string" && !/^\d+\.\d+\.\d+$/.test(scriptMeta.version)) {
       err(file, `script.version "${scriptMeta.version}" must be x.y.z: servers compare it with semver to offer the update`);
+    }
+  }
+
+  // --- generated_sign_in: a sign-in the app writes to one of its own folders ---
+  const generatedSignIn = script.generated_sign_in;
+  if (generatedSignIn !== undefined) {
+    if (!isObject(generatedSignIn)) {
+      err(file, "generated_sign_in must be an object");
+    } else {
+      for (const key of ["file", "username", "password"]) {
+        if (typeof generatedSignIn[key] !== "string") err(file, `generated_sign_in.${key} must be a string`);
+      }
+      const path = generatedSignIn.file;
+      if (typeof path === "string" && (path.split("/").length < 2 || path.split("/").some((part) => [".", "..", ""].includes(part)))) {
+        err(file, "generated_sign_in.file must start at one of the app's folders, with no . or .. in it");
+      }
+      const changeHook = generatedSignIn.change_hook;
+      const hook = ((script.hooks as unknown[]) ?? []).find((each) => isObject(each) && each.id === changeHook);
+      if (changeHook !== undefined && !isObject(hook)) {
+        err(file, `generated_sign_in.change_hook names no hook: ${String(changeHook)}`);
+      } else if (isObject(hook) && !(Array.isArray(hook.surfaces) && hook.surfaces.includes("settings"))) {
+        err(file, `generated_sign_in.change_hook "${String(changeHook)}" must have the settings surface`);
+      }
     }
   }
 
@@ -852,7 +881,8 @@ function validateCollection(file: string, collection: Record<string, unknown>, c
   const id = file.slice(COLLECTIONS_DIR.length + 1).replace(/\.json$/, "");
   if (!COLLECTION_ID.test(id)) err(file, "the file name must be the collection id: lowercase words joined by hyphens");
   if (collection.type !== "collection") err(file, 'type must be "collection"');
-  if (collection.version !== 1) err(file, "version must be 1");
+  if (collection.version !== 1 && collection.version !== 2) err(file, "version must be 1 or 2");
+  if (collection.version === 1 && collection.localAi !== undefined) err(file, "localAi needs a file of version 2");
   for (const field of ["name", "description"]) {
     if (typeof collection[field] !== "string" || !(collection[field] as string).trim()) err(file, `${field} is required`);
   }
@@ -992,6 +1022,9 @@ for (const appId of [...linkedApps].sort()) {
 for (const [appId, script] of parsedScripts) {
   report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script), ...instanceRules(appId, script)]);
 }
+const runsInCopies = (appId: string) =>
+  (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
+for (const [appId, script] of parsedScripts) report(`${appId}.json`, linkCopyRules(appId, script, runsInCopies));
 report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 
 const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));

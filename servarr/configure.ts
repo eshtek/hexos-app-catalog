@@ -4,7 +4,7 @@ import { chownSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
 /**
- * Sets Radarr, Sonarr, Lidarr and Prowlarr up as HexOS ships them. Fresh, Radarr, Lidarr and
+ * Sets Radarr, Sonarr, Lidarr, Chaptarr and Prowlarr up as HexOS ships them. Fresh, Radarr, Lidarr and
  * Prowlarr open on a screen that makes the owner choose a sign-in, and Sonarr on a sign-in page
  * whose password is only in its log. So HexOS gives each the sign-in the owner chose for the
  * install (`ctx.signIn`) and lets the home network in without it: seed-sign-in writes it into
@@ -12,16 +12,39 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * an app that has another (an app the owner already had, which a collection brings in), and adds
  * the library HexOS mounts as the app's root folder. With no sign-in from the owner (a deck from
  * before they chose one) the app gets admin/admin, kept beside its settings so a later check knows
- * it's HexOS's. Read at Radarr 6.4.4, Sonarr 5.0.0, Lidarr 3.1.6 and Prowlarr 2.6.5, the versions
- * TrueNAS pins.
+ * it's HexOS's. Read at Radarr 6.4.4, Sonarr 5.0.0, Lidarr 3.1.6, Chaptarr 0.9.965 and Prowlarr
+ * 2.6.5, the versions TrueNAS pins.
  */
 
-const APPS: Record<string, { name: string; api: string; library?: { path: string; name: string } }> = {
-  radarr: { name: "Radarr", api: "v3", library: { path: "/movies", name: "Movies" } },
-  sonarr: { name: "Sonarr", api: "v3", library: { path: "/shows", name: "Shows" } },
-  lidarr: { name: "Lidarr", api: "v1", library: { path: "/music", name: "Music" } },
+interface Library {
+  path: string;
+  name: string;
+  /** Chaptarr keeps ebooks and audiobooks in folders of their own, each with its own profiles. */
+  format?: "ebook" | "audiobook";
+}
+
+const APPS: Record<string, { name: string; api: string; libraries?: Library[]; noAllowedHosts?: boolean }> = {
+  radarr: { name: "Radarr", api: "v3", libraries: [{ path: "/movies", name: "Movies" }] },
+  sonarr: { name: "Sonarr", api: "v3", libraries: [{ path: "/shows", name: "Shows" }] },
+  lidarr: { name: "Lidarr", api: "v1", libraries: [{ path: "/music", name: "Music" }] },
+  chaptarr: {
+    name: "Chaptarr",
+    api: "v1",
+    // Chaptarr takes "Disabled for Local Addresses" without a list, and keeps none in its file
+    noAllowedHosts: true,
+    libraries: [
+      { path: "/books", name: "Books", format: "ebook" },
+      { path: "/audiobooks", name: "Audiobooks", format: "audiobook" },
+    ],
+  },
   prowlarr: { name: "Prowlarr", api: "v1" },
 };
+
+/** Chaptarr's folderType, and the profile each format starts with (the UI's own numbers at 0.9.965). */
+const CHAPTARR_FORMATS = {
+  ebook: { folderType: 2, quality: "E-Book", metadata: "Ebook Default" },
+  audiobook: { folderType: 1, quality: "Audiobook", metadata: "Audiobook Default" },
+} as const;
 
 /** The user the TrueNAS charts run these apps as. */
 const APPS_UID = 568;
@@ -48,7 +71,7 @@ interface Api {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function readText(path: string): string | undefined {
@@ -85,9 +108,10 @@ function keepDefault(config: ContextMount): SignIn {
 const forgetDefault = (config: ContextMount) => rmSync(signInPath(config), { force: true });
 
 function appOf(ctx: HookContext) {
-  const app = APPS[ctx.resourceId];
+  const catalogId = ctx.catalogAppId ?? ctx.resourceId;
+  const app = APPS[catalogId];
   if (!app) ctx.fail(`HexOS can't set up ${ctx.resourceId} this way`);
-  const config = configMount(ctx.mounts, ctx.resourceId);
+  const config = configMount(ctx.mounts, catalogId);
   if (!config) ctx.fail(`HexOS couldn't find ${app.name}'s settings folder`);
   return { app, config };
 }
@@ -221,7 +245,7 @@ async function signsIn(base: string, signIn: SignIn): Promise<boolean> {
   const response = await fetch(`${base}/login?returnUrl=%2F`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ username: signIn.username, password: signIn.password, rememberMe: "on" }),
+    body: new URLSearchParams({ username: signIn.username, password: signIn.password }),
     redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   }).catch(() => undefined);
@@ -250,7 +274,7 @@ async function setSignIn(
   const required = kept && host.authenticationRequired ? host.authenticationRequired : "disabledForLocalAddresses";
   const allowedHosts = host.allowedHosts ?? "";
   const standIn =
-    required === "disabledForLocalAddresses" && allowedHosts.trim() === "" ? new URL(api.base).hostname : undefined;
+    !app.noAllowedHosts && required === "disabledForLocalAddresses" && allowedHosts.trim() === "" ? new URL(api.base).hostname : undefined;
   try {
     await call(api, "/config/host", {
       method: "PUT",
@@ -321,7 +345,13 @@ async function ensureSignIn(ctx: HookContext, app: (typeof APPS)[string], config
     }
     // The apps keep usernames in lower case
     const named = (host.authenticationMethod === "forms" || host.authenticationMethod === "basic") && host.username === wanted.username.toLowerCase();
-    if (named && (await signsIn(ctx.baseUrl, wanted))) {
+    // Just started, an app can turn down the sign-in it was seeded with for a moment
+    let takes = false;
+    for (let attempt = 0; named && attempt < 5 && !takes; attempt++) {
+      takes = await signsIn(ctx.baseUrl, wanted);
+      if (!takes && attempt < 4) await ctx.sleep(2_000);
+    }
+    if (named && takes) {
       forgetDefault(config);
       await signedInAtHome();
       await ctx.skipCheckpoint("signIn", `${app.name} already uses the sign-in you chose`);
@@ -373,22 +403,47 @@ async function ensureSignIn(ctx: HookContext, app: (typeof APPS)[string], config
 
 const trimmed = (path: string) => path.replace(/\/+$/, "");
 
-/** The library HexOS mounts, as the app's root folder, when it has none. */
-async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: Api) {
-  const library = app.library;
-  if (!library) return;
-  const folders = () => call<Array<{ path: string }>>(api, "/rootfolder");
-  if ((await folders()).length > 0) {
-    await ctx.skipCheckpoint("library", `${app.name} already has a library folder`);
+/** Chaptarr's body for a folder: its fields carry the format's name, so each format is its own form. */
+async function chaptarrFolder(ctx: HookContext, api: Api, library: Library, format: "ebook" | "audiobook") {
+  const wanted = CHAPTARR_FORMATS[format];
+  const pick = (profiles: Array<{ id: number; name: string }>, name: string) =>
+    profiles.find((profile) => profile.name === name) ?? profiles.find((profile) => profile.name !== "None");
+  const quality = pick(await call(api, "/qualityprofile"), wanted.quality);
+  const metadata = pick(await call(api, "/metadataprofile"), wanted.metadata);
+  if (!quality || !metadata) ctx.fail(`Chaptarr has no profiles to give your ${library.name} folder yet. Try again in a minute.`);
+  return {
+    name: library.name,
+    folderType: wanted.folderType,
+    defaultTags: [],
+    isCalibreLibrary: false,
+    [`${format}Monitored`]: true,
+    [`${format}MonitorExistingMode`]: "all",
+    [`${format}MonitorNewItems`]: "all",
+    [`${format}QualityProfileId`]: quality.id,
+    [`${format}MetadataProfileId`]: metadata.id,
+    [`${format}Tags`]: [],
+  };
+}
+
+/** A library HexOS mounts, as a root folder of the app, when the app has none of its kind. */
+async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: Api, library: Library, checkpoint: string) {
+  const folders = () => call<Array<{ path: string; folderType?: number }>>(api, "/rootfolder");
+  const present = await folders();
+  const haveOne = library.format
+    ? present.some((entry) => entry.folderType === CHAPTARR_FORMATS[library.format as "ebook"].folderType || entry.folderType === 0)
+    : present.length > 0;
+  if (haveOne) {
+    await ctx.skipCheckpoint(checkpoint, `${app.name} already has a ${library.name} folder`);
     return;
   }
   if (ctx.mounts.length > 0 && !ctx.mounts.some((m) => m.containerPath === library.path)) {
-    await ctx.skipCheckpoint("library", `HexOS didn't give ${app.name} a ${library.name} folder, so it has none to add`);
+    await ctx.skipCheckpoint(checkpoint, `HexOS didn't give ${app.name} a ${library.name} folder, so it has none to add`);
     return;
   }
 
   const folder: Record<string, unknown> = { path: library.path };
-  if (ctx.resourceId === "lidarr") {
+  if (library.format) Object.assign(folder, await chaptarrFolder(ctx, api, library, library.format));
+  if ((ctx.catalogAppId ?? ctx.resourceId) === "lidarr") {
     // Lidarr's Standard profiles when it has them: its form starts on "Any", which takes any bitrate
     // and never upgrades it. Never the empty "None" metadata profile.
     const pick = (profiles: Array<{ id: number; name: string }>) =>
@@ -419,7 +474,7 @@ async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: 
   if (!(await folders()).some((entry) => trimmed(entry.path) === library.path)) {
     ctx.fail(`${app.name} saved your ${library.name} folder, but HexOS couldn't find it there`);
   }
-  await ctx.emitCheckpoint("library");
+  await ctx.emitCheckpoint(checkpoint);
 }
 
 export async function configure(ctx: HookContext) {
@@ -427,10 +482,15 @@ export async function configure(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "start", message: `Waiting for ${app.name} to start` },
     { id: "signIn", message: `Checking ${app.name}'s sign-in` },
-    ...(app.library ? [{ id: "library", message: `Adding your ${app.library.name} folder to ${app.name}` }] : []),
+    ...(app.libraries ?? []).map((library, index) => ({
+      id: `library-${index}`,
+      message: `Adding your ${library.name} folder to ${app.name}`,
+    })),
   ]);
   const api = await reach(ctx, app, config);
   await ctx.emitCheckpoint("start");
   await ensureSignIn(ctx, app, config, api);
-  await ensureLibrary(ctx, app, api);
+  for (const [index, library] of (app.libraries ?? []).entries()) {
+    await ensureLibrary(ctx, app, api, library, `library-${index}`);
+  }
 }

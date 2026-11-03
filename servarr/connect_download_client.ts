@@ -4,7 +4,7 @@ import { chownSync, mkdirSync, readFileSync } from "node:fs";
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
 /**
- * Adds a download client to Radarr, Sonarr, Lidarr or Prowlarr: the hook each of them declares per
+ * Adds a download client to Radarr, Sonarr, Lidarr, Chaptarr or Prowlarr: the hook each of them declares per
  * client (connect-qbittorrent, connect-deluge, connect-sabnzbd, connect-nzbget). Prowlarr's is for
  * what the owner grabs in Prowlarr's own search, which lands in a prowlarr category no manager imports. The client is added
  * through the manager's own schema, so a field the manager renames is still filled, and saved with
@@ -33,6 +33,8 @@ const MANAGERS = {
   radarr: { name: "Radarr", api: "v3", categoryField: "movieCategory" },
   sonarr: { name: "Sonarr", api: "v3", categoryField: "tvCategory" },
   lidarr: { name: "Lidarr", api: "v1", categoryField: "musicCategory" },
+  // Chaptarr sorts books and audiobooks with a field each, and both land in one category
+  chaptarr: { name: "Chaptarr", api: "v1", categoryField: "ebookCategory", alsoCategoryField: "audiobookCategory" },
   prowlarr: { name: "Prowlarr", api: "v1", categoryField: "category" },
 } as const;
 
@@ -40,10 +42,10 @@ type ManagerId = keyof typeof MANAGERS;
 
 /** Each manager's category: the manager's own choice in a torrent client, the client's own for Usenet. */
 const CATEGORIES: Record<string, Record<ManagerId, string>> = {
-  qbittorrent: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", prowlarr: "prowlarr" },
-  deluge: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", prowlarr: "prowlarr" },
-  sabnzbd: { radarr: "movies", sonarr: "tv", lidarr: "audio", prowlarr: "prowlarr" },
-  nzbget: { radarr: "Movies", sonarr: "Series", lidarr: "Music", prowlarr: "Prowlarr" },
+  qbittorrent: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", chaptarr: "chaptarr", prowlarr: "prowlarr" },
+  deluge: { radarr: "radarr", sonarr: "tv-sonarr", lidarr: "lidarr", chaptarr: "chaptarr", prowlarr: "prowlarr" },
+  sabnzbd: { radarr: "movies", sonarr: "tv", lidarr: "audio", chaptarr: "books", prowlarr: "prowlarr" },
+  nzbget: { radarr: "Movies", sonarr: "Series", lidarr: "Music", chaptarr: "Books", prowlarr: "Prowlarr" },
 };
 
 interface Field {
@@ -90,7 +92,7 @@ interface Client {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function readText(path: string): string | undefined {
@@ -120,7 +122,7 @@ async function until(ctx: HookContext, check: () => Promise<boolean>, attempts: 
 }
 
 async function managerApi<T>(ctx: HookContext, apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
-  const manager = MANAGERS[ctx.resourceId as ManagerId];
+  const manager = MANAGERS[(ctx.catalogAppId ?? ctx.resourceId) as ManagerId];
   const response = await fetch(`${ctx.baseUrl}/api/${manager.api}${path}`, {
     ...init,
     headers: { "X-Api-Key": apiKey, "Content-Type": "application/json" },
@@ -154,7 +156,7 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
     { id: "configure", message: `Adding ${name} as a download client` },
   ]);
 
-  const managerId = ctx.resourceId as ManagerId;
+  const managerId = (ctx.catalogAppId ?? ctx.resourceId) as ManagerId;
   const manager = MANAGERS[managerId];
   if (!manager) ctx.fail(`HexOS can't add a download client to ${ctx.resourceId}`);
   const apiKey = readText(`${configMount(ctx.mounts, managerId)?.localPath}/config.xml`)?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
@@ -167,7 +169,8 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
     host: parsed.hostname,
     port: Number(parsed.port),
     managerName: manager.name,
-    category: CATEGORIES[appId][managerId],
+    // A later copy has a category of its own: a manager imports whatever lands in its category
+    category: `${CATEGORIES[appId][managerId]}${ctx.resourceId.slice(managerId.length)}`,
     mounts: await ctx.getInstalledAppMounts(appId),
   };
   await ctx.emitCheckpoint("locate");
@@ -176,7 +179,11 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
   await ctx.emitCheckpoint("prepare");
 
   const connection: Record<string, unknown> = { host: client.host, port: client.port, useSsl: false, ...plan.connection };
-  const preferences: Record<string, unknown> = { [manager.categoryField]: client.category, ...plan.preferences };
+  const preferences: Record<string, unknown> = {
+    [manager.categoryField]: client.category,
+    ...("alsoCategoryField" in manager ? { [manager.alsoCategoryField]: client.category } : {}),
+    ...plan.preferences,
+  };
   const existing = (await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient")).find(
     (entry) =>
       entry.implementation === plan.implementation &&
@@ -468,6 +475,16 @@ export const deluge = (ctx: HookContext) =>
         !(await until(ctx, async () => !!delugeStartPlugins(configDir)?.includes("Label"), 15))
       ) {
         ctx.fail("Deluge turned on its Label plugin but didn't save that it did. Restart Deluge, then try again.");
+      }
+    }
+
+    // Deluge makes these at its first download, and until then a manager's health check says the
+    // completed folder is missing
+    const downloads = mounts.find((m) => m.containerPath === "/downloads/deluge");
+    if (downloads) {
+      for (const folder of ["incomplete", "complete"]) {
+        const local = `${downloads.localPath}/${folder}`;
+        if (mkdirSync(local, { recursive: true })) chownSync(local, APPS_UID, APPS_UID);
       }
     }
 

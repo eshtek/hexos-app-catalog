@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Uses the sign-in you choose. A Profilarr you already have gets that password when you add it to a collection"
+    "version": "1.2.0",
+    "changeLog": "Profilarr links to each copy of Radarr and Sonarr, by the name you gave it"
   },
   "sign_in": {
     "username": true
@@ -86,6 +86,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "profilarr/profilarr_hook.ts",
       "entrypoint": "radarr",
       "timeout": 900,
@@ -114,6 +115,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "profilarr/profilarr_hook.ts",
       "entrypoint": "sonarr",
       "timeout": 900,
