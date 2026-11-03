@@ -10,13 +10,12 @@ To add another user later, open the TrueNAS shell, identify The Lounge's contain
 
 The HexOS sign-in must have a username made of letters, numbers, dots, underscores or hyphens and a non-empty password of at most 72 UTF-8 bytes, matching The Lounge's bcrypt password limit. If the chosen username already exists, the hook preserves its current password and history. Change an existing password through The Lounge's UI or the reset command.
 
-## Server verification before merge
+## Checking a change on a HexOS server
 
-1. Before the hook file is available in the upstream catalog, run `bun the-lounge/make-custom-install.ts > the-lounge/the-lounge-custom-install.json` from the catalog checkout. Paste the generated JSON into HexOS Custom Install (Expert Mode) and choose a test sign-in. This embeds the same hook in `scriptContent` so the test does not depend on HexOS fetching a hook file from the unpublished PR branch. The generated file is ignored by Git.
-2. Confirm that the account-creation hook completes and Launch opens the login page on the published port.
-3. Sign in, join a test IRC network, send a message, then restart the app and confirm the account, network, and history remain.
-4. Confirm the container runs as UID/GID 568 and that the data folder and its account file are owned by 568:568. Check that the account file is mode 0600 and that any dataset ACL grants access only to intended users.
-5. Test a second install or update over existing data and confirm the hook does not replace the existing account or history.
+1. Install from the catalog with a test sign-in, and confirm the Set up admin account step completes and Launch opens the login page on the published port.
+2. Sign in, join a test IRC network, send a message, then restart the app and confirm the account, network, and history remain.
+3. Confirm the container runs as UID/GID 568, that the account file in `the-lounge/data/users` is owned by 568, and that its ACL grants nothing to other users.
+4. Run the setup step again over existing data and confirm it keeps the existing account and history.
 
 Icon: The Lounge's `client/public/img/logo-grey-bg.svg` from the MIT-licensed [v4.5.2 source](https://github.com/thelounge/thelounge/tree/v4.5.2).
 
