@@ -42,6 +42,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Minecraft](minecraft.json) | Minecraft Java Edition server |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
+| [Nevu](nevu.json) | Front-end interface for Plex |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [PairDrop](pairdrop.json) | Transfer files cross-clatform |
