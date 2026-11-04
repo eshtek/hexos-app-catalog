@@ -68,6 +68,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
+| [UniFi Protect Backup](unifi-protect-backup.json) | Backs up UniFi Protect camera events |
 | [Uptime Kuma](uptime-kuma.json) | Self-hosted uptime monitoring |
 | [Valheim](valheim.json) | Viking survival game server, joined with a crossplay join code |
 | [Vaultwarden](vaultwarden.json) | Bitwarden-compatible password manager |
