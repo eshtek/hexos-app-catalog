@@ -23,7 +23,10 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * after five failed sign-ins, so it is never tried ahead of one HexOS knows works.
  *
  * Run again, a link puts back how the manager reaches the client and its sign-in, and fills only the
- * choices the owner left empty.
+ * choices the owner left empty. A manager names each client once, so an entry under the client's name
+ * that it reaches at another address (the box's address or the client's port changed) is moved to
+ * this client: with proof it was this one, or with the owner's yes once nothing answers there. One
+ * that may be another client the owner chose is left as it is, and the link says which.
  */
 
 /** The user the TrueNAS charts run the download clients as. */
@@ -80,6 +83,14 @@ interface ClientPlan {
    * locked the manager out: the manager is given the sign-in anyway and connects once it ends.
    */
   lockout?: (managerName: string) => string;
+  /**
+   * What it proves when the manager's test of an entry's saved secret passes against this client:
+   * "key", a key only this client has (SABnzbd's); "sign-in", one the owner may use for another
+   * client too, so it counts only once nothing answers at the entry's address. Absent where a pass
+   * proves nothing: qBittorrent lets its home network in with any sign-in and counts each refused
+   * one toward its lockout, and a sign-in every install starts with is anyone's.
+   */
+  proof?: "key" | "sign-in";
 }
 
 interface Client {
@@ -113,12 +124,24 @@ function readJson<T>(path: string): T | undefined {
 
 const isEmpty = (value: unknown) => value === undefined || value === null || value === "";
 
+/** The fields that say where a manager reaches a client: what moving an entry to this client rewrites. */
+const ADDRESS_FIELDS = ["host", "port", "useSsl", "urlBase"];
+
 async function until(ctx: HookContext, check: () => Promise<boolean>, attempts: number): Promise<boolean> {
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (await check().catch(() => false)) return true;
     await ctx.sleep(1_000);
   }
   return false;
+}
+
+/** Whether anything answers at this address now. An app that's off, or an address nobody has any more, doesn't. */
+async function answering(url: string, timeoutMs = 10_000): Promise<boolean> {
+  // Any answer counts, so a certificate made for another name isn't taken for silence; nothing is sent
+  const init = { redirect: "manual", signal: AbortSignal.timeout(timeoutMs), tls: { rejectUnauthorized: false } };
+  const response = await fetch(url, init as RequestInit).catch(() => undefined);
+  await response?.body?.cancel().catch(() => undefined);
+  return response !== undefined;
 }
 
 async function managerApi<T>(ctx: HookContext, apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -161,6 +184,10 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
   if (!manager) ctx.fail(`HexOS can't add a download client to ${ctx.resourceId}`);
   const apiKey = readText(`${configMount(ctx.mounts, managerId)?.localPath}/config.xml`)?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
   if (!apiKey) ctx.fail(`HexOS couldn't read ${manager.name}'s API key yet. Try again once it has started.`);
+  // A manager that has only just started answers nothing for a while
+  if (!(await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 30))) {
+    ctx.fail(`${manager.name} isn't answering yet. Try again once it has started.`);
+  }
   const url = await ctx.getInstalledAppUrl(appId);
   if (!url) ctx.fail(`${name} isn't installed, or HexOS can't find its port`);
   const parsed = new URL(url);
@@ -184,12 +211,49 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
     ...("alsoCategoryField" in manager ? { [manager.alsoCategoryField]: client.category } : {}),
     ...plan.preferences,
   };
-  const existing = (await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient")).find(
+  const here = `${client.host}:${client.port}`;
+  // An entry under the client's name at another address: the box's address or the client's port
+  // changed, or it's another client the owner chose. It moves here with proof it was this client, or
+  // with the owner's yes once nothing answers there, and is left as it is otherwise.
+  const repair = async (entry: DownloadClient): Promise<DownloadClient> => {
+    const value = (field: string) => entry.fields.find((each) => each.name === field)?.value;
+    const at = `${value("host")}:${value("port")}`;
+    if (entry.implementation === plan.implementation) {
+      // The manager shows a secret it holds as ******** (SchemaBuilder) and tests an entry sent by id
+      // with the one it holds, so a pass at this client's address says the saved secret is this client's
+      const moved = {
+        ...entry,
+        fields: entry.fields.map((field) => (ADDRESS_FIELDS.includes(field.name) && field.name in connection ? { ...field, value: connection[field.name] } : field)),
+      };
+      const proven =
+        plan.proof !== undefined &&
+        (await managerApi(ctx, apiKey, "/downloadclient/test", { method: "POST", body: JSON.stringify(moved) }).then(
+          () => true,
+          () => false,
+        ));
+      if (proven && plan.proof === "key") return entry;
+      const silent = !(await answering(`${value("useSsl") === true ? "https" : "http"}://${at}${value("urlBase") ?? ""}`));
+      if (silent && (proven || (await ownerSwitches(ctx, manager.name, name, entry.name, at)))) return entry;
+    }
+    // It may be another client the owner chose, so it's theirs to change: trying again can't help
+    const message = `${manager.name} already has a download client named ${entry.name}, at ${at}. Rename that one in ${manager.name}'s Settings, under Download Clients, then run Connect to ${name} again.`;
+    const context = [
+      { label: `${manager.name}'s ${entry.name}`, value: at },
+      { label: `This ${name}`, value: here },
+    ];
+    if (ctx.skip) ctx.skip(message, context);
+    ctx.fail(message, context);
+  };
+  const entries = await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient");
+  const atThisAddress = entries.find(
     (entry) =>
       entry.implementation === plan.implementation &&
       entry.fields.some((field) => field.name === "host" && field.value === client.host) &&
       entry.fields.some((field) => field.name === "port" && Number(field.value) === client.port),
   );
+  // A manager refuses a second client under a name it has, whatever its case (ProviderControllerBase)
+  const named = atThisAddress ? undefined : entries.find((entry) => entry.name.toLowerCase() === plan.name.toLowerCase());
+  const existing = atThisAddress ?? (named ? await repair(named) : undefined);
   const template =
     existing ??
     (await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient/schema")).find(
@@ -267,11 +331,41 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
       return;
     }
   }
+  // One added since the list was read: a run again finds it under the name
+  if (refused !== undefined && /should be unique/i.test(reasonOf(refused))) {
+    ctx.fail(`${manager.name} already has a download client named ${plan.name}. Run Connect to ${name} again to check it.`);
+  }
   if (refused !== undefined) {
     const message = signInRefused(refused) ? `${name} didn't accept ${manager.name}'s sign-in` : `${manager.name} couldn't reach ${name}`;
     ctx.fail(message, [{ label: "Reason", value: reasonOf(refused) }]);
   }
-  await ctx.emitCheckpoint("configure");
+  await ctx.emitCheckpoint("configure", existing && !atThisAddress ? `${manager.name} reaches ${name} at its new address` : undefined);
+}
+
+/**
+ * Whether the owner wants a manager's entry moved to this client, once nothing answers at its
+ * address. Nothing proves it was this one (it may be another computer that's switched off), so the
+ * owner decides. False when they say no, skip the question, or this HexOS can't ask.
+ */
+async function ownerSwitches(ctx: HookContext, managerName: string, name: string, entryName: string, at: string): Promise<boolean> {
+  const answers = await ask(
+    ctx,
+    [
+      {
+        type: "question",
+        id: "switch",
+        question: {
+          question: `Switch ${managerName} to this ${name}`,
+          description: `${managerName} keeps its other settings for it.`,
+          type: "boolean",
+          key: "switch",
+          required: true,
+        },
+      },
+    ],
+    { title: `Switch ${managerName}'s ${name}`, description: `${managerName} sends downloads to ${entryName} at ${at}, which isn't answering.` },
+  );
+  return answers?.switch === true;
 }
 
 /** The owner's answers, or undefined when they skip, the wait runs out, or this HexOS can't ask. */
@@ -546,13 +640,16 @@ export const sabnzbd = (ctx: HookContext) =>
       ]);
     }
     if (!(await categories()).includes(category)) ctx.fail(`SABnzbd didn't make its ${category} category`);
-    return { name: "SABnzbd", implementation: "Sabnzbd", connection: { apiKey, urlBase: "" } };
+    // SABnzbd makes its API key at random when it first starts
+    return { name: "SABnzbd", implementation: "Sabnzbd", connection: { apiKey, urlBase: "" }, proof: "key" };
   });
 
 // --- NZBGet ------------------------------------------------------------------
 
 /** What NZBGet's settings file starts with (nzbget.conf at v26.3, the version TrueNAS pins). */
 const NZBGET_STOCK = { username: "nzbget", password: "tegbzn6789", mainDir: "/downloads" };
+/** Sign-ins many NZBGets have: its own to start with, and the one HexOS gives it when nobody chose one. */
+const NZBGET_SHARED = [NZBGET_STOCK, { username: "admin", password: "admin" }];
 /** The Downloads folder HexOS gives NZBGet, which it also sees at /downloads. */
 const NZBGET_MAIN_DIR = "/downloads/nzbget";
 
@@ -658,10 +755,12 @@ export const nzbget = (ctx: HookContext) =>
     }
     // NZBGet's own settings file says what it takes now, so it's what the manager is given
     const current = { username: signIn.username, password: signIn.password };
+    const shared = NZBGET_SHARED.some((each) => each.username === current.username && each.password === current.password);
     return {
       name: "NZBGet",
       implementation: "Nzbget",
       connection: { urlBase: "" },
       signIn: { known: async () => current, ask: async () => current },
+      proof: shared ? undefined : "sign-in",
     };
   });
