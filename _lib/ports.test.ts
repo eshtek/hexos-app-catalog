@@ -540,6 +540,22 @@ describe("validate.ts", () => {
     expect(code).toBe(0);
   });
 
+  test("a custom app's direct port pin serves its hook without a warning", () => {
+    const custom = {
+      custom: true,
+      metadata: { name: "A", description: "A", icon: "go.ts", version: "1.0.0" },
+      hooks: [hook],
+    };
+    const values = (port: number) => ({ image: { repository: "example/app", tag: "1.0.0" }, ports: [pin(`$PORT(${port})`, { container_port: 9000 })] });
+    const good = run({ a: script([30025], values(30025), custom) });
+    expect(good.output).toContain("0 error(s), 0 warning(s)");
+    expect(good.code).toBe(0);
+
+    const wrong = run({ a: script([30025, 30026], values(30026), custom) });
+    expect(wrong.output).toContain("requirements.ports[0] (30025) must be a port it pins in app_values.ports");
+    expect(wrong.code).toBe(1);
+  });
+
   test("a hook-linked app whose ports[0] isn't its $PORT pin is still refused", () => {
     const { code, output } = run({ a: script([30025, 30026], web("$PORT(30026)"), { hooks: [hook] }) });
     expect(output).toContain("requirements.ports[0] (30025) must be a port it pins");
