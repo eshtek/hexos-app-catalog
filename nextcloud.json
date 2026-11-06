@@ -26,7 +26,8 @@
       "description": "Create a username for the admin account. You'll use this to log in via web and mobile apps.",
       "type": "text",
       "key": "admin_user",
-      "required": true
+      "required": true,
+      "installonly": true
     },
     {
       "question": "Nextcloud Password",
@@ -34,7 +35,8 @@
       "type": "password",
       "key": "admin_password",
       "required": true,
-      "default": "$RANDOM_STRING(16)"
+      "default": "$RANDOM_STRING(16)",
+      "installonly": true
     },
     {
       "question": "Default Phone Region",

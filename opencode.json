@@ -164,6 +164,7 @@
         }
       ],
       "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
       "script": "opencode/connect_ollama.ts",
       "entrypoint": "run",
       "timeout": 300,

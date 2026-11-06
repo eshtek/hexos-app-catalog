@@ -38,6 +38,7 @@ import {
   portMacrosWellFormed,
   portsCanMove,
   preferredPort,
+  publishedPorts,
   type Finding,
 } from "./ports";
 import { instanceRules, linkCopyRules } from "./instances";
@@ -281,7 +282,11 @@ function validate(file: string, script: Record<string, unknown>) {
       if (signIn.adds_user !== undefined && typeof signIn.adds_user !== "boolean") {
         err(file, "sign_in.adds_user must be true or false");
       }
-      const extra = Object.keys(signIn).filter((key) => key !== "username" && key !== "adds_user");
+      // An app whose first account takes the owner's email: only then does HexOS ask for one
+      if (signIn.email !== undefined && typeof signIn.email !== "boolean") {
+        err(file, "sign_in.email must be true or false");
+      }
+      const extra = Object.keys(signIn).filter((key) => !["username", "adds_user", "email"].includes(key));
       if (extra.length > 0) err(file, `sign_in: unknown keys ${extra.join(", ")}`);
     }
     // The sign-in is set by a hook; a script with none would promise the owner one it never gets
@@ -362,6 +367,14 @@ function validate(file: string, script: Record<string, unknown>) {
       if (!Array.isArray(options) || options.length === 0) {
         err(file, `${where}: select question "${key}" has no options`);
       }
+    }
+    // The deck fills a sourced question's answers itself; it knows one source, for a typed answer
+    if (q.source !== undefined && (q.source !== "local-ai-models" || q.type !== "text")) {
+      err(file, `${where}: question "${key}" has source "${String(q.source)}", which only a text question may take as "local-ai-models"`);
+    }
+    // The install asks an attestation as a checkbox Install waits on, so only a required yes will do
+    if (q.attestation === true && (q.type !== "boolean" || q.required !== true)) {
+      err(file, `${where}: attestation question "${key}" must be a required boolean`);
     }
     // The app's Settings tab shows a text answer as it is and hides a password until asked
     if (q.type === "text" && SECRET_KEY.test(key)) {
@@ -572,6 +585,14 @@ function validate(file: string, script: Record<string, unknown>) {
             err(file, `${where}: rerun "${String(hook.rerun)}" is not a known rerun mode`);
           }
           if (!userTriggerable) err(file, `${where}: rerun applies to user firings only`);
+        }
+        // The box runs a link again after a change it passes on; one it can't run again has none
+        if (hook.rerunsOn !== undefined) {
+          const triggers = hook.rerunsOn;
+          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model")) {
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model"`);
+          }
+          if (hook.rerun !== "converge" && hook.rerun !== "idempotent") err(file, `${where}: rerunsOn needs a hook that may run again`);
         }
         if (hook.optional !== undefined && lifecycleCount === 0) {
           err(file, `${where}: optional requires a lifecycle trigger`);
@@ -981,8 +1002,8 @@ for (const file of files) {
 
 // A hook reaches an app at the box's LAN IP and the app's requirements.ports[0] (getInstalledAppUrl,
 // ctx.baseUrl), so an app a hook runs on or names must publish its web UI on that port, pinned in
-// app_values.network (web_port, or http_port for Emby), as a number or $PORT(n). A container's own port
-// (Radarr's 7878) is not where TrueNAS publishes it.
+// app_values.network (web_port, or http_port for Emby), or a custom app's app_values.ports,
+// as a number or $PORT(n). A container's own port (Radarr's 7878) is not where TrueNAS publishes it.
 const parsedScripts = new Map<string, Record<string, unknown>>();
 for (const file of files) {
   try {
@@ -1007,14 +1028,19 @@ for (const appId of [...linkedApps].sort()) {
   const declared = Array.isArray(requirements.ports) ? requirements.ports[0] : undefined;
   const appValues = isObject(script.app_values) ? script.app_values : {};
   const network = isObject(appValues.network) ? appValues.network : {};
-  const pinned = Object.values(network)
+  const namedPins = Object.values(network)
     .filter(isObject)
     .map((port) => preferredPort(port.port_number))
     .filter((port) => port !== undefined);
+  const customPins = script.custom === true
+    ? publishedPorts(script).flatMap((pin) => "port" in pin && pin.path.startsWith("app_values.ports[") ? [pin.port] : [])
+    : [];
+  const pinned = [...namedPins, ...customPins];
+  const pinLocation = script.custom === true ? "app_values.ports" : "app_values.network";
   if (pinned.length === 0) {
-    warn(`${appId}.json`, `takes part in a hook, so pin its web port in app_values.network (requirements.ports[0] is ${declared ?? "missing"})`);
+    warn(`${appId}.json`, `takes part in a hook, so pin its web port in ${pinLocation} (requirements.ports[0] is ${declared ?? "missing"})`);
   } else if (!pinned.includes(declared)) {
-    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in app_values.network (${pinned.join(", ")})`);
+    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in ${pinLocation} (${pinned.join(", ")})`);
   }
 }
 

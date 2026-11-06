@@ -66,7 +66,13 @@ export async function download(ctx: HookContext) {
   });
   if (!response.ok || !response.body) ctx.fail(`Ollama didn't start downloading ${model}`, [{ label: "Reason", value: `${response.status} ${response.statusText}` }]);
 
+  // Ollama reports each layer only once it starts, so a small first layer would read as the whole
+  // model. The percent is over the model's known download size, or the layers seen if they come to
+  // more, and never goes back; held under 99 until Ollama says it has finished. A model this list
+  // doesn't know is measured over the layers seen so far
+  const expected = (CHOICES.find((choice) => choice.model === model)?.sizeGB ?? 0) * 1e9;
   const decoder = new TextDecoder();
+  const layers = new Map<string, { total: number; completed: number }>();
   let pending = "";
   let shown = -1;
   let finished = false;
@@ -76,11 +82,22 @@ export async function download(ctx: HookContext) {
     pending = lines.pop() ?? "";
     for (const line of lines) {
       if (!line.trim()) continue;
-      const update = JSON.parse(line) as { status?: string; total?: number; completed?: number; error?: string };
+      const update = JSON.parse(line) as {
+        status?: string;
+        digest?: string;
+        total?: number;
+        completed?: number;
+        error?: string;
+      };
       if (update.error) ctx.fail(`Ollama couldn't download ${model}`, [{ label: "Reason", value: update.error }]);
       if (update.status === "success") finished = true;
       if (update.total && update.completed !== undefined) {
-        const percent = Math.floor((update.completed / update.total) * 99);
+        layers.set(update.digest ?? "", { total: update.total, completed: update.completed });
+        const all = [...layers.values()];
+        const total = Math.max(expected, all.reduce((sum, layer) => sum + layer.total, 0));
+        const completed = all.reduce((sum, layer) => sum + layer.completed, 0);
+        const measured = Math.min(98, Math.floor((completed / total) * 99));
+        const percent = expected ? Math.max(shown, measured) : measured;
         if (percent !== shown) {
           shown = percent;
           await ctx.setProgress(percent);
