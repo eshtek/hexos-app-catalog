@@ -168,6 +168,24 @@ Something the app makes rather than the owner answers, such as Valheim's join co
 "settings": [{ "field": "code" }]
 ```
 
+## A settings file outside the app's folders
+
+Some apps keep their settings in one file outside every folder a script mounts. AnythingLLM writes each setting to `/app/server/.env`, inside its container, and TrueNAS makes a new container on every stop, restart and update, so those settings were lost. `ensure_files_exist` keeps such a file on the pool:
+
+```json
+"ensure_directories_exists": [{ "path": "$LOCATION(ApplicationsPerformance)/anything-llm/config" }],
+"ensure_files_exist": [
+  { "path": "$LOCATION(ApplicationsPerformance)/anything-llm/config/.env", "mount_path": "/app/server/.env", "uid": 1000, "gid": 1000 }
+]
+```
+
+- **HexOS makes the file and mounts it.** TrueNAS refuses a mount whose file isn't there, so the mount stays out of `app_values`: HexOS adds it as `$MOUNTED_HOST_PATH(path, mount_path)` once the file is there. A box from before the field runs the app as it did, and offers the update again once it can.
+- **A file that's there is kept.** HexOS never writes into one. A new file belongs to `uid:gid`, the user the container runs as (TrueNAS's `run_as_context`), with mode 600.
+- **An update carries the settings over.** On an app that's installed, the new file starts as a copy of the one in the app's container, read just before the update. A new install, or an app with no container, starts with an empty file. When Docker can't say what the container holds, HexOS changes nothing and the update stops, so the container that has the settings is never replaced.
+- **The file lives in a folder `ensure_directories_exists` makes**, so removing the app's data removes it, and a plain uninstall keeps it for the next install. `mount_path` is at most 64 characters, and the file's path on the pool at most 150.
+
+`bun test _lib/settings_files.test.ts` checks each declaration against these rules.
+
 ## Collections
 
 A collection is a curated set of apps installed in one walk ("Media library": a media server, the *arr apps and a download client). Each is a JSON file in `_collections/`, named after its id (`media-management.json`). The catalog sync reads them alongside the install scripts, and HexOS shows them in the app catalog to accounts with the `app-collections` feature.

@@ -2,8 +2,8 @@
   "version": 6,
   "internal": true,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "AnythingLLM chats with your documents through Ollama."
+    "version": "1.1.0",
+    "changeLog": "AnythingLLM keeps its settings when it restarts or updates."
   },
   "requirements": {
     "locations": [
@@ -30,6 +30,17 @@
       "snapshot": {
         "id": "data"
       }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/anything-llm/config"
+    }
+  ],
+  "ensure_files_exist": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/anything-llm/config/.env",
+      "mount_path": "/app/server/.env",
+      "uid": 1000,
+      "gid": 1000
     }
   ],
   "app_values": {
