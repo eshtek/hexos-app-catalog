@@ -364,6 +364,10 @@ function validate(file: string, script: Record<string, unknown>) {
         err(file, `${where}: select question "${key}" has no options`);
       }
     }
+    // The install asks an attestation as a checkbox Install waits on, so only a required yes will do
+    if (q.attestation === true && (q.type !== "boolean" || q.required !== true)) {
+      err(file, `${where}: attestation question "${key}" must be a required boolean`);
+    }
     // The app's Settings tab shows a text answer as it is and hides a password until asked
     if (q.type === "text" && SECRET_KEY.test(key)) {
       err(file, `${where}: question "${key}" names a secret, so make its type "password"`);

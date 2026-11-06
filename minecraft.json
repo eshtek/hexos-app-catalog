@@ -24,12 +24,13 @@
   },
   "installation_questions": [
     {
-      "question": "Accept the Minecraft EULA",
+      "question": "I accept the Minecraft EULA",
       "description": "The server starts only after you accept Mojang's EULA at https://www.minecraft.net/eula.",
       "type": "boolean",
       "key": "eula",
       "required": true,
-      "installonly": true
+      "installonly": true,
+      "attestation": true
     }
   ],
   "ensure_directories_exists": [
