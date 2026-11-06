@@ -28,7 +28,8 @@
       "description": "The server starts only after you accept Mojang's EULA at https://www.minecraft.net/eula.",
       "type": "boolean",
       "key": "eula",
-      "required": true
+      "required": true,
+      "installonly": true
     }
   ],
   "ensure_directories_exists": [
