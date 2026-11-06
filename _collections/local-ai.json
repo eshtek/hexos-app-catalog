@@ -64,13 +64,15 @@
             "sizeGB": 6.6,
             "minVramGB": 8,
             "contextK": 16,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 5.5, "perKGB": 0.034, "maxContextK": 128 }
           },
           {
             "model": "qwen3.5:4b-q4_K_M",
             "sizeGB": 3.3,
             "minVramGB": 4,
-            "contextK": 8
+            "contextK": 8,
+            "memory": { "baseGB": 3.2, "perKGB": 0.038, "maxContextK": 256 }
           }
         ],
         "better": [
@@ -79,7 +81,8 @@
             "sizeGB": 7.2,
             "minVramGB": 10,
             "contextK": 16,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 7.5, "perKGB": 0.015, "maxContextK": 128 }
           }
         ],
         "best": [
@@ -88,7 +91,8 @@
             "sizeGB": 18,
             "minVramGB": 20,
             "contextK": 32,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 15.8, "perKGB": 0.064, "maxContextK": 128 }
           }
         ]
       },
@@ -99,7 +103,8 @@
             "sizeGB": 6.6,
             "minVramGB": 8,
             "contextK": 16,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 5.5, "perKGB": 0.034, "maxContextK": 128 }
           }
         ],
         "better": [
@@ -108,7 +113,8 @@
             "sizeGB": 6.6,
             "minVramGB": 10,
             "contextK": 16,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 5.5, "perKGB": 0.034, "maxContextK": 128 }
           }
         ],
         "best": [
@@ -117,11 +123,22 @@
             "sizeGB": 18,
             "minVramGB": 20,
             "contextK": 32,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 15.8, "perKGB": 0.064, "maxContextK": 128 }
           }
         ]
       },
       "agents": {
+        "good": [
+          {
+            "model": "gemma4:12b-it-qat",
+            "sizeGB": 7.2,
+            "minVramGB": 10,
+            "contextK": 64,
+            "tools": true,
+            "memory": { "baseGB": 7.5, "perKGB": 0.015, "maxContextK": 128 }
+          }
+        ],
         "better": [
           {
             "model": "gemma4:26b-a4b-it-qat",
@@ -129,14 +146,8 @@
             "minVramGB": 16,
             "contextK": 64,
             "minRamGB": 32,
-            "tools": true
-          },
-          {
-            "model": "gemma4:12b-it-qat",
-            "sizeGB": 7.2,
-            "minVramGB": 10,
-            "contextK": 64,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 14.1, "perKGB": 0.002, "maxContextK": 128 }
           }
         ],
         "best": [
@@ -145,14 +156,16 @@
             "sizeGB": 18,
             "minVramGB": 24,
             "contextK": 64,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 15.8, "perKGB": 0.064, "maxContextK": 128 }
           },
           {
             "model": "gemma4:26b-a4b-it-qat",
             "sizeGB": 16,
             "minVramGB": 20,
             "contextK": 64,
-            "tools": true
+            "tools": true,
+            "memory": { "baseGB": 14.1, "perKGB": 0.002, "maxContextK": 128 }
           }
         ]
       }
@@ -180,7 +193,7 @@
       "id": "chat",
       "type": "single",
       "title": "Chat",
-      "description": "Where you talk to your model.",
+      "description": "A web interface that you can use to interact with your model.",
       "options": [
         {
           "app": "open-webui",

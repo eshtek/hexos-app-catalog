@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookContext } from "./hook_context";
 import { connect as connectOllama } from "../open-webui/connect_ollama";
-import { run as connectSearxng } from "../searxng/connect_open_webui";
+import { openWebui as connectSearxng } from "../searxng/connect";
 
 // Open WebUI's link to Ollama and SearXNG's link to Open WebUI against a fake Open WebUI, read at
 // Open WebUI 0.13.0 (backend/open_webui/routers/ollama.py, auths.py, retrieval.py). Open WebUI keeps

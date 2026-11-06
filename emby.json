@@ -6,7 +6,8 @@
   },
   "sign_in": {
     "username": true,
-    "adds_user": true
+    "adds_user": true,
+    "email": true
   },
   "requirements": {
     "locations": [
