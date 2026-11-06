@@ -5,6 +5,10 @@ import type { HookContext } from "../_lib/hook_context";
  * Points AnythingLLM at Ollama and the model it has, through the settings API its own setup screen
  * uses. A fresh AnythingLLM has no sign-in on the home network. One that has been given a password
  * refuses this, and the owner sets Ollama in its settings. Read at AnythingLLM 1.19.
+ *
+ * AnythingLLM sends Ollama a context size with every chat: its token limit, else at most 16,384
+ * (server/utils/AiProviders/ollama/index.js, promptWindowLimit). The link sets that limit to the
+ * context Ollama runs at, so Ollama doesn't reload the model at a smaller one.
  */
 
 /** Ends the link for something only the owner can change, so a collection doesn't offer Try again. */
@@ -13,15 +17,20 @@ function refuse(ctx: HookContext, message: string, context?: Array<{ label: stri
   return ctx.fail(message, context);
 }
 
-/** The model Ollama is set to, which may still be downloading, else the first it has. */
-async function ollamaModel(ctx: HookContext, url: string): Promise<string | undefined> {
+/**
+ * The model Ollama is set to, which may still be downloading, else the first it has, and the
+ * context Ollama runs at. A box from before the context was read doesn't say it.
+ */
+async function ollamaSettings(ctx: HookContext, url: string): Promise<{ model?: string; contextLength?: number }> {
   const hardware = await ctx.readLocalAiHardware?.().catch(() => undefined);
-  if (hardware?.ollama?.wanted) return hardware.ollama.wanted;
+  const length = hardware?.ollama?.contextLength;
+  const contextLength = typeof length === "number" && Number.isInteger(length) && length > 0 ? length : undefined;
+  if (hardware?.ollama?.wanted) return { model: hardware.ollama.wanted, contextLength };
   const tags = (await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(15_000) })
     .then((response) => (response.ok ? response.json() : undefined))
     .catch(() => undefined)) as { models?: Array<{ name: string }> } | undefined;
   if (!tags) ctx.fail("Ollama didn't answer. Wait a minute for it to start, then run this again.");
-  return tags.models?.[0]?.name;
+  return { model: tags.models?.[0]?.name, contextLength };
 }
 
 export async function run(ctx: HookContext) {
@@ -32,16 +41,23 @@ export async function run(ctx: HookContext) {
   const url = await ctx.getInstalledAppUrl("ollama");
   if (!url) ctx.fail("Ollama isn't installed, or HexOS can't find its port");
   await ctx.waitForApp("/api/ping", { maxAttempts: 60 });
-  const model = await ollamaModel(ctx, url);
+  const { model, contextLength } = await ollamaSettings(ctx, url);
   if (!model) ctx.fail("Ollama has no model yet. Choose one on its Connections tab, then run this again.");
   await ctx.emitCheckpoint("locate");
 
   // AnythingLLM takes the settings in the order sent and stops at the first it refuses, so the
   // provider comes last and is never switched to an Ollama it didn't take
+  const settings = {
+    OllamaLLMBasePath: url,
+    OllamaLLMModelPref: model,
+    // Its own settings page sends the limit as text
+    ...(contextLength ? { OllamaLLMTokenLimit: String(contextLength) } : {}),
+    LLMProvider: "ollama",
+  };
   const response = await fetch(`${ctx.baseUrl}/api/system/update-env`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ OllamaLLMBasePath: url, OllamaLLMModelPref: model, LLMProvider: "ollama" }),
+    body: JSON.stringify(settings),
     signal: AbortSignal.timeout(30_000),
   }).catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))));
   if (response instanceof Error) {

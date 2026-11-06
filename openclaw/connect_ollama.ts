@@ -13,6 +13,10 @@ import type { HookContext } from "../_lib/hook_context";
  * it only when it reads as plain JSON, keeps every setting it doesn't set, and copies the old file to
  * openclaw.json.hexos-bak first (OpenClaw's own backups are openclaw.json.bak and up). A file it
  * can't read is left as it is, and so is one that already has this model.
+ *
+ * OpenClaw sends Ollama a context size with every chat, its model's `contextTokens`, and gives a
+ * local Ollama model 32,768 when the entry has none (extensions/ollama/src/stream.runtime.ts,
+ * provider-models.ts capLocalOllamaModelContext). The link sets it to the context Ollama runs at.
  */
 
 const APPS_UID = 568;
@@ -29,15 +33,20 @@ function refuse(ctx: HookContext, message: string, context?: Array<{ label: stri
   return ctx.fail(message, context);
 }
 
-/** The model Ollama is set to, which may still be downloading, else the first it has. */
-async function ollamaModel(ctx: HookContext, url: string): Promise<string | undefined> {
+/**
+ * The model Ollama is set to, which may still be downloading, else the first it has, and the
+ * context Ollama runs at. A box from before the context was read doesn't say it.
+ */
+async function ollamaSettings(ctx: HookContext, url: string): Promise<{ model?: string; contextLength?: number }> {
   const hardware = await ctx.readLocalAiHardware?.().catch(() => undefined);
-  if (hardware?.ollama?.wanted) return hardware.ollama.wanted;
+  const length = hardware?.ollama?.contextLength;
+  const contextLength = typeof length === "number" && Number.isInteger(length) && length > 0 ? length : undefined;
+  if (hardware?.ollama?.wanted) return { model: hardware.ollama.wanted, contextLength };
   const tags = (await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(15_000) })
     .then((response) => (response.ok ? response.json() : undefined))
     .catch(() => undefined)) as { models?: Array<{ name: string }> } | undefined;
   if (!tags) ctx.fail("Ollama didn't answer. Wait a minute for it to start, then run this again.");
-  return tags.models?.[0]?.name;
+  return { model: tags.models?.[0]?.name, contextLength };
 }
 
 /** The settings as they are, an empty set when there's no file yet, or why HexOS won't change them. */
@@ -56,14 +65,21 @@ function readSettings(path: string): { settings: Json } | { refused: string } {
   return { refused: "OpenClaw's settings file has comments or isn't plain JSON, so HexOS won't rewrite it. Set Ollama as OpenClaw's model in its own settings." };
 }
 
-/** The settings with Ollama as a provider and the default model, everything else as it was. */
-export function withOllama(settings: Json, url: string, model: string): Json {
+/**
+ * The settings with Ollama as a provider and the default model, everything else as it was. With
+ * `contextLength`, this model's entry gets it as its `contextTokens`; without, its entry is left alone.
+ */
+export function withOllama(settings: Json, url: string, model: string, contextLength?: number): Json {
   const models = isRecord(settings.models) ? settings.models : {};
   const providers = isRecord(models.providers) ? models.providers : {};
   const ollama = isRecord(providers.ollama) ? providers.ollama : {};
   // Models the owner added to this provider stay listed
-  const listed = Array.isArray(ollama.models) ? ollama.models : [];
-  const known = listed.some((entry) => isRecord(entry) && entry.id === model);
+  const existing = Array.isArray(ollama.models) ? ollama.models : [];
+  const known = existing.some((entry) => isRecord(entry) && entry.id === model);
+  const listed = contextLength
+    ? existing.map((entry) => (isRecord(entry) && entry.id === model ? { ...entry, contextTokens: contextLength } : entry))
+    : existing;
+  const added = contextLength ? { id: model, name: model, contextTokens: contextLength } : { id: model, name: model };
   const agents = isRecord(settings.agents) ? settings.agents : {};
   const defaults = isRecord(agents.defaults) ? agents.defaults : {};
   // The default model is "provider/model" or { primary, fallbacks }, and the owner's fallbacks stay
@@ -79,7 +95,7 @@ export function withOllama(settings: Json, url: string, model: string): Json {
           baseUrl: url,
           apiKey: ollama.apiKey ?? "ollama-local",
           api: "ollama",
-          models: known ? listed : [...listed, { id: model, name: model }],
+          models: known ? listed : [...listed, added],
         },
       },
     },
@@ -116,7 +132,7 @@ export async function run(ctx: HookContext) {
   ]);
   const url = await ctx.getInstalledAppUrl("ollama");
   if (!url) ctx.fail("Ollama isn't installed, or HexOS can't find its port");
-  const model = await ollamaModel(ctx, url);
+  const { model, contextLength } = await ollamaSettings(ctx, url);
   if (!model) ctx.fail("Ollama has no model yet. Choose one on its Connections tab, then run this again.");
   const home = ctx.mounts.find((mount) => mount.containerPath === "/home/node") ?? ctx.mounts.find((mount) => mount.hostPath.endsWith("/openclaw/config"));
   if (!home) ctx.fail("HexOS couldn't find OpenClaw's settings folder");
@@ -126,7 +142,7 @@ export async function run(ctx: HookContext) {
   const path = `${folder}/openclaw.json`;
   const read = readSettings(path);
   if ("refused" in read) refuse(ctx, read.refused, [{ label: "File", value: `${home.hostPath}/.openclaw/openclaw.json` }]);
-  const next = withOllama(read.settings, url, model);
+  const next = withOllama(read.settings, url, model, contextLength);
   if (JSON.stringify(next) === JSON.stringify(read.settings)) {
     await ctx.skipCheckpoint("configure", `OpenClaw already uses ${model}`);
     return;

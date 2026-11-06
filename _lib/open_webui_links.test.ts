@@ -43,6 +43,8 @@ interface Options {
   signIn?: { username: string; password: string; email?: string };
   /** The owner's answer when asked, "skip" to skip the question, or "none" for a box that can't ask. */
   owner?: { email: string; password: string } | "skip" | "none";
+  /** The context Ollama runs at, as the box reads it. */
+  contextLength?: number;
 }
 
 class Skipped extends Error {}
@@ -109,6 +111,7 @@ function openWebUi(options: Options = {}) {
       signIn: options.signIn,
       mounts: app === "searxng" ? [{ containerPath: "/etc/searxng", hostPath: "/mnt/apps/searxng/config", localPath: searxngConfig }] : [],
       getInstalledAppUrl: async (id: string) => (id === "ollama" ? (options.ollamaUrl ?? "http://box.test:30068") : id === "open-webui" ? `http://${WEBUI}` : null),
+      readLocalAiHardware: async () => ({ cards: [], ollama: { models: [], ...(options.contextLength ? { contextLength: options.contextLength } : {}) } }),
       waitForApp: async (path: string) => {
         const response = await fetch(`${baseUrl(app)}${path}`).catch(() => undefined);
         if (!response?.ok) throw new Error(`App did not respond at ${path}`);
@@ -181,6 +184,13 @@ describe("Open WebUI's link to Ollama", () => {
       OLLAMA_BASE_URLS: ["http://remote.test:11434", "http://box.test:30068"],
       OLLAMA_API_CONFIGS: { "0": { key: "sk-remote" } },
     });
+  });
+
+  test("the connection carries nothing about Ollama's context, which Ollama applies itself", async () => {
+    const ollama = { ENABLE_OLLAMA_API: true, OLLAMA_BASE_URLS: [], OLLAMA_API_CONFIGS: {} };
+    const { contextFor, updates } = openWebUi({ ollama, signIn: RUN_SIGN_IN, contextLength: 65536 });
+    await connectOllama(contextFor("open-webui"));
+    expect(updates).toEqual([{ ENABLE_OLLAMA_API: true, OLLAMA_BASE_URLS: ["http://box.test:30068"], OLLAMA_API_CONFIGS: {} }]);
   });
 
   test("a connection to another computer that's switched off is kept, and this one is added", async () => {

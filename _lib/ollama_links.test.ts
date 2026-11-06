@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ContextMount, HookContext } from "./hook_context";
 
-// The Ollama links of OpenClaw, OpenCode and AnythingLLM against a fake Ollama and AnythingLLM, read
-// at OpenClaw 2026.10, OpenCode 1.19.5 and AnythingLLM 1.19. The settings files are the owner's: one
-// HexOS can't read as plain JSON stays byte for byte, every key HexOS doesn't set survives, the old
-// file is copied beside the new one first, and a run that changes nothing writes nothing and doesn't
-// restart the app.
+// The Ollama links of OpenClaw, OpenCode, AnythingLLM and Hermes against a fake Ollama and
+// AnythingLLM, read at OpenClaw 2026.10 and 2026.11, OpenCode 1.19.5, AnythingLLM 1.19 and Hermes
+// 0.22.7. The settings files are the owner's: one HexOS can't read as plain JSON stays byte for byte,
+// every key HexOS doesn't set survives, the old file is copied beside the new one first, and a run
+// that changes nothing writes nothing and doesn't restart the app. Each app gets the context Ollama
+// runs at, and a box that doesn't say it leaves the app's context settings as they are.
 
 const real = { ...fs };
 /** Owner changes need root, so the test only records them. */
@@ -29,6 +30,7 @@ mock.module("node:fs", () => ({
 const { run: connectOpenClaw, withOllama: openClawWithOllama } = await import("../openclaw/connect_ollama");
 const { run: connectOpenCode } = await import("../opencode/connect_ollama");
 const { run: connectAnythingLlm } = await import("../anything-llm/connect_ollama");
+const { run: connectHermes } = await import("../hermes-agent/connect_ollama");
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -51,6 +53,8 @@ interface Options {
   tags?: Array<{ name: string }> | "down";
   /** The model the owner chose on Ollama's Connections tab, which may still be downloading. */
   wanted?: string;
+  /** The context Ollama runs at, which a box from before it doesn't say. */
+  contextLength?: number;
   baseUrl?: string;
   /** Another app's API, by host. */
   apps?: Record<string, (path: string, init?: RequestInit) => Response>;
@@ -74,7 +78,14 @@ function harness(options: Options = {}) {
     host: "box.test",
     mounts: options.mounts ?? [],
     getInstalledAppUrl: async (id: string) => (id === "ollama" ? OLLAMA : null),
-    readLocalAiHardware: async () => ({ cards: [], ollama: { models: [], ...(options.wanted ? { wanted: options.wanted } : {}) } }),
+    readLocalAiHardware: async () => ({
+      cards: [],
+      ollama: {
+        models: [],
+        ...(options.wanted ? { wanted: options.wanted } : {}),
+        ...(options.contextLength !== undefined ? { contextLength: options.contextLength } : {}),
+      },
+    }),
     waitForApp: async () => new Response("ok"),
     registerCheckpoints: async () => {},
     emitCheckpoint: async (id: string) => {
@@ -200,6 +211,68 @@ describe("OpenClaw's link to Ollama", () => {
       agents: { defaults: { model: unknown } };
     };
     expect(next.agents.defaults.model).toEqual({ primary: `ollama/${MODEL}` });
+  });
+
+  test("the model's entry gets the context Ollama runs at as its contextTokens, which OpenClaw sends Ollama", async () => {
+    const { path, mounts } = openClaw();
+    await connectOpenClaw(harness({ mounts, contextLength: 65536 }).ctx);
+    const saved = JSON.parse(real.readFileSync(path, "utf-8"));
+    expect(saved.models.providers.ollama.models).toEqual([{ id: MODEL, name: MODEL, contextTokens: 65536 }]);
+  });
+
+  test("an entry the owner made for this model keeps its other fields and takes the context, and their other models stay as they were", () => {
+    const owner = {
+      models: {
+        providers: {
+          ollama: {
+            baseUrl: OLLAMA,
+            models: [
+              { id: "qwen3:8b", name: "Qwen", contextWindow: 32768, contextTokens: 8192 },
+              { id: MODEL, name: "Mine", contextWindow: 131072, contextTokens: 8192, reasoning: false },
+            ],
+          },
+        },
+      },
+    };
+    const next = openClawWithOllama(owner, OLLAMA, MODEL, 65536) as { models: { providers: { ollama: { models: unknown[] } } } };
+    expect(next.models.providers.ollama.models).toEqual([
+      { id: "qwen3:8b", name: "Qwen", contextWindow: 32768, contextTokens: 8192 },
+      { id: MODEL, name: "Mine", contextWindow: 131072, contextTokens: 65536, reasoning: false },
+    ]);
+  });
+
+  test("a box that doesn't say Ollama's context leaves the entry's context as the owner set it", () => {
+    const listed = [{ id: MODEL, name: MODEL, contextTokens: 8192 }];
+    const next = openClawWithOllama({ models: { providers: { ollama: { models: listed } } } }, OLLAMA, MODEL) as {
+      models: { providers: { ollama: { models: unknown[] } } };
+    };
+    expect(next.models.providers.ollama.models).toEqual(listed);
+  });
+
+  test.each([0, -1, 65536.5])("a context that isn't a whole number of tokens (%d) is left out", async (contextLength) => {
+    const { path, mounts } = openClaw();
+    await connectOpenClaw(harness({ mounts, contextLength }).ctx);
+    expect(JSON.parse(real.readFileSync(path, "utf-8")).models.providers.ollama.models).toEqual([{ id: MODEL, name: MODEL }]);
+  });
+
+  test("the model the owner chose on Ollama, still downloading, gets the context too", async () => {
+    const { path, mounts } = openClaw();
+    await connectOpenClaw(harness({ mounts, tags: [], wanted: "qwen3:8b", contextLength: 32768 }).ctx);
+    expect(JSON.parse(real.readFileSync(path, "utf-8")).models.providers.ollama.models).toEqual([{ id: "qwen3:8b", name: "qwen3:8b", contextTokens: 32768 }]);
+  });
+
+  test("a run with the same context writes nothing, and a new context is written and OpenClaw restarts", async () => {
+    const { path, mounts } = openClaw();
+    await connectOpenClaw(harness({ mounts, contextLength: 32768 }).ctx);
+    const written = real.statSync(path).mtimeMs;
+    const same = harness({ mounts, contextLength: 32768 });
+    await connectOpenClaw(same.ctx);
+    expect(real.statSync(path).mtimeMs).toBe(written);
+    expect(same.restarts()).toBe(0);
+    const larger = harness({ mounts, contextLength: 65536 });
+    await connectOpenClaw(larger.ctx);
+    expect(JSON.parse(real.readFileSync(path, "utf-8")).models.providers.ollama.models).toEqual([{ id: MODEL, name: MODEL, contextTokens: 65536 }]);
+    expect(larger.restarts()).toBe(1);
   });
 
   test("a run that changes nothing writes nothing and doesn't restart OpenClaw", async () => {
@@ -378,6 +451,73 @@ describe("OpenCode's link to Ollama", () => {
     expect(modeOf(join(folder, "opencode.json"))).toBe(0o640);
   });
 
+  test("the model gets the context Ollama runs at as its limit, with a quarter of it kept for the reply", async () => {
+    const { folder, mounts } = openCode({ "opencode.jsonc": SEEDED });
+    await connectOpenCode(harness({ mounts, contextLength: 65536 }).ctx);
+    const saved = JSON.parse(real.readFileSync(join(folder, "opencode.jsonc"), "utf-8"));
+    expect(saved.provider.ollama.models).toEqual({ [MODEL]: { name: MODEL, limit: { context: 65536, output: 16384 } } });
+  });
+
+  test("the reply's share stops at OpenCode's own 32,000 on a large window", async () => {
+    const { folder, mounts } = openCode();
+    await connectOpenCode(harness({ mounts, contextLength: 262144 }).ctx);
+    const saved = JSON.parse(real.readFileSync(join(folder, "opencode.json"), "utf-8"));
+    expect(saved.provider.ollama.models[MODEL].limit).toEqual({ context: 262144, output: 32000 });
+  });
+
+  test("an entry the owner made for this model keeps its other settings and takes the context, and their other models stay as they were", async () => {
+    const owner = {
+      provider: {
+        ollama: {
+          models: {
+            "qwen3:8b": { name: "Qwen", limit: { context: 32768, output: 4096 } },
+            [MODEL]: { name: "Mine", tool_call: true, limit: { context: 8192, input: 6000, output: 1024 } },
+          },
+        },
+      },
+    };
+    const { folder, mounts } = openCode({ "opencode.json": JSON.stringify(owner, null, 2) });
+    await connectOpenCode(harness({ mounts, contextLength: 32768 }).ctx);
+    const saved = JSON.parse(real.readFileSync(join(folder, "opencode.json"), "utf-8"));
+    expect(saved.provider.ollama.models).toEqual({
+      "qwen3:8b": { name: "Qwen", limit: { context: 32768, output: 4096 } },
+      [MODEL]: { name: "Mine", tool_call: true, limit: { context: 32768, input: 6000, output: 8192 } },
+    });
+  });
+
+  test("a box that doesn't say Ollama's context leaves the model's limit as the owner set it", async () => {
+    const mine = { name: "Mine", limit: { context: 8192, output: 1024 } };
+    const { folder, mounts } = openCode({ "opencode.json": JSON.stringify({ provider: { ollama: { models: { [MODEL]: mine } } } }, null, 2) });
+    await connectOpenCode(harness({ mounts }).ctx);
+    expect(JSON.parse(real.readFileSync(join(folder, "opencode.json"), "utf-8")).provider.ollama.models[MODEL]).toEqual(mine);
+  });
+
+  test.each([0, -1, 65536.5])("a context that isn't a whole number of tokens (%d) is left out", async (contextLength) => {
+    const { folder, mounts } = openCode();
+    await connectOpenCode(harness({ mounts, contextLength }).ctx);
+    expect(JSON.parse(real.readFileSync(join(folder, "opencode.json"), "utf-8")).provider.ollama.models).toEqual({ [MODEL]: { name: MODEL } });
+  });
+
+  test("the model the owner chose on Ollama, still downloading, gets the context too", async () => {
+    const { folder, mounts } = openCode();
+    await connectOpenCode(harness({ mounts, tags: [], wanted: "qwen3:8b", contextLength: 32768 }).ctx);
+    expect(JSON.parse(real.readFileSync(join(folder, "opencode.json"), "utf-8")).provider.ollama.models).toEqual({
+      "qwen3:8b": { name: "qwen3:8b", limit: { context: 32768, output: 8192 } },
+    });
+  });
+
+  test("a run with the same context writes nothing and doesn't restart OpenCode", async () => {
+    const { folder, mounts } = openCode();
+    await connectOpenCode(harness({ mounts, contextLength: 32768 }).ctx);
+    const path = join(folder, "opencode.json");
+    const written = real.statSync(path).mtimeMs;
+    const second = harness({ mounts, contextLength: 32768 });
+    await connectOpenCode(second.ctx);
+    expect(real.statSync(path).mtimeMs).toBe(written);
+    expect(second.restarts()).toBe(0);
+    expect(second.checkpoints).toEqual(["locate", "skipped:configure"]);
+  });
+
   test("a run that changes nothing writes nothing and doesn't restart OpenCode", async () => {
     const { folder, mounts } = openCode();
     await connectOpenCode(harness({ mounts }).ctx);
@@ -416,19 +556,22 @@ describe("AnythingLLM's link to Ollama", () => {
     /** AnythingLLM's settings, as update-env keeps them. */
     env: Record<string, string>;
     calls: number;
+    /** The settings each request sent, in the order sent. */
+    sent: string[][];
   }
   /**
    * AnythingLLM's update-env: 401 behind a password, else each setting in the order sent until one
    * fails its check, answering 200 either way with the reason (server/utils/helpers/updateENV.js).
    */
-  function anythingLlm(options: { password?: 401 | 403; down?: boolean; refuseAddress?: string } = {}) {
-    const llm: Llm = { env: { LLMProvider: "openai", OllamaLLMModelPref: "old-model" }, calls: 0 };
+  function anythingLlm(options: { password?: 401 | 403; down?: boolean; refuseAddress?: string; env?: Record<string, string> } = {}) {
+    const llm: Llm = { env: { LLMProvider: "openai", OllamaLLMModelPref: "old-model", ...options.env }, calls: 0, sent: [] };
     const api = (path: string, init?: RequestInit) => {
       if (path !== "/api/system/update-env" || init?.method !== "POST") throw new Error(`Unexpected request: ${path}`);
       llm.calls++;
       if (options.down) throw new TypeError("fetch failed");
       if (options.password) return Response.json({ error: "No auth token found." }, { status: options.password });
       const body = JSON.parse(String(init.body)) as Record<string, string>;
+      llm.sent.push(Object.keys(body));
       const newValues: Record<string, string> = {};
       for (const [key, value] of Object.entries(body)) {
         if (key === "OllamaLLMBasePath" && options.refuseAddress) return Response.json({ newValues, error: options.refuseAddress });
@@ -448,10 +591,37 @@ describe("AnythingLLM's link to Ollama", () => {
     expect(checkpoints).toEqual(["locate", "configure"]);
   });
 
-  test("the model the owner chose on Ollama, still downloading, is the one AnythingLLM gets", async () => {
+  test("AnythingLLM's token limit is the context Ollama runs at, sent after the model and before the provider", async () => {
     const { llm, apps, baseUrl } = anythingLlm();
-    await connectAnythingLlm(harness({ apps, baseUrl, tags: [], wanted: "qwen3:8b" }).ctx);
+    await connectAnythingLlm(harness({ apps, baseUrl, contextLength: 65536 }).ctx);
+    expect(llm.env).toEqual({ LLMProvider: "ollama", OllamaLLMBasePath: OLLAMA, OllamaLLMModelPref: MODEL, OllamaLLMTokenLimit: "65536" });
+    expect(llm.sent).toEqual([["OllamaLLMBasePath", "OllamaLLMModelPref", "OllamaLLMTokenLimit", "LLMProvider"]]);
+  });
+
+  test("a box that doesn't say Ollama's context sends no token limit, so the owner's stays", async () => {
+    const { llm, apps, baseUrl } = anythingLlm({ env: { OllamaLLMTokenLimit: "4096" } });
+    await connectAnythingLlm(harness({ apps, baseUrl }).ctx);
+    expect(llm.env.OllamaLLMTokenLimit).toBe("4096");
+    expect(llm.sent).toEqual([["OllamaLLMBasePath", "OllamaLLMModelPref", "LLMProvider"]]);
+  });
+
+  test.each([0, -1, 65536.5])("a context that isn't a whole number of tokens (%d) sends no token limit", async (contextLength) => {
+    const { llm, apps, baseUrl } = anythingLlm();
+    await connectAnythingLlm(harness({ apps, baseUrl, contextLength }).ctx);
+    expect(llm.sent).toEqual([["OllamaLLMBasePath", "OllamaLLMModelPref", "LLMProvider"]]);
+  });
+
+  test("an address AnythingLLM refuses leaves its token limit as it was too", async () => {
+    const { llm, apps, baseUrl } = anythingLlm({ refuseAddress: "Not a valid URL", env: { OllamaLLMTokenLimit: "4096" } });
+    await expect(connectAnythingLlm(harness({ apps, baseUrl, contextLength: 65536 }).ctx)).rejects.toThrow("AnythingLLM didn't take Ollama's address");
+    expect(llm.env).toEqual({ LLMProvider: "openai", OllamaLLMModelPref: "old-model", OllamaLLMTokenLimit: "4096" });
+  });
+
+  test("the model the owner chose on Ollama, still downloading, is the one AnythingLLM gets, with Ollama's context", async () => {
+    const { llm, apps, baseUrl } = anythingLlm();
+    await connectAnythingLlm(harness({ apps, baseUrl, tags: [], wanted: "qwen3:8b", contextLength: 32768 }).ctx);
     expect(llm.env.OllamaLLMModelPref).toBe("qwen3:8b");
+    expect(llm.env.OllamaLLMTokenLimit).toBe("32768");
   });
 
   test("an Ollama with no model fails with what to do, and AnythingLLM keeps its settings", async () => {
@@ -486,5 +656,76 @@ describe("AnythingLLM's link to Ollama", () => {
     const { llm, apps, baseUrl } = anythingLlm({ refuseAddress: reason });
     await expect(connectAnythingLlm(harness({ apps, baseUrl }).ctx)).rejects.toThrow("AnythingLLM didn't take Ollama's address");
     expect(llm.env.LLMProvider).toBe("openai");
+  });
+});
+
+describe("Hermes's link to Ollama", () => {
+  /** Hermes's data folder, with its config.yaml when given. */
+  function hermes(text?: string) {
+    const data = real.mkdtempSync(join(tmpdir(), "hermes-data-"));
+    const path = join(data, "config.yaml");
+    if (text !== undefined) real.writeFileSync(path, text);
+    const mounts = [{ containerPath: "/opt/data", hostPath: "/mnt/apps/hermes-agent/data", localPath: data }];
+    return { data, path, mounts };
+  }
+  const block = (contextLength?: number) =>
+    `model:\n  default: "${MODEL}"\n  provider: custom\n  base_url: "${OLLAMA}/v1"\n  api_key: ollama\n${contextLength ? `  context_length: ${contextLength}\n` : ""}`;
+
+  test("a missing config.yaml is made with Ollama as the model and its context as context_length, and Hermes restarts", async () => {
+    const { path, mounts } = hermes();
+    const { ctx, checkpoints, restarts } = harness({ mounts, contextLength: 65536 });
+    await connectHermes(ctx);
+    expect(real.readFileSync(path, "utf-8")).toBe(block(65536));
+    expect(owned).toContain(path);
+    expect(restarts()).toBe(1);
+    expect(checkpoints).toEqual(["locate", "configure"]);
+  });
+
+  test("the model section is replaced and every other line of the owner's file stays, blank lines too", async () => {
+    const before = "# my settings\nagent:\n  max_turns: 60\n\n";
+    const after = "\nterminal:\n  backend: local\n";
+    const { path, mounts } = hermes(`${before}model:\n  default: "anthropic/claude"\n  provider: anthropic\n  context_length: 200000\n${after}`);
+    await connectHermes(harness({ mounts, contextLength: 32768 }).ctx);
+    expect(real.readFileSync(path, "utf-8")).toBe(`${before}${block(32768)}${after}`);
+  });
+
+  test("a box that doesn't say Ollama's context writes the model section with no context_length", async () => {
+    const { path, mounts } = hermes();
+    await connectHermes(harness({ mounts }).ctx);
+    expect(real.readFileSync(path, "utf-8")).toBe(block());
+  });
+
+  test.each([0, -1, 65536.5])("a context that isn't a whole number of tokens (%d) is left out", async (contextLength) => {
+    const { path, mounts } = hermes();
+    await connectHermes(harness({ mounts, contextLength }).ctx);
+    expect(real.readFileSync(path, "utf-8")).toBe(block());
+  });
+
+  test("the model the owner chose on Ollama, still downloading, gets the context too", async () => {
+    const { path, mounts } = hermes();
+    await connectHermes(harness({ mounts, tags: [], wanted: "qwen3:8b", contextLength: 32768 }).ctx);
+    expect(real.readFileSync(path, "utf-8")).toContain('  default: "qwen3:8b"\n');
+    expect(real.readFileSync(path, "utf-8")).toContain("  context_length: 32768\n");
+  });
+
+  test.each([undefined, 32768])("a run that changes nothing (context %p) writes nothing and doesn't restart Hermes", async (contextLength) => {
+    const { path, mounts } = hermes();
+    await connectHermes(harness({ mounts, contextLength }).ctx);
+    const text = real.readFileSync(path, "utf-8");
+    const written = real.statSync(path).mtimeMs;
+    const second = harness({ mounts, contextLength });
+    await connectHermes(second.ctx);
+    expect(real.readFileSync(path, "utf-8")).toBe(text);
+    expect(real.statSync(path).mtimeMs).toBe(written);
+    expect(second.restarts()).toBe(0);
+    expect(second.checkpoints).toEqual(["locate", "skipped:configure"]);
+  });
+
+  test("a new context from Ollama is written and Hermes restarts", async () => {
+    const { path, mounts } = hermes(block(32768));
+    const { ctx, restarts } = harness({ mounts, contextLength: 65536 });
+    await connectHermes(ctx);
+    expect(real.readFileSync(path, "utf-8")).toBe(block(65536));
+    expect(restarts()).toBe(1);
   });
 });
