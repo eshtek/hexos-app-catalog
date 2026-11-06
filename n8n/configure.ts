@@ -8,7 +8,9 @@ import type { HookContext } from "../_lib/hook_context";
  * with a number and a capital letter, and is refused once an owner exists.
  */
 
-const PASSWORD_RULE = /^(?=.*\d)(?=.*[A-Z]).{8,64}$/;
+/** n8n's password rule, written without a regex range so nothing that rewrites the script can bend it. */
+const meetsPasswordRule = (password: string) =>
+  password.length >= 8 && password.length <= 64 && /\d/.test(password) && /[A-Z]/.test(password);
 
 /** The sign-in's username as a first and last name: "aaron.roach" is Aaron Roach, "aaron" is Aaron Owner. */
 export function namesOf(username: string): { firstName: string; lastName: string } {
@@ -44,7 +46,7 @@ export async function configure(ctx: HookContext) {
     await ctx.skipCheckpoint("account", "n8n keeps the account it has");
     return;
   }
-  if (!PASSWORD_RULE.test(wanted.password)) {
+  if (!meetsPasswordRule(wanted.password)) {
     refuse(ctx, "n8n needs a password with a number and a capital letter, so set up its account the first time you open n8n.");
   }
 
