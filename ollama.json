@@ -29,6 +29,7 @@
       "type": "select",
       "key": "image",
       "required": true,
+      "installonly": true,
       "default": "image",
       "options": [
         {
