@@ -237,13 +237,7 @@ Each download client keeps its downloads in its own folder of the Downloads loca
 
 ## App summaries
 
-`_summaries/apps.json` holds the few words HexOS shows under an app's name on its catalog card, for every app in the catalog, curated or not:
-
-```json
-{ "seerr": "Movie & show requests" }
-```
-
-A summary is two to five words and at most 48 characters, in sentence case, with "&" for "and". It says what the app does for the owner in plain words: no app name, no marketing words, no trailing full stop. The catalog sync leaves out an entry that breaks the length rules and keeps the rest; an app missing from the file shows its category instead. Add an app's summary here when you add its script.
+The few words HexOS shows under an app's name on its catalog card live in the deck, not here: `app_summary_<appId>` in hexos-platform's `packages/frontend/i18n/lang/en.json`, with the app id's hyphens as underscores (`app_summary_actual_budget`), so they're translated with the rest of the deck. When you add an app's script, add its summary there in the same week: two to five words and at most 48 characters, in sentence case, with "&" for "and", saying what the app does for the owner in plain words (no app name, no marketing words, no trailing full stop). Until then its card shows its category.
 
 ## Jellyfin pairing actions
 
