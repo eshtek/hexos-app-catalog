@@ -110,6 +110,7 @@
         }
       ],
       "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
       "script": "hermes-agent/connect_ollama.ts",
       "entrypoint": "run",
       "timeout": 300,

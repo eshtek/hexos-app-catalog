@@ -89,6 +89,7 @@
         }
       ],
       "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
       "script": "anything-llm/connect_ollama.ts",
       "entrypoint": "run",
       "timeout": 300,

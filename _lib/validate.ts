@@ -574,6 +574,14 @@ function validate(file: string, script: Record<string, unknown>) {
           }
           if (!userTriggerable) err(file, `${where}: rerun applies to user firings only`);
         }
+        // The box runs a link again after a change it passes on; one it can't run again has none
+        if (hook.rerunsOn !== undefined) {
+          const triggers = hook.rerunsOn;
+          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model")) {
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model"`);
+          }
+          if (hook.rerun !== "converge" && hook.rerun !== "idempotent") err(file, `${where}: rerunsOn needs a hook that may run again`);
+        }
         if (hook.optional !== undefined && lifecycleCount === 0) {
           err(file, `${where}: optional requires a lifecycle trigger`);
         }
