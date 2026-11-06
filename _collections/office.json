@@ -1,7 +1,6 @@
 {
   "type": "collection",
   "version": 1,
-  "internal": true,
   "name": "Office suite",
   "description": "Files, documents and passwords in one place, on your own server.",
   "image": "_collections/office.jpg",

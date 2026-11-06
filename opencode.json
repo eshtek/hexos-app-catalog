@@ -1,7 +1,6 @@
 {
   "version": 6,
   "custom": true,
-  "internal": true,
   "metadata": {
     "name": "OpenCode",
     "description": "A coding agent that runs on your own model. It can reach the internet and Ollama, and nothing else at home.",

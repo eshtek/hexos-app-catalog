@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.1.0",
     "changeLog": "AnythingLLM keeps its settings when it restarts or updates."
