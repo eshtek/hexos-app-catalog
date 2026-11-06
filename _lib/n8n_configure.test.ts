@@ -15,6 +15,7 @@ function ctxWith(signIn?: { username: string; password: string; email?: string }
     baseUrl: "http://box:30109",
     signIn,
     registerCheckpoints: async () => {},
+    sleep: async () => {},
     waitForApp: async () => new Response("ok"),
     emitCheckpoint: async (id: string) => void done.push(`done ${id}`),
     skipCheckpoint: async (id: string, message?: string) => void done.push(`skip ${id}: ${message}`),
@@ -28,11 +29,13 @@ function ctxWith(signIn?: { username: string; password: string; email?: string }
   return { ctx, done };
 }
 
-function n8nAnswering(showSetup: boolean, setupStatus = 200) {
+function n8nAnswering(showSetup: boolean, setupStatus = 200, notMountedFor = 0) {
   const sent: unknown[] = [];
+  let unmounted = notMountedFor;
   spyOn(globalThis, "fetch").mockImplementation((async (url: string, init?: RequestInit) => {
     if (url.endsWith("/rest/settings")) return Response.json({ data: { userManagement: { showSetupOnFirstLoad: showSetup } } });
     sent.push(JSON.parse(String(init?.body)));
+    if (unmounted-- > 0) return new Response("Cannot POST /rest/owner/setup", { status: 404 });
     return new Response(setupStatus === 200 ? "{}" : "Instance owner already setup", { status: setupStatus });
   }) as never);
   return sent;
@@ -52,6 +55,14 @@ describe("n8n's account", () => {
     const { ctx, done } = ctxWith({ username: "aaron", password: "Correct1horse", email: "owner@example.com" });
     await configure(ctx);
     expect(sent).toEqual([{ email: "owner@example.com", firstName: "Aaron", lastName: "Owner", password: "Correct1horse" }]);
+    expect(done).toEqual(["done start", "done account"]);
+  });
+
+  test("waits for n8n to mount its owner route, which answers 404 while n8n starts", async () => {
+    const sent = n8nAnswering(true, 200, 2);
+    const { ctx, done } = ctxWith({ username: "aaron", password: "Correct1horse", email: "owner@example.com" });
+    await configure(ctx);
+    expect(sent).toHaveLength(3);
     expect(done).toEqual(["done start", "done account"]);
   });
 

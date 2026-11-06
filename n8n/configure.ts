@@ -50,12 +50,20 @@ export async function configure(ctx: HookContext) {
     refuse(ctx, "n8n needs a password with a number and a capital letter, so set up its account the first time you open n8n.");
   }
 
-  const response = await fetch(`${ctx.baseUrl}/rest/owner/setup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: wanted.email, ...namesOf(wanted.username), password: wanted.password }),
-    signal: AbortSignal.timeout(30_000),
-  }).catch((error: unknown) => new Error(error instanceof Error ? error.message : String(error)));
+  // n8n answers its health check and settings before it mounts the owner route, which answers 404 until then
+  const body = JSON.stringify({ email: wanted.email, ...namesOf(wanted.username), password: wanted.password });
+  let response: Response | Error = new Error("n8n didn't answer");
+  for (let attempt = 0; attempt < 24; attempt++) {
+    response = await fetch(`${ctx.baseUrl}/rest/owner/setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      signal: AbortSignal.timeout(30_000),
+    }).catch((error: unknown) => new Error(error instanceof Error ? error.message : String(error)));
+    if (response instanceof Error || response.status !== 404) break;
+    await response.body?.cancel();
+    await ctx.sleep(5_000);
+  }
   if (response instanceof Error) ctx.fail("n8n stopped answering. Run this again.", [{ label: "Reason", value: response.message }]);
   if (!response.ok) ctx.fail("n8n didn't take your sign-in", [{ label: "Reason", value: (await response.text()).slice(0, 200) }]);
   await ctx.emitCheckpoint("account");
