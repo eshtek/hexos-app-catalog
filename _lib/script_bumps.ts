@@ -27,10 +27,18 @@ const canonical = (value: unknown): string =>
  * itself, `internal`, which only says which catalog lists the app, and `requirements.game_port`,
  * which the deck reads from the catalog's current script to show the port players join on. Neither
  * does `requirements.instances` change a server that has the app, or `$INSTANCE`, which reads as the
- * folder it names on every app installed so far, or `$PORT`.
+ * folder it names on every app installed so far, or `$PORT`. A hook's `rerunsOn` is read from the
+ * catalog's current script too (the box's link list), so it reaches installed apps at the next sync.
  */
 export function runPart(script: Record<string, unknown>): string {
   const { metadata: _metadata, script: _block, internal: _internal, ...runs } = script;
+  if (Array.isArray(runs.hooks)) {
+    runs.hooks = runs.hooks.map((hook) => {
+      if (!isObject(hook)) return hook;
+      const { rerunsOn: _rerunsOn, ...rest } = hook;
+      return rest;
+    });
+  }
   if (isObject(runs.requirements)) {
     const { game_port: _gamePort, instances: _instances, shared_folders: _shared, ...requirements } = runs.requirements;
     runs.requirements = requirements;

@@ -20,6 +20,12 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
  * default, and the owner is asked last. Run again, a link puts back how Sportarr reaches the client
  * and its sign-in, and fills the category only when the owner left it empty.
+ *
+ * Sportarr gives a download to the first client it has that's on, so an entry of the same kind it
+ * reaches at another address (the box's address or the client's port changed) would keep getting
+ * them. Once nothing answers there, it is moved to this client when it holds this client's own key or
+ * sign-in, which Sportarr's list shows as they are, or when the owner says so. An entry that answers
+ * is another client the owner chose, and this one joins beside it.
  */
 
 /** The user the TrueNAS charts run the download clients as. */
@@ -62,6 +68,8 @@ interface ClientPlan {
   signIn: { known: () => Promise<Fields | undefined>; ask: () => Promise<Fields | undefined> };
   /** For a client that locks out an address after failed sign-ins, what the link says when it has locked Sportarr out. */
   lockout?: string;
+  /** Sign-ins many of these clients have, which say nothing about whose an entry is: the client's own default and HexOS's. */
+  shared?: Fields[];
 }
 
 interface Client {
@@ -99,6 +107,15 @@ async function until(ctx: HookContext, check: () => Promise<boolean>, attempts: 
   return false;
 }
 
+/** Whether anything answers at this address now. An app that's off, or an address nobody has any more, doesn't. */
+async function answering(url: string, timeoutMs = 10_000): Promise<boolean> {
+  // Any answer counts, so a certificate made for another name isn't taken for silence; nothing is sent
+  const init = { redirect: "manual", signal: AbortSignal.timeout(timeoutMs), tls: { rejectUnauthorized: false } };
+  const response = await fetch(url, init as RequestInit).catch(() => undefined);
+  await response?.body?.cancel().catch(() => undefined);
+  return response !== undefined;
+}
+
 async function sportarrApi<T>(ctx: HookContext, apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${ctx.baseUrl}/api${path}`, {
     ...init,
@@ -130,6 +147,10 @@ async function link(ctx: HookContext, appId: ClientId, name: string, prepare: (c
 
   const apiKey = readText(`${configMount(ctx.mounts, "sportarr")?.localPath}/config.xml`)?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
   if (!apiKey) ctx.fail(`HexOS couldn't read ${MANAGER}'s API key yet. Try again once it has started.`);
+  // Sportarr answers nothing for a while after it starts
+  if (!(await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 30))) {
+    ctx.fail(`${MANAGER} isn't answering yet. Try again once it has started.`);
+  }
   const url = await ctx.getInstalledAppUrl(appId);
   if (!url) ctx.fail(`${name} isn't installed, or HexOS can't find its port`);
   const parsed = new URL(url);
@@ -139,10 +160,43 @@ async function link(ctx: HookContext, appId: ClientId, name: string, prepare: (c
   const plan = await prepare(client);
   await ctx.emitCheckpoint("prepare");
 
+  // A sign-in HexOS just signed in to the client with, which also says whose an entry is
+  const known = await plan.signIn.known();
+  const here = `${client.host}:${client.port}`;
+  const holds = (entry: DownloadClient) => {
+    const secrets = Object.entries(known ?? {});
+    const shared = (plan.shared ?? []).some((each) => Object.entries(each).every(([field, value]) => known?.[field] === value));
+    return secrets.length > 0 && !shared && secrets.every(([field, value]) => entry[field] === value);
+  };
+  // Entries of this kind at other addresses, oldest first. One that answers is left as it is. One
+  // that doesn't is moved here with this client's own key or sign-in, or with the owner's yes, and
+  // without either the link stops rather than add this one behind it.
+  const repair = async (others: DownloadClient[]): Promise<DownloadClient | undefined> => {
+    const silent: DownloadClient[] = [];
+    for (const entry of others) {
+      if (!(await answering(`${entry.useSsl ? "https" : "http"}://${entry.host}:${entry.port}${entry.urlBase ?? ""}`))) silent.push(entry);
+    }
+    const gone = silent.find(holds) ?? silent[0];
+    if (!gone) return undefined;
+    const at = `${gone.host}:${gone.port}`;
+    if (holds(gone) || (await ownerSwitches(ctx, name, gone.name, at))) return gone;
+    // Nothing proves it was this one (it may be another computer that's switched off), so it's the
+    // owner's to change: trying again can't help
+    const message = `${MANAGER} sends downloads to ${gone.name} at ${at}, which isn't answering. Turn that one off or change its address in ${MANAGER}'s Settings, under Download Clients, then run Connect to ${name} again.`;
+    const context = [
+      { label: `${MANAGER}'s ${gone.name}`, value: at },
+      { label: `This ${name}`, value: here },
+    ];
+    if (ctx.skip) ctx.skip(message, context);
+    ctx.fail(message, context);
+  };
+  const ofKind = (await sportarrApi<DownloadClient[]>(ctx, apiKey, "/downloadclient"))
+    .filter((entry) => entry.type === TYPES[appId])
+    .sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
   // The oldest of the owner's clients at this address, when they added it more than once
-  const existing = (await sportarrApi<DownloadClient[]>(ctx, apiKey, "/downloadclient"))
-    .filter((entry) => entry.type === TYPES[appId] && entry.host === client.host && entry.port === client.port)
-    .sort((a, b) => (a.id ?? 0) - (b.id ?? 0))[0];
+  const atThisAddress = ofKind.find((entry) => entry.host === client.host && entry.port === client.port);
+  // One that's off takes no downloads
+  const existing = atThisAddress ?? (await repair(ofKind.filter((entry) => entry.enabled !== false)));
 
   const definition = (signIn: Fields): DownloadClient => ({
     ...existing,
@@ -175,7 +229,6 @@ async function link(ctx: HookContext, appId: ClientId, name: string, prepare: (c
 
   // A sign-in HexOS just signed in to the client with goes first. Without one, Sportarr keeps what it
   // has, and the owner is asked only when that fails too.
-  const known = await plan.signIn.known();
   let signIn: Fields = known ?? {};
   let verified = known !== undefined;
   let refused = await attempt(signIn);
@@ -201,7 +254,32 @@ async function link(ctx: HookContext, appId: ClientId, name: string, prepare: (c
     }
   }
   if (refused !== undefined) ctx.fail(`${MANAGER} couldn't connect to ${name}`, [{ label: "Reason", value: reasonOf(refused) }]);
-  await ctx.emitCheckpoint("configure");
+  await ctx.emitCheckpoint("configure", existing && !atThisAddress ? `${MANAGER} reaches ${name} at its new address` : undefined);
+}
+
+/**
+ * Whether the owner wants Sportarr's entry moved to this client, once nothing answers at its address.
+ * False when they say no, skip the question, or this HexOS can't ask.
+ */
+async function ownerSwitches(ctx: HookContext, name: string, entryName: string, at: string): Promise<boolean> {
+  const answers = await ask(
+    ctx,
+    [
+      {
+        type: "question",
+        id: "switch",
+        question: {
+          question: `Switch ${MANAGER} to this ${name}`,
+          description: `${MANAGER} keeps its other settings for it.`,
+          type: "boolean",
+          key: "switch",
+          required: true,
+        },
+      },
+    ],
+    { title: `Switch ${MANAGER}'s ${name}`, description: `${MANAGER} sends downloads to ${entryName} at ${at}, which isn't answering.` },
+  );
+  return answers?.switch === true;
 }
 
 /** The owner's answers, or undefined when they skip, the wait runs out, or this HexOS can't ask. */
@@ -276,6 +354,11 @@ export const qbittorrent = (ctx: HookContext) =>
     const saved = readJson<{ username: string; password: string }>(`${configMount(mounts, "qbittorrent")?.localPath}/hexos/webui.json`);
     return {
       name: "qBittorrent",
+      // qBittorrent's own default before 4.6.1, and HexOS's
+      shared: [
+        { username: "admin", password: "adminadmin" },
+        { username: "admin", password: "admin" },
+      ],
       // Five failed sign-ins lock an address out for an hour by default (WebApplication at qBittorrent 5.3.0)
       lockout: `qBittorrent is locking ${MANAGER} out for now after sign-ins with an old password failed. ${MANAGER} has the new sign-in and connects on its own within the hour.`,
       signIn: {
@@ -400,7 +483,9 @@ export const deluge = (ctx: HookContext) =>
     }
 
     const signIn = { password };
-    return { name: "Deluge", signIn: { known: async () => signIn, ask: async () => signIn } };
+    // Deluge's own and HexOS's (deluge/seed_webui.ts)
+    const shared = [{ password: DELUGE_STOCK_PASSWORD }, { password: "admin" }];
+    return { name: "Deluge", signIn: { known: async () => signIn, ask: async () => signIn }, shared };
   });
 
 // --- SABnzbd -----------------------------------------------------------------
@@ -550,5 +635,10 @@ export const nzbget = (ctx: HookContext) =>
     }
     // NZBGet's own settings file says what it takes now, so it's what Sportarr is given
     const current = { username: signIn.username, password: signIn.password };
-    return { name: "NZBGet", signIn: { known: async () => current, ask: async () => current } };
+    // NZBGet's own and HexOS's (nzbget/configure.ts)
+    const shared = [
+      { username: NZBGET_STOCK.username, password: NZBGET_STOCK.password },
+      { username: "admin", password: "admin" },
+    ];
+    return { name: "NZBGet", signIn: { known: async () => current, ask: async () => current }, shared };
   });
