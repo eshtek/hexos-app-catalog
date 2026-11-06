@@ -47,7 +47,6 @@
       }
     }
   },
-  "internal": true,
   "hooks": [
     {
       "id": "connect-open-webui",

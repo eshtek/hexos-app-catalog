@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "OpenClaw runs as an assistant on your own model, kept off your home network."

@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Open WebUI chats with the models on your own graphics card through Ollama."

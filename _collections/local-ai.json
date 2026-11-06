@@ -1,7 +1,6 @@
 {
   "type": "collection",
   "version": 2,
-  "internal": true,
   "name": "Local AI",
   "description": "Run AI models on your own graphics card, with chat and assistants that stay on your server.",
   "image": "_collections/local-ai.jpg",
