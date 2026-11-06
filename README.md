@@ -235,6 +235,16 @@ An app a collection installs opens ready, with nothing left for the owner but th
 
 Each download client keeps its downloads in its own folder of the Downloads location, mounted in the client at the path Radarr, Sonarr, Lidarr and Sportarr see it at (they mount the whole location at `/downloads`, and qBittorrent's folder at `/config/Downloads` too), so the links add no remote path mapping, which would belong to the box's address rather than to one client. Deluge's and NZBGet's charts fix their own `/downloads` mount, so their folder is mounted again at `/downloads/<app>`, which leaves an empty folder of that name inside it. Every client keeps a download in progress apart from finished ones, inside its own folder: qBittorrent in `incomplete` and `complete`, Deluge in `incomplete` and `complete` (its own default and the managers' Download and Move Completed folders), SABnzbd in `incomplete` and `complete`, NZBGet in its stock `intermediate` and `completed`. A client the owner already had keeps folders they chose. Prowlarr gets each client too, for what the owner grabs in Prowlarr's own search, under a `prowlarr` category that no manager imports from, and qBittorrent hands it a new sign-in as it does the managers.
 
+## App summaries
+
+`_summaries/apps.json` holds the few words HexOS shows under an app's name on its catalog card, for every app in the catalog, curated or not:
+
+```json
+{ "seerr": "Movie & show requests" }
+```
+
+A summary is two to five words and at most 48 characters, in sentence case, with "&" for "and". It says what the app does for the owner in plain words: no app name, no marketing words, no trailing full stop. The catalog sync leaves out an entry that breaks the length rules and keeps the rest; an app missing from the file shows its category instead. Add an app's summary here when you add its script.
+
 ## Jellyfin pairing actions
 
 Jellyfin offers optional connections to Jellystat and Seerr, plus a read-only Fladder/Jellyfin reachability check. Jellystat and Seerr depend on Pre-configure Jellyfin (`requiresHooks`), whose administrator they sign in with: the sign-in the owner chose for the install or collection (`ctx.signIn`), else the answers an older Pre-configure Jellyfin was given, and asked for last. Pre-configure Jellyfin remains optional.
