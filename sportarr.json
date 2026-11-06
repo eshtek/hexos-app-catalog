@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Joins the Media library with the sign-in you choose for it, and connects to your download clients and Prowlarr in one click."
+    "version": "1.2.0",
+    "changeLog": "Shows what's on next, what's live and what's downloading on its dashboard card."
   },
   "sign_in": {
     "username": true
@@ -188,6 +188,68 @@
       "entrypoint": "nzbget",
       "timeout": 120,
       "retries": 0
+    }
+  ],
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "up-next",
+      "title": "Up next",
+      "description": "What's on next, what's live and what's downloading.",
+      "refresh": 30,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "background": {
+        "field": "events"
+      },
+      "slots": [
+        {
+          "type": "list",
+          "field": "events",
+          "rows": 1
+        }
+      ],
+      "slides": [
+        {
+          "title": "Downloading",
+          "slots": [
+            {
+              "type": "stat",
+              "field": "queued"
+            },
+            {
+              "type": "list",
+              "field": "queue",
+              "rows": 3
+            }
+          ]
+        },
+        {
+          "title": "Library",
+          "slots": [
+            {
+              "type": "stat",
+              "field": "downloaded"
+            },
+            {
+              "type": "stat",
+              "field": "wanted"
+            },
+            {
+              "type": "chart",
+              "field": "week"
+            }
+          ]
+        }
+      ],
+      "script": "sportarr/widget_up_next.ts",
+      "entrypoint": "run",
+      "timeout": 10
     }
   ]
 }
