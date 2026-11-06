@@ -40,6 +40,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
 | [Minecraft](minecraft.json) | Minecraft Java Edition server |
+| [Minecraft Bedrock](minecraft-bedrock.json) | Minecraft Bedrock Edition server, for phones, consoles and Windows |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
