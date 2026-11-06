@@ -71,7 +71,8 @@
             "model": "qwen3.5:4b-q4_K_M",
             "sizeGB": 3.3,
             "minVramGB": 4,
-            "contextK": 8
+            "contextK": 8,
+            "memory": { "baseGB": 3.2, "perKGB": 0.038, "maxContextK": 256 }
           }
         ],
         "better": [
