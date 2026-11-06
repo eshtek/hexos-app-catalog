@@ -11,7 +11,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * Jellyfin made a Jellyfin administrator, so the owner signs in to both with it; run from the card
  * with none, it asks. A Seerr already set up with this server gets that account as an administrator
  * of its own, imported from Jellyfin. Seerr's links to Radarr and Sonarr act as Seerr's first
- * administrator, so they need this one first. Read at Seerr 3.5.1, the version TrueNAS pins.
+ * administrator, so they need this one first. Run again, it moves Seerr to this server when Seerr's
+ * own is gone: Jellyfin reinstalled (a new server at the same address, which needs a new API key), or
+ * this server at an address that no longer reaches it. Read at Seerr 3.5.1, the version TrueNAS pins.
  */
 
 /** Seerr's MediaServerType (server/constants/server.ts). */
@@ -37,6 +39,16 @@ interface SeerrUser {
   id: number;
   jellyfinUserId?: string | null;
   permissions?: number;
+}
+
+/** Seerr's Jellyfin settings, as `GET /settings/jellyfin` gives them. */
+interface JellyfinSettings {
+  name?: string;
+  ip?: string;
+  port?: number;
+  useSsl?: boolean;
+  urlBase?: string;
+  serverId?: string;
 }
 
 interface SignIn {
@@ -124,22 +136,86 @@ async function account(ctx: HookContext): Promise<SignIn> {
   return { username, password };
 }
 
-/** The account's id in Jellyfin, which Seerr knows its users by (without the hyphens). */
-async function jellyfinUserId(ctx: HookContext, signIn: SignIn): Promise<string> {
+/** The account signed in to Jellyfin: its id and a session token. */
+async function session(ctx: HookContext, signIn: SignIn): Promise<{ id: string; token: string }> {
   const resp = await fetch(`${ctx.baseUrl}/Users/AuthenticateByName`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: CLIENT_HEADER },
     body: JSON.stringify({ Username: signIn.username, Pw: signIn.password }),
     signal: AbortSignal.timeout(15_000),
   }).catch(() => undefined);
-  const id = resp?.ok ? ((await resp.json()) as { User?: { Id?: string } }).User?.Id : undefined;
-  if (!id) {
+  const body = resp?.ok ? ((await resp.json()) as { AccessToken?: string; User?: { Id?: string } }) : undefined;
+  if (!body?.User?.Id || !body.AccessToken) {
     const message = `Jellyfin didn't accept the sign-in for ${signIn.username}. Run Pre-configure Jellyfin, then try again.`;
     // Jellyfin answered and refused it: its setup was skipped, which trying again won't change
     if (resp && ctx.skip) ctx.skip(message);
     ctx.fail(message);
   }
-  return id.replaceAll("-", "");
+  return { id: body.User.Id, token: body.AccessToken };
+}
+
+/** The account's id in Jellyfin, which Seerr knows its users by (without the hyphens). */
+async function jellyfinUserId(ctx: HookContext, signIn: SignIn): Promise<string> {
+  return (await session(ctx, signIn)).id.replaceAll("-", "");
+}
+
+/**
+ * The Jellyfin server that answers at an address now, by its id, or undefined when nothing does.
+ * Jellyfin answers `/System/Info/Public` without a sign-in.
+ */
+async function serverIdAt(url: string): Promise<string | undefined> {
+  // Only the server's public id is read, so a certificate made for another name (a Jellyfin reached
+  // by its IP over TLS) doesn't count as no answer; nothing is sent
+  const init = { signal: AbortSignal.timeout(10_000), tls: { rejectUnauthorized: false } };
+  const response = await fetch(`${url}/System/Info/Public`, init as RequestInit).catch(() => undefined);
+  if (!response?.ok) return undefined;
+  const info = (await response.json().catch(() => undefined)) as { Id?: string } | undefined;
+  return info?.Id || undefined;
+}
+
+/**
+ * An API key for Seerr in this Jellyfin, made with the owner's administrator as Seerr's own setup
+ * makes one. A Jellyfin Seerr didn't set up (a reinstalled one) doesn't know the key Seerr holds.
+ */
+async function seerrApiKey(ctx: HookContext, owner: SignIn): Promise<string> {
+  const { token } = await session(ctx, owner);
+  const headers = { Authorization: `MediaBrowser Token="${token}"` };
+  const find = async () => {
+    const response = await fetch(`${ctx.baseUrl}/Auth/Keys`, { headers, signal: AbortSignal.timeout(15_000) });
+    if (!response.ok) ctx.fail("Jellyfin didn't list its API keys. Run Connect to Seerr from Jellyfin with an administrator's sign-in.");
+    const keys = ((await response.json()) as { Items?: Array<{ AppName?: string; AccessToken?: string; DateCreated?: string }> }).Items ?? [];
+    return keys
+      .filter((key) => key.AppName === "Seerr" && key.AccessToken)
+      .sort((a, b) => (b.DateCreated ?? "").localeCompare(a.DateCreated ?? ""))[0]?.AccessToken;
+  };
+  const existing = await find();
+  if (existing) return existing;
+  const created = await fetch(`${ctx.baseUrl}/Auth/Keys?App=Seerr`, { method: "POST", headers, signal: AbortSignal.timeout(15_000) });
+  if (!created.ok) ctx.fail("Jellyfin didn't make an API key for Seerr", [{ label: "Status", value: String(created.status) }]);
+  const minted = await find();
+  if (!minted) ctx.fail("Jellyfin didn't make an API key for Seerr");
+  return minted;
+}
+
+/**
+ * Whether the owner wants Seerr moved off a server that no longer answers. Nothing proves that server
+ * is gone for good (it may be another computer that's switched off), so the owner decides. False when
+ * they say no, skip the question, or the box can't ask.
+ */
+async function ownerSwitches(ctx: HookContext, current: JellyfinSettings): Promise<boolean> {
+  const address = `${current.ip}:${current.port}`;
+  const answers = await ask(
+    ctx,
+    [
+      {
+        type: "question",
+        id: "switch",
+        question: { question: "Switch Seerr to this Jellyfin server", description: "Seerr keeps its requests.", type: "boolean", key: "switch", required: true },
+      },
+    ],
+    { title: "Switch Seerr's Jellyfin server", description: `Seerr uses ${current.name ? `${current.name} at ${address}` : address}, which isn't answering.` },
+  );
+  return answers?.switch === true;
 }
 
 async function signIn(ctx: HookContext, seerr: string, signIn: SignIn): Promise<void> {
@@ -210,28 +286,61 @@ export async function run(ctx: HookContext) {
   if (!ctx.host || !ctx.port) ctx.fail("HexOS couldn't find this Jellyfin server's address");
   const { apiKey, before } = await waitForSeerr(ctx, seerr);
   await ctx.emitCheckpoint("locate");
+  let switched = false;
 
   if (before.mediaServerType === NOT_CONFIGURED) {
     await signIn(ctx, seerr, await account(ctx));
     await ctx.emitCheckpoint("signin");
   } else if (before.mediaServerType === JELLYFIN) {
-    const current = await call<{ ip?: string; port?: number; useSsl?: boolean; urlBase?: string }>(
-      `${seerr}/api/v1/settings/jellyfin`,
-      apiKey,
-    );
-    // The same server only at the same address, over plain HTTP at its root, as this link sets it
-    if (current.ip !== ctx.host || Number(current.port) !== ctx.port || current.useSsl === true || (current.urlBase ?? "") !== "") {
-      // Seerr keeps one media server, and switching it is the owner's to do: trying again can't help
-      const message = "Seerr is already set up with another Jellyfin server. Change it in Seerr's own settings, then run Connect to Seerr from Jellyfin.";
-      const context = [{ label: "Seerr uses", value: `${current.ip}:${current.port}` }];
-      if (ctx.skip) ctx.skip(message, context);
-      ctx.fail(message, context);
-    }
-    // Only with the owner's chosen sign-in: run from the card, the Seerr they set up stays theirs
-    if (ctx.signIn && (await makeSeerrAdministrator(ctx, seerr, apiKey, ctx.signIn))) {
-      await ctx.emitCheckpoint("signin", `${ctx.signIn.username} is a Seerr administrator`);
+    // Seerr keeps one Jellyfin server. It's left alone while it still answers as another server, which
+    // the owner chose. It moves to this one when its own is this server at an address that no longer
+    // reaches it (the box's address or Jellyfin's port changed), when its address now answers as this
+    // server (Jellyfin was reinstalled, which gives it a new id), or when its server doesn't answer at
+    // all and the owner says so.
+    const current = await call<JellyfinSettings>(`${seerr}/api/v1/settings/jellyfin`, apiKey);
+    const thisServer = await serverIdAt(ctx.baseUrl);
+    if (!thisServer) ctx.fail("Jellyfin didn't answer. Try again once it has started.");
+    const stored = current.ip ? `${current.useSsl ? "https" : "http"}://${current.ip}:${current.port ?? 8096}${current.urlBase ?? ""}` : undefined;
+    const answering = stored ? await serverIdAt(stored) : undefined;
+    // A Seerr from before it kept the server's id knows this one by its address
+    const knowsThis = current.serverId ? current.serverId === thisServer : answering === thisServer;
+    if (knowsThis && answering === thisServer) {
+      // Only with the owner's chosen sign-in: run from the card, the Seerr they set up stays theirs
+      if (ctx.signIn && (await makeSeerrAdministrator(ctx, seerr, apiKey, ctx.signIn))) {
+        await ctx.emitCheckpoint("signin", `${ctx.signIn.username} is a Seerr administrator`);
+      } else {
+        await ctx.skipCheckpoint("signin", "Seerr already uses this Jellyfin server");
+      }
     } else {
-      await ctx.skipCheckpoint("signin", "Seerr already uses this Jellyfin server");
+      if (!knowsThis && answering !== thisServer) {
+        // Seerr keeps one media server, and switching it is the owner's to do: trying again can't help
+        const message = "Seerr is already set up with another Jellyfin server. Change it in Seerr's own settings, then run Connect to Seerr from Jellyfin.";
+        const context = [{ label: "Seerr uses", value: `${current.ip}:${current.port}` }];
+        if (answering || !(await ownerSwitches(ctx, current))) {
+          if (ctx.skip) ctx.skip(message, context);
+          ctx.fail(message, context);
+        }
+      }
+      // An address that answers as this server stays as the owner wrote it; anything else becomes
+      // this one's. A server Seerr didn't know needs a key of its own and the owner as an administrator.
+      const address =
+        answering === thisServer
+          ? { ip: current.ip, port: current.port, useSsl: current.useSsl, urlBase: current.urlBase ?? "" }
+          : { ip: ctx.host, port: ctx.port, useSsl: false, urlBase: "" };
+      const owner = knowsThis ? undefined : await account(ctx);
+      const key = owner ? await seerrApiKey(ctx, owner) : undefined;
+      try {
+        // Seerr checks the server answers with the key before it keeps them
+        await call(`${seerr}/api/v1/settings/jellyfin`, apiKey, { method: "POST", body: JSON.stringify({ ...address, ...(key ? { apiKey: key } : {}) }) });
+      } catch (error) {
+        ctx.fail("Seerr couldn't reach this Jellyfin server. Check Jellyfin is running, then run Connect to Seerr from Jellyfin again.", [
+          { label: "Address", value: `${address.ip}:${address.port}` },
+          { label: "Reason", value: error instanceof Error ? error.message : String(error) },
+        ]);
+      }
+      if (owner) await makeSeerrAdministrator(ctx, seerr, apiKey, owner);
+      switched = !knowsThis;
+      await ctx.emitCheckpoint("signin", switched ? "Seerr moved to this Jellyfin server" : "Seerr reaches Jellyfin at its new address");
     }
   } else {
     // Seerr keeps one media server, and switching it is the owner's to do: trying again can't help
@@ -240,7 +349,8 @@ export async function run(ctx: HookContext) {
     ctx.fail(message);
   }
 
-  // The libraries the owner chose in Seerr are theirs: only a Seerr with none on gets them turned on
+  // The libraries the owner chose in Seerr are theirs: only a Seerr with none on, or one that just
+  // moved to this server, gets them turned on
   let libraries: SeerrLibrary[] = [];
   try {
     libraries = await call<SeerrLibrary[]>(`${seerr}/api/v1/settings/jellyfin/library/sync`, apiKey, { method: "POST" });
@@ -253,10 +363,12 @@ export async function run(ctx: HookContext) {
   const media = libraries.filter((library) => library.type === "movie" || library.type === "show");
   if (media.length === 0) {
     await ctx.skipCheckpoint("libraries", "Jellyfin has no movie or show library yet");
-  } else if (libraries.some((library) => library.enabled)) {
+  } else if (!switched && libraries.some((library) => library.enabled)) {
     await ctx.skipCheckpoint("libraries", "Seerr's libraries are already chosen");
   } else {
-    for (const library of media) {
+    // A server Seerr just moved to gets what a new Seerr does: what it picked on its old server
+    // belonged to that server's libraries
+    for (const library of media.filter((each) => !each.enabled)) {
       await call(`${seerr}/api/v1/settings/jellyfin/library/${encodeURIComponent(library.id)}`, apiKey, {
         method: "PUT",
         body: JSON.stringify({ enabled: true }),

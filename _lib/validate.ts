@@ -368,6 +368,14 @@ function validate(file: string, script: Record<string, unknown>) {
         err(file, `${where}: select question "${key}" has no options`);
       }
     }
+    // The deck fills a sourced question's answers itself; it knows one source, for a typed answer
+    if (q.source !== undefined && (q.source !== "local-ai-models" || q.type !== "text")) {
+      err(file, `${where}: question "${key}" has source "${String(q.source)}", which only a text question may take as "local-ai-models"`);
+    }
+    // The install asks an attestation as a checkbox Install waits on, so only a required yes will do
+    if (q.attestation === true && (q.type !== "boolean" || q.required !== true)) {
+      err(file, `${where}: attestation question "${key}" must be a required boolean`);
+    }
     // The app's Settings tab shows a text answer as it is and hides a password until asked
     if (q.type === "text" && SECRET_KEY.test(key)) {
       err(file, `${where}: question "${key}" names a secret, so make its type "password"`);
@@ -577,6 +585,14 @@ function validate(file: string, script: Record<string, unknown>) {
             err(file, `${where}: rerun "${String(hook.rerun)}" is not a known rerun mode`);
           }
           if (!userTriggerable) err(file, `${where}: rerun applies to user firings only`);
+        }
+        // The box runs a link again after a change it passes on; one it can't run again has none
+        if (hook.rerunsOn !== undefined) {
+          const triggers = hook.rerunsOn;
+          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model")) {
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model"`);
+          }
+          if (hook.rerun !== "converge" && hook.rerun !== "idempotent") err(file, `${where}: rerunsOn needs a hook that may run again`);
         }
         if (hook.optional !== undefined && lifecycleCount === 0) {
           err(file, `${where}: optional requires a lifecycle trigger`);

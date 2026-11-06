@@ -115,4 +115,12 @@ describe("what doesn't change a server", () => {
     };
     expect(runPart(head)).toBe(runPart(base));
   });
+
+  test("a link's rerunsOn, which the box reads from the catalog's current script", () => {
+    const hook = { id: "connect-ollama", script: "x/connect_ollama.ts", entrypoint: "run", rerun: "converge" };
+    const base = { custom: true, hooks: [hook] };
+    expect(runPart({ custom: true, hooks: [{ ...hook, rerunsOn: ["local-ai-model"] }] })).toBe(runPart(base));
+    // Anything else on the hook still changes what a server runs
+    expect(runPart({ custom: true, hooks: [{ ...hook, entrypoint: "connect" }] })).not.toBe(runPart(base));
+  });
 });
