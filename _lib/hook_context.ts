@@ -325,7 +325,13 @@ export interface HookContext {
   /** What this server's graphics cards can run, for a hook that offers models. Missing on a box from before it. */
   readLocalAiHardware?(): Promise<{
     cards: Array<{ pciSlot: string; name: string; memoryGB: number | null }>;
-    ollama?: { pciSlot?: string; models: string[]; wanted?: string };
+    ollama?: {
+      pciSlot?: string;
+      models: string[];
+      wanted?: string;
+      /** The context it runs models at, in tokens (its OLLAMA_CONTEXT_LENGTH). Absent on a box from before it. */
+      contextLength?: number;
+    };
   }>;
 
   /** Async sleep helper */
