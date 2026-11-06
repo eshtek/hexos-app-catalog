@@ -166,6 +166,8 @@ A question whose answer only matters while the app is set up says `"installonly"
 
 A yes the owner must give before the app installs, such as an agreement (Minecraft's EULA), is a required `boolean` question that also says `"attestation": true`, worded as the owner's own statement ("I accept the Minecraft EULA"). The install asks it as a checkbox on its review step, with the description under it, and Install waits until it is ticked; it never takes a step of its own. Mark it `installonly` too, since nobody takes the agreement back later. A deck from before the flag asks it as an ordinary yes or no.
 
+A `text` question whose answers the deck can list itself says where from in `"source"`. The one source is `"local-ai-models"`, Ollama's model: the deck shows the models the server has and those its card can run, each marked Installed or Not downloaded, and on the Settings tab a model it doesn't have downloads before Ollama moves to it, after which each app linked to Ollama runs its link again. A deck from before `source` asks for the name as typed text.
+
 Something the app makes rather than the owner answers, such as Valheim's join code, comes from a widget: its `settings` names up to four of its `stat` fields, and the tab shows each with its label, its value and a Copy button in place of Change. The field doesn't have to fill a slot on the card. While the app is still getting the value (Valheim's server starting), send the field with an empty `value`: the tab shows its label with the value loading and Copy off, rather than no row at all.
 
 ```json

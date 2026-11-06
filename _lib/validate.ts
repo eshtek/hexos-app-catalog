@@ -364,6 +364,10 @@ function validate(file: string, script: Record<string, unknown>) {
         err(file, `${where}: select question "${key}" has no options`);
       }
     }
+    // The deck fills a sourced question's answers itself; it knows one source, for a typed answer
+    if (q.source !== undefined && (q.source !== "local-ai-models" || q.type !== "text")) {
+      err(file, `${where}: question "${key}" has source "${String(q.source)}", which only a text question may take as "local-ai-models"`);
+    }
     // The install asks an attestation as a checkbox Install waits on, so only a required yes will do
     if (q.attestation === true && (q.type !== "boolean" || q.required !== true)) {
       err(file, `${where}: attestation question "${key}" must be a required boolean`);
