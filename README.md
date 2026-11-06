@@ -18,6 +18,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Collabora](collabora.json) | Documents you edit together in Nextcloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
+| [Dockge](dockge.json) | Docker Compose stack manager |
 | [Donetick](dozzle.json) | Smart task manager |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
