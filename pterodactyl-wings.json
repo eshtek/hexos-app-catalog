@@ -20,7 +20,8 @@
     "locations": ["ApplicationsPerformance"],
     "specifications": ["2CORE", "4GBRAM", "20GB"],
     "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [30163, 30164]
+    "ports": [30163, 30164],
+    "reserved_ports": [{ "start": 27100, "end": 27119 }]
   },
   "ensure_directories_exists": [
     {

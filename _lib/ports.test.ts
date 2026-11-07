@@ -12,6 +12,8 @@ import {
   portMacrosWellFormed,
   preferredPort,
   publishedPorts,
+  reservedPorts,
+  reservedPortsWellFormed,
   usesHostNetwork,
   type Script,
 } from "./ports";
@@ -501,6 +503,52 @@ describe("portsCanMove", () => {
 
   test("an internal script is exempt", () => {
     expect(portsCanMove(scriptWith({ web_port: { port_number: 30100 } }, { internal: true }))).toEqual([]);
+  });
+});
+
+describe("reservedPortsWellFormed", () => {
+  const wings = (reserved_ports: unknown, extra: Record<string, unknown> = {}) => ({
+    requirements: { ports: [30163], reserved_ports, ...extra },
+    app_values: { ports: [{ bind_mode: "published", port_number: "$PORT(30163)", container_port: 8080 }] },
+  });
+
+  test("a port and a block are read one port at a time", () => {
+    expect(reservedPorts(wings([27015, { start: 27100, end: 27102 }]))).toEqual([27015, 27100, 27101, 27102]);
+    expect(reservedPortsWellFormed(wings([27015, { start: 27100, end: 27119 }]))).toEqual([]);
+  });
+
+  test("a script without the field has nothing to check", () => {
+    expect(reservedPortsWellFormed({ requirements: { ports: [1] } })).toEqual([]);
+    expect(reservedPorts({ requirements: { ports: [1] } })).toEqual([]);
+  });
+
+  test("anything but a list is refused", () => {
+    expect(reservedPortsWellFormed(wings({ start: 1, end: 2 }))[0]?.message).toContain("must be a list");
+  });
+
+  test("a backward block, a $PORT, a port out of range and a block wider than the cap are refused", () => {
+    for (const entry of [{ start: 27119, end: 27100 }, "$PORT(27100)", 70000, { start: 27000, end: 27100 }]) {
+      const findings = reservedPortsWellFormed(wings([entry]));
+      expect(findings).toHaveLength(1);
+      expect(findings[0]?.level).toBe("error");
+      expect(reservedPorts(wings([entry]))).toEqual([]);
+    }
+  });
+
+  test("a port the script publishes is refused, since HexOS holds it already", () => {
+    expect(reservedPortsWellFormed(wings([30163]))[0]?.message).toContain("publishes already");
+  });
+
+  test("a block can't go with several copies", () => {
+    expect(reservedPortsWellFormed(wings([27100], { instances: "many" }))[0]?.message).toContain("instances: many");
+  });
+
+  test("another script that wants a reserved port is told the box holds it", () => {
+    const scripts = new Map<string, Script>([
+      ["wings", wings([{ start: 27100, end: 27119 }])],
+      ["other", webApp("$PORT(27105)")],
+    ]);
+    expect(catalogPreferredPortClashes(scripts)[0]?.message).toContain("other prefers 27105, which wings fixes");
   });
 });
 
