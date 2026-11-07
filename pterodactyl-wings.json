@@ -1,0 +1,113 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": false,
+  "metadata": {
+    "name": "Pterodactyl Wings",
+    "description": "The part of Pterodactyl that runs your game servers. Each server you create in Pterodactyl Panel runs here in its own container, with its files in this app's folder.",
+    "icon": "pterodactyl/icon.svg",
+    "version": "1.13.4",
+    "categories": ["games"],
+    "keywords": ["pterodactyl", "wings", "game server", "dedicated server", "minecraft", "multiplayer"],
+    "homepage": "https://pterodactyl.io/",
+    "sources": ["https://github.com/pterodactyl/wings"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: joins the server's Pterodactyl Panel as its node, with game servers on ports 27100 to 27119"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "4GBRAM", "20GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30163, 30164]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pterodactyl-wings/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pterodactyl-wings/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "servers"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/pterodactyl/wings",
+      "tag": "v1.13.4@sha256:f3eb1fcca035ba94256d612e31315bf33db948693db1a9c4646ce398aefc2f1b",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "tty": true,
+    "envs": [
+      { "name": "WINGS_UID", "value": "568" },
+      { "name": "WINGS_GID", "value": "568" },
+      { "name": "WINGS_USERNAME", "value": "apps" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": "$PORT(30163)", "container_port": 8080, "protocol": "tcp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(30164)", "container_port": 2022, "protocol": "tcp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/var/run/docker.sock",
+        "host_path_config": {
+          "path": "/var/run/docker.sock"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/etc/pterodactyl",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/pterodactyl-wings/config"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "$LOCATION(ApplicationsPerformance)/pterodactyl-wings/data",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/pterodactyl-wings/data"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": false
+    }
+  },
+  "hooks": [
+    {
+      "id": "join-panel",
+      "title": "Join Pterodactyl Panel",
+      "description": "Adding this server to Pterodactyl Panel",
+      "events": ["onBeforeInstall"],
+      "script": "pterodactyl/setup.ts",
+      "entrypoint": "joinPanel",
+      "timeout": 600
+    },
+    {
+      "id": "panel-sftp-port",
+      "title": "Tell Pterodactyl Panel the file transfer port",
+      "description": "Setting the file transfer port",
+      "events": ["onAfterInstall"],
+      "script": "pterodactyl/setup.ts",
+      "entrypoint": "sftpPort",
+      "timeout": 120
+    }
+  ]
+}
