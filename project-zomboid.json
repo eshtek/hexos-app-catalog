@@ -1,0 +1,105 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": false,
+  "metadata": {
+    "name": "Project Zomboid",
+    "description": "Survive the zombie apocalypse with friends on your own Project Zomboid server. Each player makes their own account the first time they join. Players join with the address HexOS copies, in the game's Join menu.",
+    "icon": "project-zomboid/icon.png",
+    "version": "1.2.0",
+    "categories": ["games"],
+    "keywords": ["project zomboid", "zomboid", "zombies", "survival", "game server", "dedicated server", "multiplayer", "steam"],
+    "homepage": "https://projectzomboid.com/",
+    "sources": ["https://github.com/indifferentbroccoli/projectzomboid-server-docker"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: a Project Zomboid server that players join on the server's own address, one folder and set of ports per copy"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["4CORE", "8GBRAM", "10GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [16261, 16262],
+    "game_port": 16261,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "Admin password",
+      "description": "Join with the username admin and this password to run the server from inside the game.",
+      "type": "password",
+      "key": "admin_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(project-zomboid)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(project-zomboid)/server",
+      "owner": {
+        "user": "apps"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "indifferentbroccoli/projectzomboid-server-docker",
+      "tag": "v1.2.0@sha256:0bfd0599c0cf3edf66ba40937ce3ae2a7c5de92073dc99d1c7e9a01fa581414e",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      { "name": "ADMIN_USERNAME", "value": "admin" },
+      { "name": "ADMIN_PASSWORD", "value": "$QUESTION(admin_password)" },
+      { "name": "RCON_PASSWORD", "value": "$RANDOM_STRING(24)" },
+      { "name": "SERVER_NAME", "value": "pzserver" },
+      { "name": "DEFAULT_PORT", "value": "$PORT(16261)" },
+      { "name": "UDP_PORT", "value": "$PORT(16262)" },
+      { "name": "MEMORY_XMX_GB", "value": "5" },
+      { "name": "UPDATE_ON_START", "value": "true" },
+      { "name": "PUID", "value": "568" },
+      { "name": "PGID", "value": "568" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": "$PORT(16261)", "container_port": "$PORT(16261)", "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(16262)", "container_port": "$PORT(16262)", "protocol": "udp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/project-zomboid-config",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(project-zomboid)/data"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/project-zomboid",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(project-zomboid)/server"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 8192)"
+      }
+    }
+  }
+}

@@ -56,6 +56,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Plex](plex.json) | Media server with Plex Pass support |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |
+| [Project Zomboid](project-zomboid.json) | Zombie survival game server |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
 | [Pterodactyl Panel](pterodactyl-panel.json) | Game server panel; its game servers run in Pterodactyl Wings |
 | [Pterodactyl Wings](pterodactyl-wings.json) | Runs Pterodactyl's game servers, on ports 27100 to 27119 |
