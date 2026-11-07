@@ -15,7 +15,7 @@
     "specifications": [
       "2CORE",
       "2GBRAM",
-      "2GB"
+      "5GB"
     ],
     "permissions": [
       "READ_WRITE_LOCATIONS"

@@ -1,0 +1,61 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: a Satisfactory server players add in Server Manager at the server's address, one folder and port pair per copy"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "4CORE",
+      "8GBRAM",
+      "15GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      7777,
+      8888
+    ],
+    "game_port": 7777,
+    "instances": "many"
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(satisfactory-server)/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "saves"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "game_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(7777)"
+      },
+      "messaging_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(8888)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(satisfactory-server)/config)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 4)",
+        "memory": "$MEMORY(25%, 8192)"
+      }
+    }
+  }
+}

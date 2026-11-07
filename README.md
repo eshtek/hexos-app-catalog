@@ -10,6 +10,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 |-----|-------------|
 | [Actual Budget](actual-budget.json) | Financial planning software |
 | [AFFiNE](affine.json) | Knowledge base software |
+| [ARK: Survival Evolved](ark-survival-evolved.json) | Dinosaur survival game server |
 | [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
@@ -50,9 +51,12 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
+| [Pelican Panel](pelican-panel.json) | Game server panel; its game servers run in Pelican Wings |
+| [Pelican Wings](pelican-wings.json) | Runs Pelican's game servers, on ports 27200 to 27219 |
 | [Plex](plex.json) | Media server with Plex Pass support |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |
+| [Project Zomboid](project-zomboid.json) | Zombie survival game server |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
 | [Pterodactyl Panel](pterodactyl-panel.json) | Game server panel; its game servers run in Pterodactyl Wings |
 | [Pterodactyl Wings](pterodactyl-wings.json) | Runs Pterodactyl's game servers, on ports 27100 to 27119 |
@@ -63,6 +67,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Ratelog](radarr.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
+| [Satisfactory Server](satisfactory-server.json) | Satisfactory game server |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
@@ -73,7 +78,9 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
 | [Terraria](terraria.json) | 2D sandbox adventure game server |
+| [Terraria TShock](terraria-tshock.json) | Terraria server with admin tools and plugins |
 | [The Lounge](the-lounge.json) | Always-connected web IRC client ([notes](the-lounge/README.md)) |
+| [tModLoader](tmodloader.json) | Modded Terraria server with a dashboard for Workshop mods |
 | [Uptime Kuma](uptime-kuma.json) | Self-hosted uptime monitoring |
 | [Valheim](valheim.json) | Viking survival game server, joined with a crossplay join code |
 | [Vaultwarden](vaultwarden.json) | Bitwarden-compatible password manager |

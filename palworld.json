@@ -107,7 +107,7 @@
             "required": true,
             "options": [
                 {
-                    "text": "8 GB (minimum recommendation)",
+                    "text": "8 GB",
                     "value": "8192"
                 },
                 {
@@ -139,7 +139,7 @@
                     "value": "15360"
                 },
                 {
-                    "text": "16 GB",
+                    "text": "16 GB (recommended)",
                     "value": "16384"
                 },
                 {
@@ -199,7 +199,7 @@
                     "value": "49152"
                 }
             ],
-            "default": "8192"
+            "default": "16384"
         },
         {
             "question": "Select a Server name",
