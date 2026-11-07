@@ -23,6 +23,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
+| [Factorio Server](factorio.json) | Factory-building game server |
 | [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
 | [FlareSolverr](flaresolverr.json) | Lets Prowlarr reach indexers behind Cloudflare |
@@ -40,6 +41,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
 | [Minecraft](minecraft.json) | Minecraft Java Edition server |
+| [Minecraft Bedrock](minecraft-bedrock.json) | Minecraft Bedrock Edition server, for phones, consoles and Windows |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
@@ -52,6 +54,8 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |
 | [Prowlarr](prowlarr.json) | Indexer manager for Sonarr & Radarr |
+| [Pterodactyl Panel](pterodactyl-panel.json) | Game server panel; its game servers run in Pterodactyl Wings |
+| [Pterodactyl Wings](pterodactyl-wings.json) | Runs Pterodactyl's game servers, on ports 27100 to 27119 |
 | [qBittorrent](qbittorrent.json) | BitTorrent client |
 | [qui](qui.json) | A qBittorrent web UI |
 | [Rackula](rackula.json) | A drag and drop rack visualizer |
@@ -68,6 +72,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
+| [Terraria](terraria.json) | 2D sandbox adventure game server |
 | [The Lounge](the-lounge.json) | Always-connected web IRC client ([notes](the-lounge/README.md)) |
 | [Uptime Kuma](uptime-kuma.json) | Self-hosted uptime monitoring |
 | [Valheim](valheim.json) | Viking survival game server, joined with a crossplay join code |

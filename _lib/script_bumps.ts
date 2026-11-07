@@ -28,7 +28,8 @@ const canonical = (value: unknown): string =>
  * which the deck reads from the catalog's current script to show the port players join on. Neither
  * does `requirements.instances` change a server that has the app, or `$INSTANCE`, which reads as the
  * folder it names on every app installed so far, or `$PORT`. A hook's `rerunsOn` is read from the
- * catalog's current script too (the box's link list), so it reaches installed apps at the next sync.
+ * catalog's current script too (the box's link list), so it reaches installed apps at the next sync,
+ * and so is `requirements.reserved_ports`, the ports HexOS holds for an installed app.
  */
 export function runPart(script: Record<string, unknown>): string {
   const { metadata: _metadata, script: _block, internal: _internal, ...runs } = script;
@@ -40,7 +41,13 @@ export function runPart(script: Record<string, unknown>): string {
     });
   }
   if (isObject(runs.requirements)) {
-    const { game_port: _gamePort, instances: _instances, shared_folders: _shared, ...requirements } = runs.requirements;
+    const {
+      game_port: _gamePort,
+      instances: _instances,
+      shared_folders: _shared,
+      reserved_ports: _reserved,
+      ...requirements
+    } = runs.requirements;
     runs.requirements = requirements;
   }
   return asFirstCopy(canonical(runs)).replace(PLACED_PORT, "$1").replace(QUOTED_NUMBER, "$1");
