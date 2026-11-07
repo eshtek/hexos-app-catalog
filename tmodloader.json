@@ -1,0 +1,97 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: a modded Terraria server whose dashboard opens with the owner's sign-in, starting a medium Classic world, one folder and port pair per copy"
+  },
+  "sign_in": {
+    "username": false
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "5GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30525,
+      7777
+    ],
+    "game_port": 7777,
+    "instances": "many"
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(tmodloader)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/$INSTANCE(tmodloader)/backups",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "backups"
+      }
+    }
+  ],
+  "app_values": {
+    "tmodloader": {
+      "world_name": "HexOS",
+      "world_size": 2,
+      "world_difficulty": 0,
+      "password": ""
+    },
+    "network": {
+      "server_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(7777)"
+      },
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30525)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(tmodloader)/data)",
+      "backups": "$HOST_PATH($LOCATION(ApplicationsCapacity)/$INSTANCE(tmodloader)/backups)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 6144)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "set-admin",
+      "title": "Sign in to tModLoader's dashboard",
+      "description": "Setting up the dashboard's sign-in",
+      "events": [
+        "onAfterInstall"
+      ],
+      "script": "tmodloader/setup.ts",
+      "entrypoint": "setAdmin",
+      "timeout": 600
+    }
+  ]
+}
