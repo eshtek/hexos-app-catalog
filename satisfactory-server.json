@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: a Satisfactory server players add in Server Manager at the server's address, one folder and port pair per copy"
+    "version": "1.0.1",
+    "changeLog": "The app card shows who's online, from the server's own log, out of how many it takes"
   },
   "requirements": {
     "locations": [
@@ -57,5 +57,29 @@
         "memory": "$MEMORY(25%, 8192)"
       }
     }
-  }
+  },
+  "widgets": [
+    {
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's playing on this server, out of how many it takes.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "satisfactory-server"
+        }
+      ],
+      "background": { "field": "online" },
+      "slots": [
+        { "type": "stat", "field": "count" },
+        { "type": "list", "field": "online", "rows": 1 }
+      ],
+      "script": "satisfactory-server/widget_players.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
 }
