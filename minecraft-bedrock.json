@@ -1,0 +1,78 @@
+{
+  "version": 6,
+  "internal": true,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: a Bedrock world that phones, consoles and Windows join on the server's own address"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      19132
+    ],
+    "game_port": 19132
+  },
+  "installation_questions": [
+    {
+      "question": "I accept the Minecraft EULA",
+      "description": "Read it at https://www.minecraft.net/eula.",
+      "type": "boolean",
+      "key": "eula",
+      "required": true,
+      "installonly": true,
+      "attestation": true
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/minecraft-bedrock/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "minecraft_bedrock": {
+      "eula": "$QUESTION(eula)",
+      "server_name": "Minecraft on HexOS"
+    },
+    "network": {
+      "server_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(19132)"
+      },
+      "udp_port_range": {
+        "bind_mode": "published",
+        "start": 19140,
+        "end": 19155,
+        "advertise_mode": "specific_ip",
+        "advertised_ip": "$SERVER_LAN_IP"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/minecraft-bedrock/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      }
+    }
+  }
+}
