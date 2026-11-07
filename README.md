@@ -63,6 +63,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Ratelog](radarr.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
+| [Satisfactory Server](satisfactory-server.json) | Satisfactory game server |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
@@ -73,7 +74,9 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
 | [Terraria](terraria.json) | 2D sandbox adventure game server |
+| [Terraria TShock](terraria-tshock.json) | Terraria server with admin tools and plugins |
 | [The Lounge](the-lounge.json) | Always-connected web IRC client ([notes](the-lounge/README.md)) |
+| [tModLoader](tmodloader.json) | Modded Terraria server with a dashboard for Workshop mods |
 | [Uptime Kuma](uptime-kuma.json) | Self-hosted uptime monitoring |
 | [Valheim](valheim.json) | Viking survival game server, joined with a crossplay join code |
 | [Vaultwarden](vaultwarden.json) | Bitwarden-compatible password manager |
