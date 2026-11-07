@@ -38,6 +38,11 @@ describe("bumpProblem", () => {
     expect(bumpProblem(kodi("21.2-1", "1.0.0", ports(2456)), moved)).not.toBeNull();
   });
 
+  test("the ports HexOS reserves for an app change nothing a server runs", () => {
+    const reserving = kodi("21.2-1", "1.0.0", { requirements: { ports: [1], reserved_ports: [{ start: 27100, end: 27119 }] } });
+    expect(bumpProblem(kodi("21.2-1", "1.0.0", { requirements: { ports: [1] } }), reserving)).toBeNull();
+  });
+
   test("a change in layout alone is no change", () => {
     const { app_values: _values, ...rest } = kodi("21.2-1", "1.0.0");
     const reordered = { app_values: { image: { tag: "21.2-1", repository: "eshtek/kodi" } }, ...rest };

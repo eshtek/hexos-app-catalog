@@ -39,6 +39,7 @@ import {
   portsCanMove,
   preferredPort,
   publishedPorts,
+  reservedPortsWellFormed,
   type Finding,
 } from "./ports";
 import { instanceRules, linkCopyRules } from "./instances";
@@ -1046,7 +1047,7 @@ for (const appId of [...linkedApps].sort()) {
 
 // What each script publishes, and what scripts would fight over on one box (see ports.ts)
 for (const [appId, script] of parsedScripts) {
-  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script), ...instanceRules(appId, script)]);
+  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script), ...reservedPortsWellFormed(script), ...instanceRules(appId, script)]);
 }
 const runsInCopies = (appId: string) =>
   (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
