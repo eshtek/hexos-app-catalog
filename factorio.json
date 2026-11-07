@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "internal": false,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: a Factorio world that players join on the server's own address, one folder and port per copy"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "2GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      34197
+    ],
+    "game_port": 34197,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "Play with Space Age",
+      "description": "Everyone who joins needs the Space Age expansion too. This can't be changed later.",
+      "type": "boolean",
+      "key": "space_age",
+      "required": true,
+      "installonly": true,
+      "default": false
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(factorio)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "factorio": {
+      "generate_new_save": false,
+      "load_latest_save": true,
+      "save_name": "_autosave1",
+      "username": "",
+      "token": "",
+      "update_mods_on_start": false,
+      "dlc_space_age": "$QUESTION(space_age)"
+    },
+    "network": {
+      "game_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(34197)"
+      },
+      "rcon_port": {
+        "bind_mode": "exposed",
+        "port_number": 27015
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(factorio)/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      }
+    }
+  }
+}
