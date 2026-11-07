@@ -123,5 +123,38 @@
         "memory": "$MEMORY(50%, 8192)"
       }
     }
-  }
+  },
+  "widgets": [
+    {
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's playing on this server's map.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ark-survival-evolved"
+        }
+      ],
+      "background": {
+        "field": "online"
+      },
+      "slots": [
+        {
+          "type": "stat",
+          "field": "count"
+        },
+        {
+          "type": "list",
+          "field": "online",
+          "rows": 1
+        }
+      ],
+      "script": "ark-survival-evolved/widget_players.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
 }
