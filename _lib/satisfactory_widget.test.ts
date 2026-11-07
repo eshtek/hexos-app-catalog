@@ -270,7 +270,7 @@ describe("the UDP query", () => {
       const dir = configDir([OPENED, withPort(port), ENTRY_MAP, login("Alex", ALEX), joined("Alex"), login("Sam", SAM), joined("Sam")]);
       const result = await run(context(dir, 1));
       expect(result.fields).toEqual({
-        online: { type: "list", entries: [{ title: "HexOS Factory", subtitle: "Alex, Sam", image: ARTWORK }] },
+        online: { type: "list", entries: [{ title: "HexOS Factory", subtitle: "Alex and Sam", image: ARTWORK }] },
         count: { type: "stat", label: "Players", value: "2/4" },
       });
     });

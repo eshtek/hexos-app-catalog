@@ -335,6 +335,13 @@ export function serverName(host: string, port: number, timeoutMs = QUERY_TIMEOUT
   });
 }
 
+/** Who's online in a line: "Alex, Steve, and 3 more", as every game card says it. */
+export function playersLine(names: string[]): string {
+  if (names.length <= 2) return names.join(" and ");
+  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
+  return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
+}
+
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const config = configMount(ctx.mounts);
   const followed = config ? await followLog(config.localPath + LOG) : null;
@@ -346,7 +353,7 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
     : "Satisfactory";
   const fields: Record<string, WidgetFieldValue> = {
     // One entry while anyone's on: the session in bold, the players in the small line under it
-    online: { type: "list", entries: names.length ? [{ title, subtitle: names.join(", "), image: ARTWORK }] : [] },
+    online: { type: "list", entries: names.length ? [{ title, subtitle: playersLine(names), image: ARTWORK }] : [] },
     count: { type: "stat", label: "Players", value: `${names.length}/${roster?.max ?? DEFAULT_MAX_PLAYERS}` },
   };
   return { fields };

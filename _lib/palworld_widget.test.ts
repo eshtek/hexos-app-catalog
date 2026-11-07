@@ -137,7 +137,7 @@ describe("the card", () => {
     const { port, asked } = api([PLAYER, { ...PLAYER, name: "Zoe" }]);
     const result = await run(context(serverDir(settingsFile(port))));
     expect(result.fields).toEqual({
-      online: { type: "list", entries: [{ title: "HexOS Palworld Test", subtitle: "PalUser, Zoe", image: ARTWORK }] },
+      online: { type: "list", entries: [{ title: "HexOS Palworld Test", subtitle: "PalUser and Zoe", image: ARTWORK }] },
       count: { type: "stat", label: "Players", value: "2/32" },
     });
     expect(asked.sort()).toEqual(["/v1/api/metrics", "/v1/api/players"]);

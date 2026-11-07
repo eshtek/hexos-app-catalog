@@ -143,6 +143,13 @@ async function api(base: string, authorization: string, path: string): Promise<u
   }
 }
 
+/** Who's online in a line: "Alex, Steve, and 3 more", as every game card says it. */
+export function playersLine(names: string[]): string {
+  if (names.length <= 2) return names.join(" and ");
+  if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]}`;
+  return `${names[0]}, ${names[1]}, and ${names.length - 2} more`;
+}
+
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const settings = await readSettings(ctx);
   const password = settings.get("AdminPassword") ?? "";
@@ -165,7 +172,7 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
     online: {
       type: "list",
       entries: names.length
-        ? [{ title, ...(named.length ? { subtitle: named.join(", ") } : {}), image: ARTWORK }]
+        ? [{ title, ...(named.length ? { subtitle: playersLine(named) } : {}), image: ARTWORK }]
         : [],
     },
     count: { type: "stat", label: "Players", value: max > 0 ? `${names.length}/${max}` : `${names.length}` },
