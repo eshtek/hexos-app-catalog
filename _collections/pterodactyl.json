@@ -1,6 +1,7 @@
 {
   "type": "collection",
   "version": 1,
+  "internal": true,
   "name": "Game server panel",
   "description": "Run Minecraft, Rust and Source game servers from one website, each in its own container.",
   "groups": [
