@@ -2,7 +2,7 @@
   "version": 6,
   "script": {
     "version": "1.0.0",
-    "changeLog": "Initial curation: a TShock world with its admin setup code on the app's card and Settings tab"
+    "changeLog": "Initial curation: a TShock world whose card shows who's online, with its admin setup code on the Settings tab"
   },
   "requirements": {
     "locations": [
@@ -119,10 +119,10 @@
   },
   "widgets": [
     {
-      "id": "setup",
-      "title": "Admin setup",
-      "description": "The one-time code that makes the first player to type it TShock's admin.",
-      "refresh": 30,
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's playing on this server, and on the Settings tab the code that makes its first admin.",
+      "refresh": 10,
       "conditions": [
         {
           "role": "availability",
@@ -130,11 +130,13 @@
           "app": "terraria-tshock"
         }
       ],
+      "background": { "field": "online" },
       "slots": [
-        { "type": "stat", "field": "setup" }
+        { "type": "stat", "field": "count" },
+        { "type": "list", "field": "online", "rows": 1 }
       ],
       "settings": [{ "field": "setup" }],
-      "script": "terraria-tshock/widget_setup.ts",
+      "script": "terraria-tshock/widget_players.ts",
       "entrypoint": "run",
       "timeout": 5
     }
