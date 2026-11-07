@@ -1,0 +1,127 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": false,
+  "metadata": {
+    "name": "ARK: Survival Evolved",
+    "description": "Tame dinosaurs, build a base and survive together on your own ARK: Survival Evolved server. The first start downloads the game, about 23 GB, so players can join only once that finishes. Players find it in the game's server list, or add the address HexOS copies to Steam's favorite servers.",
+    "icon": "ark-survival-evolved/icon.png",
+    "version": "latest-1793607995",
+    "categories": ["games"],
+    "keywords": ["ark", "survival evolved", "ase", "dinosaurs", "game server", "dedicated server", "multiplayer", "steam"],
+    "homepage": "https://playark.com/",
+    "sources": ["https://github.com/Hermsi1337/docker-ark-server"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: an ARK: Survival Evolved server on one of the free maps, one folder and set of ports per copy"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "8GBRAM", "30GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [7777, 7778, 27015],
+    "game_port": 27015,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "Server name",
+      "type": "text",
+      "key": "server_name",
+      "required": true,
+      "default": "HexOS ARK"
+    },
+    {
+      "question": "Password",
+      "description": "Players type it when they join. Letters and numbers only.",
+      "type": "password",
+      "key": "server_password",
+      "required": false,
+      "default": "",
+      "placeholder": "Leave blank for no password"
+    },
+    {
+      "question": "Admin password",
+      "description": "Turns on admin commands in the game: open the console and type enablecheats, then this password.",
+      "type": "password",
+      "key": "admin_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    },
+    {
+      "question": "Map",
+      "description": "Each map keeps its own world, so changing it later starts fresh on the new map. The old world stays on the server.",
+      "type": "select",
+      "key": "map",
+      "required": true,
+      "default": "TheIsland",
+      "options": [
+        { "text": "The Island", "value": "TheIsland" },
+        { "text": "The Center", "value": "TheCenter" },
+        { "text": "Ragnarok", "value": "Ragnarok" },
+        { "text": "Valguero", "value": "Valguero_P" },
+        { "text": "Crystal Isles", "value": "CrystalIsles" },
+        { "text": "Lost Island", "value": "LostIsland" },
+        { "text": "Fjordur", "value": "Fjordur" }
+      ]
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(ark-survival-evolved)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/hermsi1337/ark-server",
+      "tag": "latest-1793607995@sha256:2c730966e2acd2a5ec80ca5c92cd1cb169a53bcf121bd160c8d8e32a2806340d",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      { "name": "SESSION_NAME", "value": "$QUESTION(server_name)" },
+      { "name": "SERVER_PASSWORD", "value": "$QUESTION(server_password)" },
+      { "name": "ADMIN_PASSWORD", "value": "$QUESTION(admin_password)" },
+      { "name": "SERVER_MAP", "value": "$QUESTION(map)" },
+      { "name": "GAME_CLIENT_PORT", "value": "$PORT(7777)" },
+      { "name": "UDP_SOCKET_PORT", "value": "$PORT(7778)" },
+      { "name": "SERVER_LIST_PORT", "value": "$PORT(27015)" },
+      { "name": "UPDATE_ON_START", "value": "true" },
+      { "name": "WARN_ON_STOP", "value": "false" },
+      { "name": "PUID", "value": "568" },
+      { "name": "PGID", "value": "568" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": "$PORT(7777)", "container_port": "$PORT(7777)", "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(7778)", "container_port": "$PORT(7778)", "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(27015)", "container_port": "$PORT(27015)", "protocol": "udp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/app",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(ark-survival-evolved)/data"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(50%, 8192)"
+      }
+    }
+  }
+}
