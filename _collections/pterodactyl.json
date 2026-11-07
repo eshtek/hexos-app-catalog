@@ -2,7 +2,7 @@
   "type": "collection",
   "version": 1,
   "name": "Game server panel",
-  "description": "Host Minecraft, Valheim, Terraria and dozens of other games from one website, each server in its own container.",
+  "description": "Run Minecraft, Rust and Source game servers from one website, each in its own container.",
   "groups": [
     {
       "id": "panel",
