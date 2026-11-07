@@ -13,7 +13,7 @@ describe("TShock's admin setup widget", () => {
   });
 
   test("shows the value as still to come before the first start writes either file", () => {
-    expect(setupField(null, false).value).toBe("");
+    expect(setupField(null, false)).toEqual({ type: "stat", label: "Admin setup", value: "" });
   });
 
   test("ignores a file that holds no code", () => {
