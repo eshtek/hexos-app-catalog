@@ -707,6 +707,42 @@ describe("emby, whose card reads sessions as an administrator", () => {
     expect(asked(app, DEVICES)).toHaveLength(4);
   });
 
+  test("on the dataset, the administrator's sign-in is kept when five newer ones push it out of those asked about", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby("owner");
+    const dir = datasetWith(signIns(["member", 200], ["owner", 100]));
+    box("emby", {}, app.answer);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    const db = new Database(join(dir, "data/authentication.db"));
+    for (const n of [1, 2, 3, 4, 5]) db.run(`INSERT INTO Tokens_2 VALUES ('guest-${n}', ${10 + n}, 'user-guest-${n}', 1, ${300 + n})`);
+    db.close();
+    app.asked.length = 0;
+    at(5_000);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    expect(asked(app, DEVICES)).toEqual([]);
+    at(300_000);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    expect(asked(app, DEVICES)).toEqual(["owner"]);
+  });
+
+  test("on the dataset, a kept sign-in that's signed out is dropped at once", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby("owner", "partner");
+    const dir = datasetWith(signIns(["owner", 200], ["partner", 100]));
+    box("emby", {}, app.answer);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    const db = new Database(join(dir, "data/authentication.db"));
+    db.run("UPDATE Tokens_2 SET IsActive = 0 WHERE AccessToken = 'owner'");
+    db.close();
+    app.admins.delete("owner");
+    app.asked.length = 0;
+    at(5_000);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    expect(asked(app, SESSIONS)).toEqual(["partner"]);
+  });
+
   test("on the dataset, a new sign-in is asked about at once, so signing in shows the streams", async () => {
     const { run } = await fresh(script);
     at(0);

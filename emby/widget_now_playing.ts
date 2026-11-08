@@ -63,6 +63,11 @@ function tokensIn(db: Database): string[] {
     .filter(Boolean);
 }
 
+/** Whether the token is still an active sign-in: looked up alone, as newer sign-ins can push it out of tokensIn's five. */
+function isActive(db: Database, token: string): boolean {
+  return !!db.query<{ found: number }, [string]>("SELECT 1 AS found FROM Tokens_2 WHERE AccessToken = ? AND IsActive = 1").get(token);
+}
+
 /** Where the file in a tar from Docker's archive endpoint sits: after its 512-byte header, and any pax header. */
 export function tarFile(head: Uint8Array): { start: number; size: number } | null {
   const text = new TextDecoder();
@@ -201,17 +206,19 @@ async function harvestToken(ctx: WidgetContext, base: string, started: number): 
     ctx.mounts.find((m) => m.hostPath.endsWith("/emby/config"));
   if (config) {
     let tokens: string[] | undefined;
+    let there = false;
     let db: Database | undefined;
     try {
       db = new Database(config.localPath + DB_RELATIVE, { readonly: true });
       tokens = tokensIn(db);
+      there = previous !== undefined && isActive(db, previous);
     } catch {
       // Not written yet, or the dataset isn't visible from here
     } finally {
       db?.close();
     }
     if (tokens) {
-      const kept = await keep(base, previous !== undefined && tokens.includes(previous), started);
+      const kept = await keep(base, there, started);
       if (kept) return kept;
       const candidates = tokens.filter((token) => token !== previous);
       const key = candidates.join("\n");
