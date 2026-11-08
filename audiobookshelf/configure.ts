@@ -5,8 +5,9 @@ import type { HookContext } from "../_lib/hook_context";
  * Sets Audiobookshelf up as HexOS ships it. Fresh, it opens on a screen that makes the owner create
  * a root user, so HexOS makes that user from the sign-in the owner chose (`ctx.signIn`) and adds the
  * Audiobooks and Podcasts folders it mounts. One that already has a root user keeps it: its API
- * needs that user's own password, so a run with nothing to sign in with stops quietly rather than
- * ask. Read at Audiobookshelf 2.37.2, the version TrueNAS pins.
+ * needs that user's own password, which the owner gives in a collection's walk for an Audiobookshelf
+ * they already had (`ctx.existingSignIns`), and a run with nothing to sign in with stops quietly
+ * rather than ask. Read at Audiobookshelf 2.37.2, the version TrueNAS pins.
  */
 
 const LIBRARIES = [
@@ -55,7 +56,10 @@ export async function configure(ctx: HookContext) {
   const initialized = await isInitialized(ctx);
   await ctx.emitCheckpoint("start");
 
-  const wanted = ctx.signIn;
+  const given = ctx.existingSignIns?.[ctx.resourceId];
+  const own = given?.username && given.password ? given : undefined;
+  // One that has a root user signs in as the owner's own, and one with none makes the account they gave
+  const wanted = initialized ? (own ?? ctx.signIn) : (ctx.signIn ?? own);
   if (!initialized) {
     if (!wanted) {
       await ctx.skipCheckpoint("signIn", "Audiobookshelf asks you to create your account the first time you open it");
@@ -72,6 +76,9 @@ export async function configure(ctx: HookContext) {
 
   const token = wanted ? await logIn(ctx, wanted.username, wanted.password) : undefined;
   if (!token) {
+    if (initialized && own) {
+      ctx.fail("Audiobookshelf didn't accept the sign-in you gave for it, so HexOS left it as it is. Check it, then run this again from Audiobookshelf's Connections tab.");
+    }
     if (initialized) {
       await ctx.skipCheckpoint("signIn", "Audiobookshelf keeps the account it has");
       for (const library of LIBRARIES) await ctx.skipCheckpoint(library.folder, "Audiobookshelf keeps the libraries it has");
@@ -79,7 +86,9 @@ export async function configure(ctx: HookContext) {
     }
     ctx.fail("Audiobookshelf took your sign-in but won't sign in with it. Try again.");
   }
-  if (initialized) await ctx.skipCheckpoint("signIn", "Audiobookshelf already uses the sign-in you chose");
+  if (initialized) {
+    await ctx.skipCheckpoint("signIn", own ? "Audiobookshelf keeps the account it has" : "Audiobookshelf already uses the sign-in you chose");
+  }
 
   const present = await shelf<{ libraries: Array<{ folders?: Array<{ fullPath?: string }> }> }>(ctx, "/api/libraries", { token });
   const folders = new Set(present.libraries.flatMap((library) => (library.folders ?? []).map((folder) => folder.fullPath)));

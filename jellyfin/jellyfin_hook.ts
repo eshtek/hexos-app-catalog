@@ -11,7 +11,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * has (or, when a user by that name exists, that user gets the password and is made one), through
  * an administrator's key from Jellyfin's own database, read-only, or the sign-in of an
  * administrator the owner gives. Its server name and libraries stay as they are. Run from the card
- * with no sign-in chosen, it asks for one.
+ * with no sign-in chosen, it asks for one. A collection that brings in a Jellyfin the owner already
+ * had hands it no sign-in to add but the administrator account the owner gave (`ctx.existingSignIns`),
+ * which it signs in with and changes in no way.
  */
 
 const DEVICE_ID = "hexos-jellyfin-setup";
@@ -59,12 +61,17 @@ export async function afterInstall(ctx: HookContext) {
   await waitForWizard(ctx);
   await ctx.emitCheckpoint("jellyfinReady");
 
+  const own = ownSignIn(ctx);
   let token: string;
   if (await isWizardComplete(ctx)) {
-    token = await administrator(ctx);
-    await ctx.emitCheckpoint("wizardComplete", ctx.signIn ? "Your sign-in is an administrator" : "Already configured", 30);
+    token = own ? await signInAsOwn(ctx, own) : await administrator(ctx);
+    await ctx.emitCheckpoint(
+      "wizardComplete",
+      own ? "Signed in with your administrator" : ctx.signIn ? "Your sign-in is an administrator" : "Already configured",
+      30,
+    );
   } else {
-    const account = ctx.signIn ?? (await chooseSignIn(ctx));
+    const account = ctx.signIn ?? own ?? (await chooseSignIn(ctx));
     await runWizard(ctx, account.username, account.password);
     token = await authenticate(ctx, account.username, account.password);
     await setServerName(ctx, token, SERVER_NAME);
@@ -91,6 +98,24 @@ function answered(answers: Record<string, unknown> | undefined): SignIn | undefi
   const username = typeof answers?.username === "string" ? answers.username.trim() : "";
   const password = typeof answers?.password === "string" ? answers.password : "";
   return username && password ? { username, password } : undefined;
+}
+
+/** The administrator account the owner gave for this Jellyfin, which they already had, in a collection's walk. */
+function ownSignIn(ctx: HookContext): SignIn | undefined {
+  const own = ctx.existingSignIns?.[ctx.resourceId];
+  return own?.username && own.password ? { username: own.username, password: own.password } : undefined;
+}
+
+/** A token of the owner's own administrator, or the setup stops and says so, having changed nothing. */
+async function signInAsOwn(ctx: HookContext, own: SignIn): Promise<string> {
+  const signedIn = await signInAs(ctx, own);
+  if (!signedIn) {
+    ctx.fail(`Jellyfin didn't accept the sign-in you gave for ${own.username}, so HexOS left it as it is. Check it, then run Pre-configure Jellyfin from its Connections tab.`);
+  }
+  if (!signedIn.admin) {
+    ctx.fail(`${own.username} isn't a Jellyfin administrator, so HexOS left Jellyfin as it is. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.`);
+  }
+  return signedIn.token;
 }
 
 /** A fresh Jellyfin's administrator, from the owner, when no sign-in came with the install. */

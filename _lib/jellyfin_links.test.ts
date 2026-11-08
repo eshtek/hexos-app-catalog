@@ -406,6 +406,19 @@ test("Jellystat takes the run's sign-in over inherited answers", async () => {
   expect(calls.find((c) => c.path === "/auth/createuser")?.body.username).toBe("chosen");
 });
 
+// A Jellyfin the owner already had keeps its own administrator (Aaron, 2026-11-08), which the run's
+// new sign-in never became
+test("Jellystat takes a kept Jellyfin's own administrator over the run's sign-in", async () => {
+  const { ctx, calls } = apis();
+  Object.assign(ctx, {
+    resourceId: "jellyfin",
+    signIn: { username: "chosen", password: "chosen-password" },
+    existingSignIns: { jellyfin: { username: "jellyadmin", password: "their-own" } },
+  });
+  await connectJellystat(ctx);
+  expect(calls.find((c) => c.path === "/Users/AuthenticateByName")?.body).toMatchObject({ Username: "jellyadmin", Pw: "their-own" });
+});
+
 test("Jellystat reuses its named API key", async () => {
   const { ctx, calls } = apis({ keyExists: true });
   await connectJellystat(ctx);

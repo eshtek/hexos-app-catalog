@@ -16,9 +16,10 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * looks, with no remote path mapping: a mapping belongs to the box's address, not to one client,
  * and would send every other client's downloads astray.
  *
- * The manager gets the client's sign-in HexOS has just signed in with: the one the owner chose for
- * the install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
- * default. Only when HexOS knows none does the manager keep what it has, and the owner is asked when
+ * The manager gets the client's sign-in HexOS has just signed in with: for a Deluge the owner
+ * already had, the password they gave for it (`ctx.existingSignIns`), else the one the owner chose
+ * for the install or collection (`ctx.signIn`), else the one in the client's own settings, else
+ * HexOS's default. Only when HexOS knows none does the manager keep what it has, and the owner is asked when
  * that fails too. The manager's own may be an old password, and qBittorrent locks out an address
  * after five failed sign-ins, so it is never tried ahead of one HexOS knows works.
  *
@@ -521,7 +522,9 @@ export const deluge = (ctx: HookContext) =>
         ]),
       );
     let password: string | undefined;
-    for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
+    // A Deluge the owner already had keeps its own password, which they gave in the walk
+    const own = ctx.existingSignIns?.deluge?.password;
+    for (const candidate of new Set([own, ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
       if (candidate && (await signsIn(candidate))) {
         password = candidate;
         break;

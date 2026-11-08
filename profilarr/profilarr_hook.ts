@@ -10,8 +10,8 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * sign-in the owner chose for the install or collection (`ctx.signIn`), which the links sign in
  * with too. Profilarr 2.2 could let the home network in without it, and gets that switched on;
  * 2.3 dropped the switch, so there the owner signs in with what they chose. A Profilarr the owner
- * already had, which a collection brings in, gets the password they chose (Profilarr has one
- * account and can't rename it). With no sign-in chosen (a deck from before they did) it gets
+ * already had, which a collection brings in, keeps its account: its setup and links sign in with the
+ * one the owner gave for it (`ctx.existingSignIns`) and change nothing of it. With no sign-in chosen (a deck from before they did) it gets
  * admin/adminadmin, kept beside its settings so the links can sign in; a link run from the card
  * asks for the sign-in when it has neither. The profiles are the Dictionarry database's; every one
  * of them gets "Not English", scored as Dictionarry scores a release a profile must never take, so
@@ -209,6 +209,12 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
   });
 }
 
+/** The account the owner gave, in a collection's walk, for a Profilarr they already had. */
+function ownSignIn(ctx: HookContext): Credentials | undefined {
+  const own = ctx.existingSignIns?.[ctx.resourceId];
+  return own?.username && own.password ? { username: own.username, password: own.password } : undefined;
+}
+
 /** Asks the owner for Profilarr's sign-in, and signs in with it. Undefined when they don't give it. */
 async function askSignIn(ctx: HookContext, description: string): Promise<{ session: Session; with: Credentials } | undefined> {
   const answers = await ask(
@@ -238,11 +244,14 @@ async function signIn(ctx: HookContext): Promise<SignIn | undefined> {
   const config = configMount(ctx.mounts, "profilarr");
   if (!config) ctx.fail("HexOS couldn't find Profilarr's settings folder");
   const saved = savedSignIn(config);
+  const own = ownSignIn(ctx);
   const way = await waitForDoor(ctx);
 
   if (way === "setup") {
-    const account = ctx.signIn ?? DEFAULT_SIGN_IN;
-    if (ctx.signIn) {
+    // A Profilarr the owner already had but never made an account in gets the one they gave for it
+    const chosen = own ?? ctx.signIn;
+    const account = chosen ?? DEFAULT_SIGN_IN;
+    if (chosen) {
       rmSync(savedPath(config), { force: true });
     } else {
       // Kept before the account exists, for the links
@@ -262,6 +271,16 @@ async function signIn(ctx: HookContext): Promise<SignIn | undefined> {
     await letHomeNetworkIn(ctx, session);
     return { session, made: true, ours: true, with: account };
   }
+  // The owner's own account or nothing, so a wrong one is never followed by a password change
+  if (own) {
+    const session: Session = { base: ctx.baseUrl };
+    const signedIn = await act(session, "/auth/login", { username: own.username, password: own.password });
+    if (signedIn.type !== "redirect" || !session.cookie) {
+      ctx.fail("Profilarr didn't accept the sign-in you gave for it, so HexOS left it as it is. Check it, then run this again from Profilarr's Connections tab.");
+    }
+    const ours = saved?.username === own.username && saved.password === own.password;
+    return { session, made: false, ours, with: own };
+  }
   // Profilarr counts refused sign-ins against the caller, so only the two HexOS knows are tried
   for (const known of [ctx.signIn, saved]) {
     if (!known) continue;
@@ -279,7 +298,7 @@ async function signIn(ctx: HookContext): Promise<SignIn | undefined> {
  */
 async function takeChosenPassword(ctx: HookContext, signedIn: SignIn | undefined): Promise<SignIn | undefined> {
   const wanted = ctx.signIn;
-  if (!wanted) return signedIn;
+  if (!wanted || ownSignIn(ctx)) return signedIn;
   if (signedIn?.with?.password === wanted.password) return signedIn;
   let current = signedIn?.with ? { session: signedIn.session, with: signedIn.with } : undefined;
   current ??= await askSignIn(ctx, "Enter the sign-in you use for Profilarr now, so HexOS can change its password to the one you chose.");

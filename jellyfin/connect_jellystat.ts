@@ -208,11 +208,15 @@ async function jellystatSignIn(
 }
 
 /**
- * The Jellyfin administrator Jellystat's account and API key come from: the sign-in the owner chose
- * for the install or collection (`ctx.signIn`, which Pre-configure Jellyfin made an administrator),
- * else the answers an older Pre-configure Jellyfin was given, else asked for.
+ * The Jellyfin administrator Jellystat's account and API key come from: the one the owner gave for a
+ * Jellyfin they already had (`ctx.existingSignIns`), else the sign-in they chose for the install or
+ * collection (`ctx.signIn`, which Pre-configure Jellyfin made an administrator), else the answers an
+ * older Pre-configure Jellyfin was given, else asked for.
  */
 async function jellyfinAdmin(ctx: HookContext): Promise<{ username: string; password: string }> {
+  // A Jellyfin the owner already had keeps its own administrator, which they gave in the walk
+  const own = ctx.existingSignIns?.[ctx.resourceId];
+  if (own?.username && own.password) return { username: own.username, password: own.password };
   if (ctx.signIn) return { username: ctx.signIn.username, password: ctx.signIn.password };
   // Read without getInput, which throws for an answer that isn't there: a run from the card has none.
   // Jellyfin takes an empty password, so an inherited one counts once the username is there.

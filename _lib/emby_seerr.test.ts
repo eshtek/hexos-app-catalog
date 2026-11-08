@@ -310,3 +310,19 @@ for (const options of [{ initializeNoop: true }, { verifiedType: JELLYFIN }]) {
     await expect(connectSeerr(ctx)).rejects.toThrow(/didn't finish its setup/);
   });
 }
+
+// An Emby the owner already had keeps its own administrator (Aaron, 2026-11-08): Seerr is signed in
+// as the one they gave in the collection's walk, and a Seerr already on it gains no administrator
+test("Seerr signs in as a kept Emby's own administrator, ahead of the run's sign-in", async () => {
+  const { ctx, calls } = apis();
+  Object.assign(ctx, { resourceId: "emby", existingSignIns: { emby: { username: "embyadmin", password: "their-own" } } });
+  await connectSeerr(ctx);
+  expect(calls.find((c) => c.path === "/api/v1/auth/jellyfin")?.body).toMatchObject({ username: "embyadmin", password: "their-own" });
+});
+
+test("a Seerr already on a kept Emby gains no administrator from the run's sign-in", async () => {
+  const { ctx, calls } = apis({ initialized: true, mediaServerType: EMBY });
+  Object.assign(ctx, { resourceId: "emby", existingSignIns: { emby: { username: "embyadmin", password: "their-own" } } });
+  await connectSeerr(ctx);
+  expect(calls.some((c) => c.path.endsWith("/Users/AuthenticateByName"))).toBe(false);
+});

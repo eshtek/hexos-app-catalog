@@ -16,9 +16,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * /config/Downloads, the paths each client keeps its downloads at in its own container. So a
  * finished download is where Sportarr looks, with no remote path mapping.
  *
- * The client's sign-in comes in the same order as for the arr apps: the one the owner chose for the
- * install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
- * default, and the owner is asked last. Run again, a link puts back how Sportarr reaches the client
+ * The client's sign-in comes in the same order as for the arr apps: a kept Deluge's own password
+ * (`ctx.existingSignIns`), the one the owner chose for the install or collection (`ctx.signIn`), else
+ * the one in the client's own settings, else HexOS's default, and the owner is asked last. Run again, a link puts back how Sportarr reaches the client
  * and its sign-in, and fills the category only when the owner left it empty.
  *
  * Sportarr gives a download to the first client it has that's on, so an entry of the same kind it
@@ -434,7 +434,9 @@ export const deluge = (ctx: HookContext) =>
         ]),
       );
     let password: string | undefined;
-    for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
+    // A Deluge the owner already had keeps its own password, which they gave in the walk
+    const own = ctx.existingSignIns?.deluge?.password;
+    for (const candidate of new Set([own, ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
       if (candidate && (await signsIn(candidate))) {
         password = candidate;
         break;
