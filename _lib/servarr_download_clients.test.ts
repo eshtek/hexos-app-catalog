@@ -438,15 +438,98 @@ test("a Radarr that isn't answering yet fails with a plain message before anythi
   await expect(qbittorrent(ctx)).rejects.toThrow("Radarr isn't answering yet. Try again once it has started.");
 });
 
-// A Deluge the owner already had keeps its password, which they gave in the collection's walk
-// (Aaron, 2026-11-08): the manager gets that one, without asking for it again
-test("Deluge: a kept Deluge's own password is the one the manager gets, ahead of the run's sign-in", async () => {
-  const { ctx, entries, questions } = fakes("deluge");
+// A client the owner already had keeps its sign-in (Aaron, 2026-11-08). The link never tries the
+// run's chosen sign-in against it, which it never took and which would count toward its lockout: the
+// manager gets the account the owner gave in the collection's walk, tried once in the whole run.
+const RUNS_OWN = { username: "admin", password: "the-runs-new-password" };
+
+/** Makes `ctx` a link into a kept client, `app` by the name it runs under, with the box's try-once. */
+function keptClient(
+  ctx: HookContext,
+  app: string,
+  run: { given?: { username: string; password: string }; refusedBefore?: boolean; linkedAs?: { catalogId: string } },
+) {
+  const seen = { refused: [] as string[], asked: 0 };
   Object.assign(ctx, {
-    signIn: { username: "admin", password: "the-runs-new-password" },
-    existingSignIns: { deluge: { username: "", password: SIGN_IN.password } },
+    signIn: RUNS_OWN,
+    keptApps: [app],
+    ...(run.given ? { existingSignIns: { [app]: run.given } } : {}),
+    ...(run.linkedAs ? { linkedApp: (id: string) => (id === run.linkedAs?.catalogId ? { name: app, displayName: "Copy" } : null) } : {}),
+    tryExistingSignIn: async <T,>(name: string, signsIn: (account: { username: string; password: string }) => Promise<T | undefined>) => {
+      if (name !== app) throw new Error(`tried ${name}`);
+      if (run.refusedBefore) return "refused";
+      if (!run.given) return undefined;
+      const taken = await signsIn(run.given);
+      if (taken !== undefined) return taken;
+      seen.asked++;
+      seen.refused.push(name);
+      return "refused";
+    },
   });
+  return seen;
+}
+
+/** The passwords qBittorrent was asked to sign in with, from any address. */
+function qbittorrentLogins() {
+  const logins: string[] = [];
+  const served = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/api/v2/auth/login") logins.push(new URLSearchParams(String(init?.body)).get("password") ?? "");
+    return served(input, init);
+  }) as typeof fetch;
+  return logins;
+}
+
+test("Deluge: a kept Deluge's own password is the one the manager gets, and the run's sign-in is never tried", async () => {
+  const { ctx, entries, questions } = fakes("deluge");
+  keptClient(ctx, "deluge", { given: { username: "", password: SIGN_IN.password } });
   await deluge(ctx);
   expect(entries()[0]).toMatchObject({ name: "Deluge", values: { password: SIGN_IN.password } });
   expect(questions).toHaveLength(0);
+});
+
+test("Deluge: a link to a later copy the owner kept takes that copy's own password, by the name it runs under", async () => {
+  const { ctx, entries } = fakes("deluge");
+  keptClient(ctx, "deluge-2", { given: { username: "", password: SIGN_IN.password }, linkedAs: { catalogId: "deluge" } });
+  await deluge(ctx);
+  expect(entries()[0]).toMatchObject({ values: { password: SIGN_IN.password } });
+});
+
+test("Deluge: a kept Deluge's refused password stops the link, with nothing else tried", async () => {
+  const { ctx, entries, questions } = fakes("deluge");
+  const seen = keptClient(ctx, "deluge", { given: { username: "", password: "a typo" } });
+  await expect(deluge(ctx)).rejects.toThrow(Skipped);
+  expect(seen.refused).toEqual(["deluge"]);
+  expect(entries()).toEqual([]);
+  expect(questions).toHaveLength(0);
+});
+
+test("qBittorrent: a kept qBittorrent's own account is the one the manager gets, and the run's sign-in is never tried", async () => {
+  const { ctx, entries, questions } = fakes("qbittorrent");
+  keptClient(ctx, "qbittorrent", { given: SIGN_IN });
+  const logins = qbittorrentLogins();
+  await qbittorrent(ctx);
+  expect(logins).not.toContain(RUNS_OWN.password);
+  expect(logins.filter((password) => password !== SIGN_IN.password)).toEqual([]);
+  expect(entries()[0]).toMatchObject({ values: SIGN_IN });
+  expect(questions).toHaveLength(0);
+});
+
+test("qBittorrent: a kept qBittorrent's refused account is tried once, then the link stops without guessing", async () => {
+  const { ctx, entries } = fakes("qbittorrent");
+  const seen = keptClient(ctx, "qbittorrent", { given: { username: SIGN_IN.username, password: "a typo" } });
+  const logins = qbittorrentLogins();
+  await expect(qbittorrent(ctx)).rejects.toThrow(Skipped);
+  expect(logins).toEqual(["a typo"]);
+  expect(seen.refused).toEqual(["qbittorrent"]);
+  expect(entries()).toEqual([]);
+});
+
+test("qBittorrent: an account an earlier hook of the run found refused isn't tried at all", async () => {
+  const { ctx } = fakes("qbittorrent");
+  keptClient(ctx, "qbittorrent", { refusedBefore: true });
+  const logins = qbittorrentLogins();
+  await expect(qbittorrent(ctx)).rejects.toThrow(Skipped);
+  expect(logins).toEqual([]);
 });

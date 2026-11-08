@@ -73,11 +73,24 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
 
 /** Signs the session in with the first password the page takes, and says which it was. */
 async function signIn(ctx: HookContext, session: Session, configDir: string): Promise<string | undefined> {
-  // A Deluge the owner already had: its own password or nothing, so a wrong one changes nothing
-  const own = ctx.existingSignIns?.[ctx.resourceId]?.password;
-  if (own) {
-    if (await delugeApi<boolean>(session, "auth.login", [own])) return own;
-    ctx.fail("Deluge didn't accept the password you gave for it, so HexOS left it as it is. Check it, then run Pre-configure Deluge from its Connections tab.");
+  // A Deluge the owner already had: the password they gave, tried once in the run, and no guesses
+  if (ctx.keptApps?.includes(ctx.resourceId)) {
+    const own = await ctx.tryExistingSignIn?.(
+      ctx.resourceId,
+      async ({ password }) => ((await delugeApi<boolean>(session, "auth.login", [password])) ? password : undefined),
+      {
+        title: "Sign in to Deluge",
+        description: "Deluge refused the password you gave. Enter it again so HexOS can use it.",
+        username: false,
+        app: "Deluge",
+      },
+    );
+    if (own === "refused") {
+      const message = "Deluge refused the password you gave, so HexOS left Deluge as it is. Run Pre-configure Deluge from its Connections tab to set it up.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
+    }
+    return own;
   }
   const tried = new Set<string>();
   for (const password of [ctx.signIn?.password, savedPassword(configDir), STOCK_PASSWORD]) {
@@ -121,8 +134,8 @@ export async function configure(ctx: HookContext) {
     await ctx.skipCheckpoint("folders", "HexOS couldn't open Deluge's settings, so they stay as they are");
     return;
   }
-  const keeps = Boolean(ctx.existingSignIns?.[ctx.resourceId]?.password);
-  const wanted = keeps ? undefined : ctx.signIn?.password;
+  // One the owner already had keeps its password
+  const wanted = ctx.keptApps?.includes(ctx.resourceId) ? undefined : ctx.signIn?.password;
   if (!wanted) {
     await ctx.skipCheckpoint("signIn", "Deluge keeps the password it has");
   } else if (current === wanted) {

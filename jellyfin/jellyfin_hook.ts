@@ -61,17 +61,19 @@ export async function afterInstall(ctx: HookContext) {
   await waitForWizard(ctx);
   await ctx.emitCheckpoint("jellyfinReady");
 
-  const own = ownSignIn(ctx);
+  const kept = ctx.keptApps?.includes(ctx.resourceId) === true;
   let token: string;
   if (await isWizardComplete(ctx)) {
-    token = own ? await signInAsOwn(ctx, own) : await administrator(ctx);
+    token = kept ? await asOwnAdministrator(ctx) : await administrator(ctx);
     await ctx.emitCheckpoint(
       "wizardComplete",
-      own ? "Signed in with your administrator" : ctx.signIn ? "Your sign-in is an administrator" : "Already configured",
+      kept ? "Signed in with your administrator" : ctx.signIn ? "Your sign-in is an administrator" : "Already configured",
       30,
     );
   } else {
-    const account = ctx.signIn ?? own ?? (await chooseSignIn(ctx));
+    // One the owner had but never finished setting up gets the account they gave, as its first
+    const given = kept && !ctx.refusedSignIns?.includes(ctx.resourceId) ? ctx.existingSignIns?.[ctx.resourceId] : undefined;
+    const account = ctx.signIn ?? (given?.username ? given : undefined) ?? (await chooseSignIn(ctx));
     await runWizard(ctx, account.username, account.password);
     token = await authenticate(ctx, account.username, account.password);
     await setServerName(ctx, token, SERVER_NAME);
@@ -100,22 +102,46 @@ function answered(answers: Record<string, unknown> | undefined): SignIn | undefi
   return username && password ? { username, password } : undefined;
 }
 
-/** The administrator account the owner gave for this Jellyfin, which they already had, in a collection's walk. */
-function ownSignIn(ctx: HookContext): SignIn | undefined {
-  const own = ctx.existingSignIns?.[ctx.resourceId];
-  return own?.username && own.password ? { username: own.username, password: own.password } : undefined;
+/**
+ * A token of the owner's own administrator on a Jellyfin they already had, tried once in the run (see
+ * `ctx.tryExistingSignIn`), or the step stops and says so, having changed nothing. With no account
+ * given, it asks for one as from the card.
+ */
+async function asOwnAdministrator(ctx: HookContext): Promise<string> {
+  const token = await ctx.tryExistingSignIn?.(ctx.resourceId, (account) => administratorToken(ctx, account), {
+    title: "Sign in to Jellyfin",
+    description: "Jellyfin refused the admin account you gave. Enter an administrator's username and password so HexOS can use it.",
+    username: true,
+    app: "Jellyfin",
+  });
+  if (token === "refused") {
+    stop(ctx, "Jellyfin refused the admin account you gave, or it isn't an administrator, so HexOS left Jellyfin as it is. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.");
+  }
+  return token ?? (await administrator(ctx));
 }
 
-/** A token of the owner's own administrator, or the setup stops and says so, having changed nothing. */
-async function signInAsOwn(ctx: HookContext, own: SignIn): Promise<string> {
-  const signedIn = await signInAs(ctx, own);
-  if (!signedIn) {
-    ctx.fail(`Jellyfin didn't accept the sign-in you gave for ${own.username}, so HexOS left it as it is. Check it, then run Pre-configure Jellyfin from its Connections tab.`);
+/** An administrator's session for this account: undefined when Jellyfin refuses it, or it isn't an administrator. */
+async function administratorToken(ctx: HookContext, account: SignIn): Promise<string | undefined> {
+  const resp = await fetch(`${ctx.baseUrl}/Users/AuthenticateByName`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": CLIENT_HEADER },
+    body: JSON.stringify({ Username: account.username, Pw: account.password }),
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => undefined);
+  if (!resp) ctx.fail("Jellyfin didn't answer. Try again once it's running.");
+  if (resp.status === 401 || resp.status === 403) {
+    await resp.body?.cancel();
+    return undefined;
   }
-  if (!signedIn.admin) {
-    ctx.fail(`${own.username} isn't a Jellyfin administrator, so HexOS left Jellyfin as it is. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.`);
-  }
-  return signedIn.token;
+  if (!resp.ok) ctx.fail(`Jellyfin didn't answer its sign-in (${resp.status}). Try again once it's running.`);
+  const data = await resp.json() as { AccessToken?: string; User?: { Policy?: { IsAdministrator?: boolean } } };
+  return data.AccessToken && data.User?.Policy?.IsAdministrator === true ? data.AccessToken : undefined;
+}
+
+/** Ends a step whose app refused the account the owner gave: trying again can't help. */
+function stop(ctx: HookContext, message: string): never {
+  if (ctx.skip) ctx.skip(message);
+  ctx.fail(message);
 }
 
 /** A fresh Jellyfin's administrator, from the owner, when no sign-in came with the install. */
@@ -215,11 +241,11 @@ async function administrator(ctx: HookContext): Promise<string> {
     const given = answered(
       await ask(ctx, signInQuestions, {
         title: "Sign in to Jellyfin",
-        description: `Enter the sign-in of a Jellyfin administrator, so HexOS can add ${wanted.username} as one.`,
+        description: "Enter the sign-in of a Jellyfin administrator, so HexOS can add the account you chose as one.",
       }),
     );
     const signedIn = given && (await signInAs(ctx, given));
-    if (!signedIn?.admin) ctx.fail(`HexOS needs a Jellyfin administrator's sign-in to add ${wanted.username}. Run this again with one.`);
+    if (!signedIn?.admin) ctx.fail("HexOS needs a Jellyfin administrator's sign-in to add the account you chose. Run this again with one.");
     acting = signedIn.token;
   }
 
@@ -235,8 +261,8 @@ async function administrator(ctx: HookContext): Promise<string> {
     await jellyfin(ctx, acting, `/Users/${user.Id}/Policy`, { body: { ...user.Policy, IsAdministrator: true, IsDisabled: false } });
   }
   const now = await signInAs(ctx, wanted);
-  if (!now?.admin) ctx.fail(`Jellyfin didn't make ${wanted.username} an administrator. Run this again.`);
-  ctx.log(`${wanted.username} is a Jellyfin administrator`);
+  if (!now?.admin) ctx.fail("Jellyfin didn't make the account you chose an administrator. Run this again.");
+  ctx.log("The account you chose is a Jellyfin administrator");
   return now.token;
 }
 

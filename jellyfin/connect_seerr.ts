@@ -121,10 +121,22 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
 
 /** The owner's Jellyfin administrator: the sign-in they chose, else the one they give now. */
 async function account(ctx: HookContext): Promise<SignIn> {
-  // A Jellyfin the owner already had keeps its own administrator, which they gave in the walk
-  const own = ctx.existingSignIns?.[ctx.resourceId];
-  if (own?.username && own.password) return { username: own.username, password: own.password };
-  if (ctx.signIn) return ctx.signIn;
+  // A Jellyfin the owner already had keeps its own administrator, which they gave in the walk: checked
+  // with Jellyfin once in the run, so a refused one never reaches Seerr, which would try it again
+  if (ctx.keptApps?.includes(ctx.resourceId)) {
+    const own = await ctx.tryExistingSignIn?.(ctx.resourceId, async (signIn) => ((await takes(ctx, signIn)) ? signIn : undefined), {
+      title: "Sign in to Jellyfin",
+      description: "Jellyfin refused the admin account you gave. Enter an administrator's username and password so HexOS can use it.",
+      username: true,
+      app: "Jellyfin",
+    });
+    if (own === "refused") {
+      const message = "Jellyfin refused the admin account you gave, so HexOS couldn't connect Seerr to it. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
+    }
+    if (own) return { username: own.username, password: own.password };
+  } else if (ctx.signIn) return ctx.signIn;
   const answers = await ask(
     ctx,
     [
@@ -139,6 +151,21 @@ async function account(ctx: HookContext): Promise<SignIn> {
   return { username, password };
 }
 
+/** Whether Jellyfin takes this account: false only when it refuses it. */
+async function takes(ctx: HookContext, signIn: SignIn): Promise<boolean> {
+  const resp = await fetch(`${ctx.baseUrl}/Users/AuthenticateByName`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: CLIENT_HEADER },
+    body: JSON.stringify({ Username: signIn.username, Pw: signIn.password }),
+    signal: AbortSignal.timeout(15_000),
+  }).catch(() => undefined);
+  if (!resp) ctx.fail("Jellyfin didn't answer. Try again once it's running.");
+  await resp.body?.cancel();
+  if (resp.status === 401 || resp.status === 403) return false;
+  if (!resp.ok) ctx.fail(`Jellyfin didn't answer its sign-in (${resp.status}). Try again once it's running.`);
+  return true;
+}
+
 /** The account signed in to Jellyfin: its id and a session token. */
 async function session(ctx: HookContext, signIn: SignIn): Promise<{ id: string; token: string }> {
   const resp = await fetch(`${ctx.baseUrl}/Users/AuthenticateByName`, {
@@ -149,7 +176,7 @@ async function session(ctx: HookContext, signIn: SignIn): Promise<{ id: string; 
   }).catch(() => undefined);
   const body = resp?.ok ? ((await resp.json()) as { AccessToken?: string; User?: { Id?: string } }) : undefined;
   if (!body?.User?.Id || !body.AccessToken) {
-    const message = `Jellyfin didn't accept the sign-in for ${signIn.username}. Run Pre-configure Jellyfin, then try again.`;
+    const message = "Jellyfin didn't accept its administrator's sign-in. Run Pre-configure Jellyfin, then try again.";
     // Jellyfin answered and refused it: its setup was skipped, which trying again won't change
     if (resp && ctx.skip) ctx.skip(message);
     ctx.fail(message);
@@ -267,7 +294,7 @@ async function makeSeerrAdministrator(ctx: HookContext, seerr: string, apiKey: s
     await call(`${seerr}/api/v1/user/import-from-jellyfin`, apiKey, { method: "POST", body: JSON.stringify({ jellyfinUserIds: [id] }) });
     user = await known();
   }
-  if (!user) ctx.fail(`Seerr didn't import ${owner.username} from Jellyfin`);
+  if (!user) ctx.fail("Seerr didn't import your Jellyfin administrator from Jellyfin");
   if (((user.permissions ?? 0) & SEERR_ADMIN) === SEERR_ADMIN) return false;
   await call(`${seerr}/api/v1/user/${user.id}/settings/permissions`, apiKey, {
     method: "POST",
@@ -310,9 +337,9 @@ export async function run(ctx: HookContext) {
     if (knowsThis && answering === thisServer) {
       // Only with the owner's chosen sign-in: run from the card, or for a server they had already, the
       // Seerr they set up stays theirs
-      const chosen = ctx.existingSignIns?.[ctx.resourceId] ? undefined : ctx.signIn;
+      const chosen = ctx.keptApps?.includes(ctx.resourceId) ? undefined : ctx.signIn;
       if (chosen && (await makeSeerrAdministrator(ctx, seerr, apiKey, chosen))) {
-        await ctx.emitCheckpoint("signin", `${chosen.username} is a Seerr administrator`);
+        await ctx.emitCheckpoint("signin", "The account you chose is a Seerr administrator");
       } else {
         await ctx.skipCheckpoint("signin", "Seerr already uses this Jellyfin server");
       }

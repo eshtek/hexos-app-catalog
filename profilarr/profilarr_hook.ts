@@ -209,12 +209,6 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
   });
 }
 
-/** The account the owner gave, in a collection's walk, for a Profilarr they already had. */
-function ownSignIn(ctx: HookContext): Credentials | undefined {
-  const own = ctx.existingSignIns?.[ctx.resourceId];
-  return own?.username && own.password ? { username: own.username, password: own.password } : undefined;
-}
-
 /** Asks the owner for Profilarr's sign-in, and signs in with it. Undefined when they don't give it. */
 async function askSignIn(ctx: HookContext, description: string): Promise<{ session: Session; with: Credentials } | undefined> {
   const answers = await ask(
@@ -244,12 +238,13 @@ async function signIn(ctx: HookContext): Promise<SignIn | undefined> {
   const config = configMount(ctx.mounts, "profilarr");
   if (!config) ctx.fail("HexOS couldn't find Profilarr's settings folder");
   const saved = savedSignIn(config);
-  const own = ownSignIn(ctx);
+  const kept = ctx.keptApps?.includes(ctx.resourceId) === true;
   const way = await waitForDoor(ctx);
 
   if (way === "setup") {
     // A Profilarr the owner already had but never made an account in gets the one they gave for it
-    const chosen = own ?? ctx.signIn;
+    const given = kept && !ctx.refusedSignIns?.includes(ctx.resourceId) ? ctx.existingSignIns?.[ctx.resourceId] : undefined;
+    const chosen = (given?.username ? given : undefined) ?? ctx.signIn;
     const account = chosen ?? DEFAULT_SIGN_IN;
     if (chosen) {
       rmSync(savedPath(config), { force: true });
@@ -271,15 +266,32 @@ async function signIn(ctx: HookContext): Promise<SignIn | undefined> {
     await letHomeNetworkIn(ctx, session);
     return { session, made: true, ours: true, with: account };
   }
-  // The owner's own account or nothing, so a wrong one is never followed by a password change
-  if (own) {
-    const session: Session = { base: ctx.baseUrl };
-    const signedIn = await act(session, "/auth/login", { username: own.username, password: own.password });
-    if (signedIn.type !== "redirect" || !session.cookie) {
-      ctx.fail("Profilarr didn't accept the sign-in you gave for it, so HexOS left it as it is. Check it, then run this again from Profilarr's Connections tab.");
+  // One the owner already had: the account they gave, tried once in the run, and no guesses
+  if (kept) {
+    const own = await ctx.tryExistingSignIn?.(
+      ctx.resourceId,
+      async (account) => {
+        const session: Session = { base: ctx.baseUrl };
+        const signedIn = await act(session, "/auth/login", { username: account.username, password: account.password });
+        return signedIn.type === "redirect" && session.cookie ? { session, with: account } : undefined;
+      },
+      {
+        title: "Sign in to Profilarr",
+        description: "Profilarr refused the account you gave. Enter it again so HexOS can use it.",
+        username: true,
+        app: "Profilarr",
+      },
+    );
+    if (own === "refused") {
+      const message = "Profilarr refused the account you gave, so HexOS left Profilarr as it is. Run this again from Profilarr's Connections tab once the run ends.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
     }
-    const ours = saved?.username === own.username && saved.password === own.password;
-    return { session, made: false, ours, with: own };
+    if (own) {
+      const ours = saved?.username === own.with.username && saved.password === own.with.password;
+      return { session: own.session, made: false, ours, with: own.with };
+    }
+    return way === "open" ? { session: { base: ctx.baseUrl }, made: false, ours: false } : undefined;
   }
   // Profilarr counts refused sign-ins against the caller, so only the two HexOS knows are tried
   for (const known of [ctx.signIn, saved]) {
@@ -298,7 +310,7 @@ async function signIn(ctx: HookContext): Promise<SignIn | undefined> {
  */
 async function takeChosenPassword(ctx: HookContext, signedIn: SignIn | undefined): Promise<SignIn | undefined> {
   const wanted = ctx.signIn;
-  if (!wanted || ownSignIn(ctx)) return signedIn;
+  if (!wanted || ctx.keptApps?.includes(ctx.resourceId)) return signedIn;
   if (signedIn?.with?.password === wanted.password) return signedIn;
   let current = signedIn?.with ? { session: signedIn.session, with: signedIn.with } : undefined;
   current ??= await askSignIn(ctx, "Enter the sign-in you use for Profilarr now, so HexOS can change its password to the one you chose.");
