@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as embyLibraries from "../emby/add_library";
@@ -121,7 +121,7 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
   } as unknown as HookContext;
   // What HexOS left in the library folders: nothing of its own once the link is done
   const leftovers = () => readdirSync(media, { recursive: true }).map(String).filter((entry) => entry.includes(".hexos"));
-  return { ctx, libraries, restarts, looks, leftovers };
+  return { ctx, libraries, restarts, looks, leftovers, media };
 }
 
 for (const server of ["jellyfin", "emby"] as const) {
@@ -134,7 +134,7 @@ for (const server of ["jellyfin", "emby"] as const) {
     expect(restarts).toEqual([2]);
     expect(looks).toHaveLength(3);
     expect(looks[0]).toBe("/media/sports");
-    expect(looks[1]).toStartWith("/media/sports/.hexos-check-");
+    expect(looks[1]).toStartWith(`/media/sports/.hexos-check-${server}-`);
     expect(libraries).toEqual(["/media/sports"]);
     expect(leftovers()).toEqual([]);
   });
@@ -191,5 +191,20 @@ for (const server of ["jellyfin", "emby"] as const) {
     await LINKS[server].sportarr(ctx);
     expect(restarts).toEqual([]);
     expect(libraries).toEqual(["/media/sports"]);
+  });
+
+  test(`${name}: its own empty check folders an earlier run left are taken out, and nothing else is`, async () => {
+    const { ctx, media, leftovers } = fakes(server, "sportarr", { media: "visible" });
+    const other = server === "jellyfin" ? "emby" : "jellyfin";
+    const left = join(media, "sports", `.hexos-check-${server}-0e3a7c1e-5f2b-4d1a-9c3e-7a1b2c3d4e5f`);
+    const holding = join(media, "sports", `.hexos-check-${server}-1f4b8d2f-6a3c-4e2b-8d4f-8b2c3d4e5f60`);
+    const others = join(media, "sports", `.hexos-check-${other}-2a5c9e3a-7b4d-4f3c-9e5a-9c3d4e5f6071`);
+    for (const folder of [left, holding, others]) mkdirSync(folder);
+    writeFileSync(join(holding, "keep.txt"), "an owner's file");
+    await LINKS[server].sportarr(ctx);
+    expect(existsSync(left)).toBe(false);
+    expect(existsSync(join(holding, "keep.txt"))).toBe(true);
+    expect(existsSync(others)).toBe(true);
+    expect(leftovers().sort()).toEqual([holding, join(holding, "keep.txt"), others].map((path) => path.slice(media.length + 1)).sort());
   });
 }

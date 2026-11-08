@@ -1,7 +1,7 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, rmdirSync } from "node:fs";
+import { type Dirent, existsSync, mkdirSync, readdirSync, rmdirSync } from "node:fs";
 
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
@@ -103,11 +103,12 @@ async function seeFolders(ctx: HookContext, token: string, media: ContextMount, 
     for (const library of libraries) {
       const local = `${media.localPath}${library.path.slice("/media".length)}`;
       if (!existsSync(local)) continue;
+      clearOldMarks(ctx, local);
       if ((await finds(ctx, token, library.path)) !== true) {
         ctx.log(`Jellyfin couldn't say whether it sees ${library.path}, so HexOS didn't check it`);
         continue;
       }
-      const mark = `/.hexos-check-${randomUUID()}`;
+      const mark = `/${MARK}${randomUUID()}`;
       try {
         mkdirSync(`${local}${mark}`);
       } catch (error) {
@@ -161,6 +162,31 @@ async function seeFolders(ctx: HookContext, token: string, media: ContextMount, 
       } catch (error) {
         ctx.log(`HexOS couldn't take its check folder out of ${mark.library.path}: ${error}`);
       }
+    }
+  }
+}
+
+/** HexOS's check folders, named for this server so a check Jellyfin runs never touches another server's. */
+const MARK = ".hexos-check-jellyfin-";
+
+/**
+ * Takes out the empty check folders a run that was stopped partway left behind. rmdir takes out only
+ * an empty folder, so one that holds anything stays as it is. A link runs once at a time on Jellyfin
+ * (APP_HOOK_ALREADY_RUNNING) and each link has its own folders, so none of these is a live check's.
+ */
+function clearOldMarks(ctx: HookContext, local: string) {
+  let entries: Dirent[] = [];
+  try {
+    entries = readdirSync(local, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(MARK)) continue;
+    try {
+      rmdirSync(`${local}/${entry.name}`);
+    } catch (error) {
+      ctx.log(`HexOS left ${local}/${entry.name} as it is: ${error}`);
     }
   }
 }
