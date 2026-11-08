@@ -477,6 +477,8 @@ describe("emby, whose card reads sessions as an administrator", () => {
     admins: Set<string>;
     /** False while Emby can't answer, as while it starts. */
     answering: boolean;
+    /** An Emby from before /Devices, which answers it with a 404 for any sign-in it doesn't refuse. */
+    noDevices?: boolean;
     asked: Array<{ path: string; token: string | null }>;
     /** Awaited before each answer about the devices, to hold one back. */
     gate?: (signal?: AbortSignal | null) => Promise<void>;
@@ -495,6 +497,7 @@ describe("emby, whose card reads sessions as an administrator", () => {
         if (url.pathname === DEVICES) await app.gate?.(signal);
         if (!app.answering) return new Response("", { status: 503 });
         const admin = app.admins.has(token ?? "");
+        if (url.pathname === DEVICES && app.noDevices) return new Response("", { status: token === "signed-out" ? 401 : 404 });
         if (url.pathname === DEVICES) return admin ? Response.json({ Items: [] }) : new Response("", { status: 403 });
         if (url.pathname === "/emby/System/Configuration") return Response.json({ ServerName: "emby" });
         if (url.pathname === SESSIONS) return Response.json(admin ? STREAM : []);
@@ -598,6 +601,29 @@ describe("emby, whose card reads sessions as an administrator", () => {
       at(300_000);
       expect(streams(await run(ctx))).toBe("1");
       expect(asked(app, DEVICES)).toEqual(["owner"]);
+    });
+
+    test("an Emby from before /Devices reads as the card did before, with HexOS's setup sign-in", async () => {
+      const { run } = await fresh(script);
+      at(0);
+      const app = emby("setup");
+      app.noDevices = true;
+      const { ctx } = open([...signIns(["member", 200], ["setup", 100]), "INSERT INTO Devices2 VALUES (2, 'hexos-emby-setup')"], app);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, SESSIONS)).toEqual(["setup"]);
+      app.asked.length = 0;
+      at(5_000);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual([]);
+    });
+
+    test("on an Emby from before /Devices, a sign-in it refuses is never the one read with", async () => {
+      const { run } = await fresh(script);
+      const app = emby("member");
+      app.noDevices = true;
+      const { ctx } = open([...signIns(["signed-out", 300], ["member", 200]), "INSERT INTO Devices2 VALUES (1, 'hexos-emby-setup')"], app);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, SESSIONS)).toEqual(["member"]);
     });
 
     test("an Emby that doesn't answer is never read as having no administrator", async () => {

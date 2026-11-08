@@ -134,19 +134,20 @@ async function tokensThroughDocker(appId: string, path: string): Promise<string[
   return dockerTokens;
 }
 
-type Verdict = "administrator" | "refused" | "unknown";
+type Verdict = "administrator" | "refused" | "unsupported" | "unknown";
 
 /**
  * What Emby says of the token: only an administrator's, or an API key, lists the server's devices.
- * Not its configuration, which Emby's API reference gives any signed-in user. An Emby that doesn't
- * answer says nothing about the token.
+ * Not its configuration, which Emby's API reference gives any signed-in user. An Emby from before
+ * /Devices can't say, and one that doesn't answer says nothing about the token.
  */
 async function verdictOn(base: string, token: string, signal: AbortSignal): Promise<Verdict> {
   try {
     const response = await fetch(`${base}/emby/Devices`, { headers: { Accept: "application/json", "X-Emby-Token": token }, signal });
     await response.body?.cancel();
     if (response.ok) return "administrator";
-    return response.status === 401 || response.status === 403 ? "refused" : "unknown";
+    if (response.status === 401 || response.status === 403) return "refused";
+    return response.status === 404 ? "unsupported" : "unknown";
   } catch {
     return "unknown";
   }
@@ -157,8 +158,10 @@ const checksSignal = (started: number) =>
   AbortSignal.timeout(Math.max(0, Math.min(CHECK_TIMEOUT_MS, started + CHECKS_END_BY_MS - Date.now())));
 
 /**
- * The first of the tokens that acts as an administrator, all asked about at once. Null when Emby
- * refuses them all. Throws when Emby doesn't answer, which proves nothing about them.
+ * The first of the tokens that acts as an administrator, all asked about at once. On an Emby that
+ * can't say, the first it doesn't refuse, as the card read with before: an API key, else HexOS's
+ * setup sign-in, else the newest. Null when Emby refuses them all. Throws when Emby doesn't answer,
+ * which proves nothing about them.
  */
 async function search(base: string, tokens: string[], started: number): Promise<string | null> {
   if (!tokens.length) return null;
@@ -167,7 +170,8 @@ async function search(base: string, tokens: string[], started: number): Promise<
   const found = verdicts.indexOf("administrator");
   if (found >= 0) return tokens[found];
   if (verdicts.includes("unknown")) throw new Error("Emby didn't say whether its sign-ins are an administrator's");
-  return null;
+  const unsupported = verdicts.indexOf("unsupported");
+  return unsupported >= 0 ? tokens[unsupported] : null;
 }
 
 /**
@@ -183,7 +187,7 @@ async function keep(base: string, there: boolean, started: number): Promise<stri
     inUse = null;
     return undefined;
   }
-  if (verdict === "administrator") use.checkedAt = Date.now();
+  if (verdict !== "unknown") use.checkedAt = Date.now();
   return use.token;
 }
 
