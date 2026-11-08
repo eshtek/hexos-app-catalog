@@ -620,3 +620,16 @@ test("a link that reaches its look while another link restarts Radarr waits for 
   expect(restarts).toHaveLength(1);
   expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
 });
+
+// A Deluge the owner already had keeps its password, which they gave in the collection's walk
+// (Aaron, 2026-11-08): the manager gets that one, without asking for it again
+test("Deluge: a kept Deluge's own password is the one the manager gets, ahead of the run's sign-in", async () => {
+  const { ctx, entries, questions } = fakes("deluge");
+  Object.assign(ctx, {
+    signIn: { username: "admin", password: "the-runs-new-password" },
+    existingSignIns: { deluge: { username: "", password: SIGN_IN.password } },
+  });
+  await deluge(ctx);
+  expect(entries()[0]).toMatchObject({ name: "Deluge", values: { password: SIGN_IN.password } });
+  expect(questions).toHaveLength(0);
+});

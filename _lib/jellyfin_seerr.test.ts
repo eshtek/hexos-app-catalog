@@ -310,3 +310,21 @@ for (const options of [{ initializeNoop: true }, { verifiedType: PLEX }]) {
     await expect(connectSeerr(ctx)).rejects.toThrow(/didn't finish its setup/);
   });
 }
+
+// A Jellyfin the owner already had keeps its own administrator (Aaron, 2026-11-08): Seerr is signed
+// in as the one they gave in the collection's walk, not the run's new sign-in, which Jellyfin never took
+test("Seerr signs in as a kept Jellyfin's own administrator, ahead of the run's sign-in", async () => {
+  const { ctx, calls } = apis();
+  Object.assign(ctx, { resourceId: "jellyfin", existingSignIns: { jellyfin: { username: "jellyadmin", password: "their-own" } } });
+  await connectSeerr(ctx);
+  expect(calls.find((c) => c.path === "/api/v1/auth/jellyfin")?.body).toMatchObject({ username: "jellyadmin", password: "their-own" });
+});
+
+test("a Seerr already on a kept Jellyfin gains no administrator from the run's sign-in", async () => {
+  const { ctx, calls } = apis({ initialized: true, mediaServerType: JELLYFIN });
+  Object.assign(ctx, { resourceId: "jellyfin", existingSignIns: { jellyfin: { username: "jellyadmin", password: "their-own" } } });
+  await connectSeerr(ctx);
+  // Not even looked up: the run's sign-in is no Jellyfin user of this server
+  expect(calls.some((c) => c.path === "/Users/AuthenticateByName")).toBe(false);
+  expect(changes(calls).filter((c) => c.path.startsWith("/api/v1/user"))).toHaveLength(0);
+});

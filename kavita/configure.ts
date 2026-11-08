@@ -5,7 +5,8 @@ import type { HookContext } from "../_lib/hook_context";
  * Sets Kavita up as HexOS ships it. Fresh, Kavita opens on a screen that makes the owner create an
  * administrator, so HexOS makes that account from the sign-in the owner chose (`ctx.signIn`) and
  * adds the Books, Comics and Manga folders it mounts. A Kavita that already has an account keeps it:
- * Kavita's API needs that account's own password, so a run with nothing to sign in with stops
+ * Kavita's API needs that account's own password, which the owner gives in a collection's walk for a
+ * Kavita they already had (`ctx.existingSignIns`), and a run with nothing to sign in with stops
  * quietly rather than ask. Read at Kavita 0.9.1, the version TrueNAS pins.
  */
 
@@ -56,7 +57,10 @@ export async function configure(ctx: HookContext) {
   const exists = await hasAccount(ctx);
   await ctx.emitCheckpoint("start");
 
-  const wanted = ctx.signIn;
+  const given = ctx.existingSignIns?.[ctx.resourceId];
+  const own = given?.username && given.password ? given : undefined;
+  // One with no account makes the one chosen, else the one the owner gave; one with an account signs in as theirs
+  const wanted = exists ? (own ?? ctx.signIn) : (ctx.signIn ?? own);
   let account: Account | undefined;
   if (!exists) {
     if (!wanted) {
@@ -66,7 +70,7 @@ export async function configure(ctx: HookContext) {
     }
     try {
       account = await kavita<Account>(ctx, "/Account/register", {
-        body: { username: wanted.username, password: wanted.password, email: wanted.email },
+        body: { username: wanted.username, password: wanted.password, email: ctx.signIn?.email },
       });
     } catch (error) {
       ctx.fail("Kavita didn't take your sign-in", [{ label: "Reason", value: error instanceof Error ? error.message : String(error) }]);
@@ -76,12 +80,15 @@ export async function configure(ctx: HookContext) {
     account = wanted
       ? await kavita<Account>(ctx, "/Account/login", { body: { username: wanted.username, password: wanted.password } }).catch(() => undefined)
       : undefined;
+    if (!account && own) {
+      ctx.fail("Kavita didn't accept the sign-in you gave for it, so HexOS left it as it is. Check it, then run this again from Kavita's Connections tab.");
+    }
     if (!account) {
       await ctx.skipCheckpoint("signIn", "Kavita keeps the account it has");
       for (const library of LIBRARIES) await ctx.skipCheckpoint(library.folder, "Kavita keeps the libraries it has");
       return;
     }
-    await ctx.skipCheckpoint("signIn", "Kavita already uses the sign-in you chose");
+    await ctx.skipCheckpoint("signIn", own ? "Kavita keeps the account it has" : "Kavita already uses the sign-in you chose");
   }
 
   const token = account.token;

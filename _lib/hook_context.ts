@@ -72,8 +72,9 @@ export interface HookContext {
    * The sign-in the owner chose for this install or collection run, for an app whose script
    * declares `sign_in` (a username of at least 3 characters and a password of at least 8). Undefined for a card run outside an
    * install or collection, and from a deck that predates it: a hook then falls back to what it did
-   * before, or asks with `askForInputs`. Never write it to a file of HexOS's own; the app's own
-   * settings are where it belongs.
+   * before, or asks with `askForInputs`. Undefined too for a hook of an app the owner already had in
+   * a collection run, other than a link, since that app keeps its own sign-in. Never write it to a
+   * file of HexOS's own; the app's own settings are where it belongs.
    */
   readonly signIn?: {
     username: string;
@@ -81,6 +82,14 @@ export interface HookContext {
     /** The owner's email, for an app whose first account takes one (Seerr's, made through Jellyfin or Emby). */
     email?: string;
   };
+  /**
+   * The admin account each app the owner already had in a collection run keeps, by the name it runs
+   * under (`resourceId` for the hook's own app), as the owner typed it for an app whose script
+   * declares `sign_in.existing`. `username` is empty for an app that takes a password alone. Sign in
+   * with it and never change it or make another account beside it; when the app refuses it, fail and
+   * say so. Undefined outside such a run, and on a box from before it.
+   */
+  readonly existingSignIns?: Readonly<Record<string, { username: string; password: string }>>;
 
   /**
    * File-targeted actions only: the files the user selected. `containerPath`

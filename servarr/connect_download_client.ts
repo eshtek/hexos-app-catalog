@@ -22,9 +22,10 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * until it restarts, and reports the client's downloads folder missing. So the link asks the manager
  * whether it sees a folder the client has made, and restarts the manager once when it doesn't.
  *
- * The manager gets the client's sign-in HexOS has just signed in with: the one the owner chose for
- * the install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
- * default. Only when HexOS knows none does the manager keep what it has, and the owner is asked when
+ * The manager gets the client's sign-in HexOS has just signed in with: for a Deluge the owner
+ * already had, the password they gave for it (`ctx.existingSignIns`), else the one the owner chose
+ * for the install or collection (`ctx.signIn`), else the one in the client's own settings, else
+ * HexOS's default. Only when HexOS knows none does the manager keep what it has, and the owner is asked when
  * that fails too. The manager's own may be an old password, and qBittorrent locks out an address
  * after five failed sign-ins, so it is never tried ahead of one HexOS knows works.
  *
@@ -618,7 +619,9 @@ export const deluge = (ctx: HookContext) =>
         ]),
       );
     let password: string | undefined;
-    for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
+    // A Deluge the owner already had keeps its own password, which they gave in the walk
+    const own = ctx.existingSignIns?.deluge?.password;
+    for (const candidate of new Set([own, ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
       if (candidate && (await signsIn(candidate))) {
         password = candidate;
         break;

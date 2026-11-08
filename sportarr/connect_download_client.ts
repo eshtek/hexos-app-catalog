@@ -20,9 +20,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * restarts. The link asks Sportarr for a folder the client has made, and restarts Sportarr once
  * when it can't find it.
  *
- * The client's sign-in comes in the same order as for the arr apps: the one the owner chose for the
- * install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
- * default, and the owner is asked last. Run again, a link puts back how Sportarr reaches the client
+ * The client's sign-in comes in the same order as for the arr apps: a kept Deluge's own password
+ * (`ctx.existingSignIns`), the one the owner chose for the install or collection (`ctx.signIn`), else
+ * the one in the client's own settings, else HexOS's default, and the owner is asked last. Run again, a link puts back how Sportarr reaches the client
  * and its sign-in, and fills the category only when the owner left it empty.
  *
  * Sportarr gives a download to the first client it has that's on, so an entry of the same kind it
@@ -521,7 +521,9 @@ export const deluge = (ctx: HookContext) =>
         ]),
       );
     let password: string | undefined;
-    for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
+    // A Deluge the owner already had keeps its own password, which they gave in the walk
+    const own = ctx.existingSignIns?.deluge?.password;
+    for (const candidate of new Set([own, ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
       if (candidate && (await signsIn(candidate))) {
         password = candidate;
         break;

@@ -8,9 +8,10 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * install or collection, and keeps downloads in progress apart from finished ones, both in Deluge's
  * own folder of the Downloads location, where Radarr, Sonarr and Lidarr see them at the same path.
  * A Deluge HexOS just installed has its password from seed-webui, so this checks it; one the owner
- * already had, which a collection brings in, gets it here through the page's own settings. With no
- * password chosen (a run from the app's card) the password stays as it is. Read at Deluge 2.2.0
- * (ui/web/json_api.py, ui/web/auth.py), the version TrueNAS pins.
+ * already had, which a collection brings in, keeps its own: HexOS signs in with the password the
+ * owner gave for it (`ctx.existingSignIns`) and changes nothing of it. With no password chosen (a run
+ * from the app's card) the password stays as it is. Read at Deluge 2.2.0 (ui/web/json_api.py,
+ * ui/web/auth.py), the version TrueNAS pins.
  */
 
 /** Deluge's web password before anyone sets one. */
@@ -72,6 +73,12 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
 
 /** Signs the session in with the first password the page takes, and says which it was. */
 async function signIn(ctx: HookContext, session: Session, configDir: string): Promise<string | undefined> {
+  // A Deluge the owner already had: its own password or nothing, so a wrong one changes nothing
+  const own = ctx.existingSignIns?.[ctx.resourceId]?.password;
+  if (own) {
+    if (await delugeApi<boolean>(session, "auth.login", [own])) return own;
+    ctx.fail("Deluge didn't accept the password you gave for it, so HexOS left it as it is. Check it, then run Pre-configure Deluge from its Connections tab.");
+  }
   const tried = new Set<string>();
   for (const password of [ctx.signIn?.password, savedPassword(configDir), STOCK_PASSWORD]) {
     if (!password || tried.has(password)) continue;
@@ -114,7 +121,8 @@ export async function configure(ctx: HookContext) {
     await ctx.skipCheckpoint("folders", "HexOS couldn't open Deluge's settings, so they stay as they are");
     return;
   }
-  const wanted = ctx.signIn?.password;
+  const keeps = Boolean(ctx.existingSignIns?.[ctx.resourceId]?.password);
+  const wanted = keeps ? undefined : ctx.signIn?.password;
   if (!wanted) {
     await ctx.skipCheckpoint("signIn", "Deluge keeps the password it has");
   } else if (current === wanted) {

@@ -136,6 +136,9 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
 
 /** The owner's Emby administrator: the sign-in they chose, else the one they give now. */
 async function account(ctx: HookContext): Promise<SignIn> {
+  // An Emby the owner already had keeps its own administrator, which they gave in the walk
+  const own = ctx.existingSignIns?.[ctx.resourceId];
+  if (own?.username && own.password) return { username: own.username, password: own.password };
   if (ctx.signIn) return ctx.signIn;
   const answers = await ask(
     ctx,
@@ -311,9 +314,11 @@ export async function run(ctx: HookContext) {
     // A Seerr from before it kept the server's id knows this one by its address
     const knowsThis = current.serverId ? current.serverId === thisServer : answering === thisServer;
     if (knowsThis && answering === thisServer) {
-      // Only with the owner's chosen sign-in: run from the card, the Seerr they set up stays theirs
-      if (ctx.signIn && (await makeSeerrAdministrator(ctx, seerr, apiKey, ctx.signIn))) {
-        await ctx.emitCheckpoint("signin", `${ctx.signIn.username} is a Seerr administrator`);
+      // Only with the owner's chosen sign-in: run from the card, or for a server they had already, the
+      // Seerr they set up stays theirs
+      const chosen = ctx.existingSignIns?.[ctx.resourceId] ? undefined : ctx.signIn;
+      if (chosen && (await makeSeerrAdministrator(ctx, seerr, apiKey, chosen))) {
+        await ctx.emitCheckpoint("signin", `${chosen.username} is a Seerr administrator`);
       } else {
         await ctx.skipCheckpoint("signin", "Seerr already uses this Emby server");
       }
