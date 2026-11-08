@@ -15,7 +15,12 @@ import type { WidgetContext, WidgetListEntry, WidgetQueryResult } from "../_lib/
 const DB_RELATIVE = "/data/authentication.db";
 /** The device the setup hook signs in as; its sign-in is the first that stands in for a key. */
 const SETUP_DEVICE_ID = "hexos-emby-setup";
-const SETUP_REASON = "Sign in to Emby to see what's playing here";
+/** Emby shows every stream only to an administrator; anyone else sees their own. */
+const SETUP_REASON = "Sign in to Emby as an administrator to see what's playing here";
+/** How many sign-ins a refresh may try, each a request to Emby. */
+const MAX_CANDIDATES = 5;
+/** Well inside the widget's 10 s timeout, so a check Emby never answers can't hold the refresh for all of it. */
+const CHECK_TIMEOUT_MS = 2000;
 /** Emby counts time in ticks of 100 ns. */
 const TICKS_PER_MS = 10_000;
 const DOCKER_SOCKET = "/var/run/docker.sock";
@@ -24,25 +29,30 @@ const DOCKER_TIMEOUT_MS = 8000;
 /** The card refreshes every 5 s and a copy is the whole database, so copies are at least this far apart. */
 const DOCKER_RETRY_MS = 60_000;
 
-// A token read through Docker, kept while it works. It's replaced at the next copy after a 401.
-let dockerToken: string | null = null;
+// The tokens a copy through Docker found, kept between refreshes: narrowed to the administrator's
+// once one is found, and dropped when none is or Emby refuses it, so the next copy looks again.
+let dockerTokens: string[] = [];
 let nextDockerCopy = 0;
+/** The token last found acting as an administrator, tried first while it is still a candidate. */
+let administrator: string | null = null;
 
 /**
- * A token the widget can read sessions with: an API key (a token with no user), else HexOS's setup
- * sign-in, else the most recently used sign-in of any Emby app. Null until someone signs in to Emby.
+ * The tokens that might read sessions, in the order to try them: an API key (a token with no user),
+ * then HexOS's setup sign-in, then the most recently used sign-ins of any Emby app. Empty until
+ * someone signs in to Emby.
  */
-function tokenIn(db: Database): string | null {
-  const token = db
-    .query<{ AccessToken: string }, [string]>(
+function tokensIn(db: Database): string[] {
+  return db
+    .query<{ AccessToken: string }, [string, number]>(
       `SELECT t.AccessToken FROM Tokens_2 t
          LEFT JOIN Devices2 d ON d.Id = t.DeviceId
         WHERE t.IsActive = 1
         ORDER BY (t.UserId IS NULL OR t.UserId = '') DESC, (d.ReportedDeviceId = ?) DESC, t.DateLastActivityInt DESC
-        LIMIT 1`,
+        LIMIT ?`,
     )
-    .get(SETUP_DEVICE_ID);
-  return token?.AccessToken ?? null;
+    .all(SETUP_DEVICE_ID, MAX_CANDIDATES)
+    .map((row) => row.AccessToken)
+    .filter(Boolean);
 }
 
 /** Where the file in a tar from Docker's archive endpoint sits: after its 512-byte header, and any pax header. */
@@ -85,12 +95,12 @@ async function copyFromContainer(appId: string, path: string, to: string, signal
 }
 
 /**
- * The token from a copy of the database, opened read-write so SQLite can take in the copy's
+ * The tokens from a copy of the database, opened read-write so SQLite can take in the copy's
  * write-ahead log, which holds whatever Emby hasn't written back yet. The live database is only
  * ever read. The copy is removed before this returns.
  */
-async function tokenThroughDocker(appId: string, path: string): Promise<string | null> {
-  if (dockerToken || Date.now() < nextDockerCopy) return dockerToken;
+async function tokensThroughDocker(appId: string, path: string): Promise<string[]> {
+  if (dockerTokens.length || Date.now() < nextDockerCopy) return dockerTokens;
   nextDockerCopy = Date.now() + DOCKER_RETRY_MS;
   const dir = mkdtempSync(join(tmpdir(), "hexos-emby-"));
   const copy = join(dir, "authentication.db");
@@ -100,7 +110,7 @@ async function tokenThroughDocker(appId: string, path: string): Promise<string |
     if (await copyFromContainer(appId, path, copy, signal)) {
       await copyFromContainer(appId, `${path}-wal`, `${copy}-wal`, signal);
       db = new Database(copy);
-      dockerToken = tokenIn(db);
+      dockerTokens = tokensIn(db);
     }
   } catch {
     // A box with no socket yet, a database too big to copy in time, or one caught mid-write
@@ -108,31 +118,61 @@ async function tokenThroughDocker(appId: string, path: string): Promise<string |
     db?.close();
     rmSync(dir, { recursive: true, force: true });
   }
-  return dockerToken;
+  return dockerTokens;
 }
 
 /**
- * A token from Emby's own database, so the owner never has to hand HexOS one. The database sits on
- * the app's own dataset, which the HexOS container can't see on a box whose app config predates the
- * pool mounts; Docker always can, over the daemon socket the HexOS container has for its host
- * commands.
+ * Whether the token acts as an administrator: only one, or an API key, lists the server's devices.
+ * Not its configuration, which Emby's API reference gives any signed-in user. Throws when Emby
+ * doesn't say, which proves nothing about the token.
  */
-async function harvestToken(ctx: WidgetContext): Promise<string | null> {
+async function actsAsAdministrator(base: string, token: string): Promise<boolean> {
+  const response = await fetch(`${base}/emby/Devices`, {
+    headers: { Accept: "application/json", "X-Emby-Token": token },
+    signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+  });
+  await response.body?.cancel();
+  if (response.ok) return true;
+  if (response.status === 401 || response.status === 403) return false;
+  throw new Error(`Emby devices query failed (${response.status})`);
+}
+
+/** The first of the tokens that acts as an administrator, the one that did last time first. Null when none does. */
+async function firstAdministrator(base: string, tokens: string[]): Promise<string | null> {
+  const last = administrator;
+  const order = last && tokens.includes(last) ? [last, ...tokens.filter((token) => token !== last)] : tokens;
+  for (const token of order) {
+    if (await actsAsAdministrator(base, token)) return (administrator = token);
+  }
+  return (administrator = null);
+}
+
+/**
+ * An administrator's token from Emby's own database, so the owner never has to hand HexOS one. The
+ * database sits on the app's own dataset, which the HexOS container can't see on a box whose app
+ * config predates the pool mounts; Docker always can, over the daemon socket the HexOS container
+ * has for its host commands.
+ */
+async function harvestToken(ctx: WidgetContext, base: string): Promise<string | null> {
   const config =
     ctx.mounts.find((m) => m.containerPath === "/config") ??
     ctx.mounts.find((m) => m.hostPath.endsWith("/emby/config"));
   if (config) {
+    let tokens: string[] | undefined;
     let db: Database | undefined;
     try {
       db = new Database(config.localPath + DB_RELATIVE, { readonly: true });
-      return tokenIn(db);
+      tokens = tokensIn(db);
     } catch {
       // Not written yet, or the dataset isn't visible from here
     } finally {
       db?.close();
     }
+    if (tokens) return firstAdministrator(base, tokens);
   }
-  return tokenThroughDocker(ctx.appId, (config?.containerPath ?? "/config") + DB_RELATIVE);
+  const found = await firstAdministrator(base, await tokensThroughDocker(ctx.appId, (config?.containerPath ?? "/config") + DB_RELATIVE));
+  dockerTokens = found ? [found] : [];
+  return found;
 }
 
 interface EmbyItem {
@@ -299,18 +339,15 @@ export async function fetchArtwork(
 }
 
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
-  const token = await harvestToken(ctx);
+  const base = `http://${ctx.host}:${ctx.port ?? 9096}`;
+  const token = await harvestToken(ctx, base);
   if (!token) return { needsSetup: true, reason: SETUP_REASON };
 
-  const base = `http://${ctx.host}:${ctx.port ?? 9096}`;
   const headers = { Accept: "application/json", "X-Emby-Token": token };
 
   const response = await fetch(`${base}/emby/Sessions?ActiveWithinSeconds=960`, { headers });
-  // A sign-in's token dies when its device signs out; the next run picks another.
-  if (response.status === 401) {
-    dockerToken = null;
-    return { needsSetup: true, reason: SETUP_REASON };
-  }
+  // A sign-in's token dies when its device signs out; the next run's check refuses it and picks another.
+  if (response.status === 401) return { needsSetup: true, reason: SETUP_REASON };
   if (!response.ok) throw new Error(`Emby sessions query failed (${response.status})`);
   const sessions = ((await response.json()) as EmbySession[]).filter(
     (session): session is EmbySession & { NowPlayingItem: EmbyItem } => !!session.NowPlayingItem,

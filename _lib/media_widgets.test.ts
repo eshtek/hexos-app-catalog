@@ -54,7 +54,7 @@ const tarOf = (name: string, content: Uint8Array | string) => {
 };
 
 /** Docker's archive endpoint holding `files` in the app's container, and the app answering everything else. */
-function box(app: string, files: Files, appResponse: () => Response): Seen {
+function box(app: string, files: Files, appResponse: (url: URL, headers: Headers) => Response): Seen {
   const seen: Seen = { docker: [], headers: [] };
   const archive = (requested: URL) => {
     expect(requested.pathname).toBe(`/containers/ix-${app}-${app}-1/archive`);
@@ -66,8 +66,9 @@ function box(app: string, files: Files, appResponse: () => Response): Seen {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit & { unix?: string }) => {
     const url = new URL(String(input));
     if (url.hostname !== "docker") {
-      seen.headers.push(new Headers(init?.headers));
-      return appResponse();
+      const headers = new Headers(init?.headers);
+      seen.headers.push(headers);
+      return appResponse(url, headers);
     }
     expect(init?.unix).toBe("/var/run/docker.sock");
     expect(init?.signal).toBeInstanceOf(AbortSignal);
@@ -262,7 +263,7 @@ describe.each([
     file: "/config/data/authentication.db",
     localFile: "data/authentication.db",
     prefix: "hexos-emby-",
-    reason: "Sign in to Emby to see what's playing here",
+    reason: "Sign in to Emby as an administrator to see what's playing here",
     token: (seen: Seen, at = 0) => seen.headers[at]?.get("X-Emby-Token"),
     schema: (token: string) => [
       "CREATE TABLE Tokens_2 (AccessToken TEXT, DeviceId INT, UserId TEXT, IsActive INT, DateLastActivityInt INT)",
@@ -446,5 +447,168 @@ describe.each([
     const withPax = tar(header("pax", 27, "x"), pax, header("file", 9, "0"), padded(new TextEncoder().encode("the bytes")));
     expect(tarFile(withPax)).toEqual({ start: 1536, size: 9 });
     expect(tarFile(new Uint8Array(1024))).toBeNull();
+  });
+});
+
+// Emby shows a token every stream only when it's an administrator's: anyone else's sees just their
+// own. Emby's API reference lists the server's devices to an administrator alone (an API key acts
+// as one), while its configuration is open to any signed-in user, so the card reads sessions only
+// with a token that just listed the devices.
+describe("emby, whose card reads sessions as an administrator", () => {
+  const script = "emby/widget_now_playing.ts";
+  const FILE = "/config/data/authentication.db";
+  const REASON = "Sign in to Emby as an administrator to see what's playing here";
+  const STREAM = [{ UserName: "sam", DeviceName: "Living room", NowPlayingItem: { Id: "1", Name: "Coco" } }];
+  const DEVICES = "/emby/Devices";
+  const SESSIONS = "/emby/Sessions";
+
+  /** Sign-ins of other users, each a token and when it was last used. */
+  const signIns = (...rows: Array<[token: string, lastUsed: number]>) => [
+    "CREATE TABLE Tokens_2 (AccessToken TEXT, DeviceId INT, UserId TEXT, IsActive INT, DateLastActivityInt INT)",
+    "CREATE TABLE Devices2 (Id INT, ReportedDeviceId TEXT)",
+    ...rows.map(([token, lastUsed], i) => `INSERT INTO Tokens_2 VALUES ('${token}', ${i + 1}, 'user-${token}', 1, ${lastUsed})`),
+  ];
+
+  interface Emby {
+    admins: Set<string>;
+    /** False while Emby can't answer, as while it starts. */
+    answering: boolean;
+    asked: Array<{ path: string; token: string | null }>;
+    answer: (url: URL, headers: Headers) => Response;
+  }
+
+  /** An Emby whose `admins` list its devices and see the one stream; anyone else reads its configuration, and sees none of theirs. */
+  function emby(...admins: string[]): Emby {
+    const app: Emby = {
+      admins: new Set(admins),
+      answering: true,
+      asked: [],
+      answer: (url, headers) => {
+        const token = headers.get("X-Emby-Token");
+        app.asked.push({ path: url.pathname, token });
+        if (!app.answering) return new Response("", { status: 503 });
+        const admin = app.admins.has(token ?? "");
+        if (url.pathname === DEVICES) return admin ? Response.json({ Items: [] }) : new Response("", { status: 403 });
+        if (url.pathname === "/emby/System/Configuration") return Response.json({ ServerName: "emby" });
+        if (url.pathname === SESSIONS) return Response.json(admin ? STREAM : []);
+        return new Response("", { status: 404 });
+      },
+    };
+    return app;
+  }
+
+  const asked = (app: Emby, path: string) => app.asked.filter((request) => request.path === path).map((request) => request.token);
+  const streams = (result: WidgetQueryResult) => {
+    const field = result.fields?.streams;
+    return field?.type === "stat" ? field.value : undefined;
+  };
+
+  const datasetWith = (statements: string[]) => {
+    const dir = scratch();
+    mkdirSync(join(dir, "data"));
+    const db = new Database(join(dir, "data/authentication.db"));
+    for (const statement of statements) db.run(statement);
+    db.close();
+    return dir;
+  };
+
+  describe.each([
+    {
+      place: "copied through Docker",
+      open: (statements: string[], app: Emby) => {
+        const seen = box("emby", { [FILE]: checkpointedDatabase(statements) }, app.answer);
+        return { seen, ctx: context("emby", NOT_MOUNTED()) };
+      },
+    },
+    {
+      place: "on the dataset",
+      open: (statements: string[], app: Emby) => {
+        const seen = box("emby", {}, app.answer);
+        return { seen, ctx: context("emby", datasetWith(statements)) };
+      },
+    },
+  ])("with the database $place", ({ open }) => {
+    test("a newer sign-in that isn't an administrator's is passed over for an older one that is", async () => {
+      const { run } = await fresh(script);
+      const app = emby("owner");
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      const result = await run(ctx);
+      expect(streams(result)).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["member", "owner"]);
+      expect(asked(app, SESSIONS)).toEqual(["owner"]);
+    });
+
+    test("with no administrator's sign-in, the card asks for one and reads no sessions", async () => {
+      const { run } = await fresh(script);
+      const app = emby();
+      const { ctx } = open(signIns(["member", 200], ["guest", 100]), app);
+      expect(await run(ctx)).toEqual({ needsSetup: true, reason: REASON });
+      expect(asked(app, SESSIONS)).toEqual([]);
+    });
+
+    test("only the five sign-ins used last are tried, so a refresh stays inside the widget's time", async () => {
+      const { run } = await fresh(script);
+      const app = emby("owner");
+      const members = [1, 2, 3, 4, 5].map((n): [string, number] => [`member-${n}`, 200 - n]);
+      const { ctx } = open(signIns(...members, ["owner", 100]), app);
+      expect(await run(ctx)).toEqual({ needsSetup: true, reason: REASON });
+      expect(asked(app, DEVICES)).toHaveLength(5);
+    });
+
+    test("the administrator's sign-in found last goes first, so a refresh asks Emby once", async () => {
+      const { run } = await fresh(script);
+      const app = emby("owner");
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      await run(ctx);
+      app.asked.length = 0;
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["owner"]);
+    });
+
+    test("an Emby that doesn't answer is never read as having no administrator", async () => {
+      const { run } = await fresh(script);
+      setSystemTime(new Date("2026-10-31T12:00:00Z"));
+      const app = emby("owner");
+      app.answering = false;
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      await expect(run(ctx)).rejects.toThrow();
+      // Five seconds on, inside the minute before another copy, Emby is up
+      setSystemTime(new Date("2026-10-31T12:00:05Z"));
+      app.answering = true;
+      expect(streams(await run(ctx))).toBe("1");
+    });
+  });
+
+  test("a kept sign-in that stops being an administrator's is replaced, and never read for the card", async () => {
+    const { run } = await fresh(script);
+    setSystemTime(new Date("2026-10-31T12:00:00Z"));
+    const app = emby("owner");
+    box("emby", { [FILE]: checkpointedDatabase(signIns(["member", 200], ["owner", 100])) }, app.answer);
+    expect(streams(await run(context("emby", NOT_MOUNTED())))).toBe("1");
+
+    // The owner hands the server to a partner, and is no longer an administrator
+    setSystemTime(new Date("2026-10-31T13:00:00Z"));
+    app.admins = new Set(["partner"]);
+    app.asked.length = 0;
+    const seen = box("emby", { [FILE]: checkpointedDatabase(signIns(["member", 300], ["partner", 250], ["owner", 100])) }, app.answer);
+    expect(await run(context("emby", NOT_MOUNTED()))).toEqual({ needsSetup: true, reason: REASON });
+    // Only the administrator's token was kept from the first copy, so only it is asked about
+    expect(asked(app, DEVICES)).toEqual(["owner"]);
+    expect(seen.docker).toEqual([]);
+    expect(streams(await run(context("emby", NOT_MOUNTED())))).toBe("1");
+    expect(seen.docker).toContain(FILE);
+    expect(asked(app, SESSIONS)).toEqual(["partner"]);
+  });
+
+  test("on the dataset, a sign-in that stops being an administrator's is passed over at the next refresh", async () => {
+    const { run } = await fresh(script);
+    const app = emby("owner");
+    const ctx = context("emby", datasetWith(signIns(["member", 300], ["partner", 250], ["owner", 100])));
+    box("emby", {}, app.answer);
+    expect(streams(await run(ctx))).toBe("1");
+    app.admins = new Set(["partner"]);
+    app.asked.length = 0;
+    expect(streams(await run(ctx))).toBe("1");
+    expect(asked(app, SESSIONS)).toEqual(["partner"]);
   });
 });

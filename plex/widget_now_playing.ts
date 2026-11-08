@@ -149,6 +149,8 @@ interface PlexSession {
   // direct play. Session.bandwidth is the reserved stream bandwidth in kbps.
   Session?: { bandwidth?: number };
   TranscodeSession?: { videoDecision?: string; audioDecision?: string };
+  /** The item's versions, the one playing marked selected; bitrate in kbps. */
+  Media?: { bitrate?: number; selected?: boolean }[];
 }
 
 /** SxxExx when both indices are known. */
@@ -186,13 +188,22 @@ function bandwidthLabel(kbps: number | undefined): string | undefined {
 }
 
 /**
+ * The stream's bitrate: the bandwidth Plex reserves for it, else the bitrate of the version that
+ * plays. A direct play on the home network can come with no bandwidth, or 0.
+ */
+function streamBitrate(session: PlexSession): string | undefined {
+  const version = session.Media?.find((media) => media.selected) ?? session.Media?.[0];
+  return bandwidthLabel(session.Session?.bandwidth) ?? bandwidthLabel(version?.bitrate);
+}
+
+/**
  * The lines that take turns under the stream: who is watching where, then how
  * the picture is served and at what bitrate. Either is left out when Plex says
  * nothing for it.
  */
 function sessionLines(session: PlexSession): string[] {
   const who = [session.User?.title, session.Player?.product || session.Player?.title].filter(Boolean).join(" · ");
-  const how = [videoMethod(session), bandwidthLabel(session.Session?.bandwidth)].filter(Boolean).join(" · ");
+  const how = [videoMethod(session), streamBitrate(session)].filter(Boolean).join(" · ");
   return [who, how].filter(Boolean);
 }
 
