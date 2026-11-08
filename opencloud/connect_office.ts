@@ -11,7 +11,7 @@ import type { HookContext } from "../_lib/hook_context";
  * (as jellyfin/hardware_transcoding.ts does). The secret is never written to a file of its own.
  *
  * Both apps serve https on the box's default certificate. A browser won't show an http editor inside
- * an https page. Read at OpenCloud 9.0 and Euro-Office 9.3.
+ * an https page. Read at OpenCloud 9.0, Euro-Office 9.3 and ONLYOFFICE 10.0.
  */
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
@@ -92,3 +92,4 @@ async function connect(ctx: HookContext, appId: string, service: string, type: s
 }
 
 export const eurooffice = (ctx: HookContext) => connect(ctx, "eurooffice-document-server", "eurooffice", "eurooffice", "Euro-Office");
+export const onlyoffice = (ctx: HookContext) => connect(ctx, "onlyoffice-document-server", "onlyoffice", "onlyoffice", "ONLYOFFICE");

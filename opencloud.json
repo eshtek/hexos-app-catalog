@@ -392,6 +392,34 @@
       "entrypoint": "eurooffice",
       "timeout": 600,
       "retries": 0
+    },
+    {
+      "id": "connect-onlyoffice-document-server",
+      "title": "Connect to ONLYOFFICE",
+      "description": "Opens and edits documents in OpenCloud with ONLYOFFICE.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "opencloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "opencloud/connect_office.ts",
+      "entrypoint": "onlyoffice",
+      "timeout": 600,
+      "retries": 0
     }
   ]
 }
