@@ -19,8 +19,12 @@ const SETUP_DEVICE_ID = "hexos-emby-setup";
 const SETUP_REASON = "Sign in to Emby as an administrator to see what's playing here";
 /** How many sign-ins a refresh may try, each a request to Emby. */
 const MAX_CANDIDATES = 5;
-/** Well inside the widget's 10 s timeout, so a check Emby never answers can't hold the refresh for all of it. */
+/** The longest a refresh's checks wait, all of them together: they're asked at once. */
 const CHECK_TIMEOUT_MS = 2000;
+/** The checks end by this far into a refresh, after a slow copy too, leaving a second of the widget's 10 s for its sessions. */
+const CHECKS_END_BY_MS = 9000;
+/** The card refreshes every 5 s; the sign-in it reads with is checked again only this often. */
+const RECHECK_MS = 5 * 60_000;
 /** Emby counts time in ticks of 100 ns. */
 const TICKS_PER_MS = 10_000;
 const DOCKER_SOCKET = "/var/run/docker.sock";
@@ -28,13 +32,17 @@ const DOCKER_SOCKET = "/var/run/docker.sock";
 const DOCKER_TIMEOUT_MS = 8000;
 /** The card refreshes every 5 s and a copy is the whole database, so copies are at least this far apart. */
 const DOCKER_RETRY_MS = 60_000;
+/** Sign-ins on the dataset with no administrator among them are asked about again only this far apart, as a copy is. */
+const SEARCH_RETRY_MS = DOCKER_RETRY_MS;
 
 // The tokens a copy through Docker found, kept between refreshes: narrowed to the administrator's
 // once one is found, and dropped when none is or Emby refuses it, so the next copy looks again.
 let dockerTokens: string[] = [];
 let nextDockerCopy = 0;
-/** The token last found acting as an administrator, tried first while it is still a candidate. */
-let administrator: string | null = null;
+/** The sign-in the card reads with, and when Emby last said it acts as an administrator. */
+let inUse: { token: string; checkedAt: number } | null = null;
+/** The sign-ins on the dataset the last search found no administrator among, and when another may run. */
+let fruitless: { tokens: string; until: number } | null = null;
 
 /**
  * The tokens that might read sessions, in the order to try them: an API key (a token with no user),
@@ -121,30 +129,63 @@ async function tokensThroughDocker(appId: string, path: string): Promise<string[
   return dockerTokens;
 }
 
+type Verdict = "administrator" | "refused" | "unknown";
+
 /**
- * Whether the token acts as an administrator: only one, or an API key, lists the server's devices.
- * Not its configuration, which Emby's API reference gives any signed-in user. Throws when Emby
- * doesn't say, which proves nothing about the token.
+ * What Emby says of the token: only an administrator's, or an API key, lists the server's devices.
+ * Not its configuration, which Emby's API reference gives any signed-in user. An Emby that doesn't
+ * answer says nothing about the token.
  */
-async function actsAsAdministrator(base: string, token: string): Promise<boolean> {
-  const response = await fetch(`${base}/emby/Devices`, {
-    headers: { Accept: "application/json", "X-Emby-Token": token },
-    signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
-  });
-  await response.body?.cancel();
-  if (response.ok) return true;
-  if (response.status === 401 || response.status === 403) return false;
-  throw new Error(`Emby devices query failed (${response.status})`);
+async function verdictOn(base: string, token: string, signal: AbortSignal): Promise<Verdict> {
+  try {
+    const response = await fetch(`${base}/emby/Devices`, { headers: { Accept: "application/json", "X-Emby-Token": token }, signal });
+    await response.body?.cancel();
+    if (response.ok) return "administrator";
+    return response.status === 401 || response.status === 403 ? "refused" : "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
-/** The first of the tokens that acts as an administrator, the one that did last time first. Null when none does. */
-async function firstAdministrator(base: string, tokens: string[]): Promise<string | null> {
-  const last = administrator;
-  const order = last && tokens.includes(last) ? [last, ...tokens.filter((token) => token !== last)] : tokens;
-  for (const token of order) {
-    if (await actsAsAdministrator(base, token)) return (administrator = token);
+/** The one wait a refresh's checks share: two seconds, or what's left before CHECKS_END_BY_MS. */
+const checksSignal = (started: number) =>
+  AbortSignal.timeout(Math.max(0, Math.min(CHECK_TIMEOUT_MS, started + CHECKS_END_BY_MS - Date.now())));
+
+/**
+ * The first of the tokens that acts as an administrator, all asked about at once. Null when Emby
+ * refuses them all. Throws when Emby doesn't answer, which proves nothing about them.
+ */
+async function search(base: string, tokens: string[], started: number): Promise<string | null> {
+  if (!tokens.length) return null;
+  const signal = checksSignal(started);
+  const verdicts = await Promise.all(tokens.map((token) => verdictOn(base, token, signal)));
+  const found = verdicts.indexOf("administrator");
+  if (found >= 0) return tokens[found];
+  if (verdicts.includes("unknown")) throw new Error("Emby didn't say whether its sign-ins are an administrator's");
+  return null;
+}
+
+/**
+ * The sign-in in use while it's still one, checked again once RECHECK_MS is up. Dropped when it's
+ * gone, or Emby refuses it now. One Emby doesn't answer about is kept: that proves nothing.
+ */
+async function keep(base: string, there: boolean, started: number): Promise<string | undefined> {
+  const use = inUse;
+  if (!use) return undefined;
+  if (there && Date.now() < use.checkedAt + RECHECK_MS) return use.token;
+  const verdict = there ? await verdictOn(base, use.token, checksSignal(started)) : "refused";
+  if (verdict === "refused") {
+    inUse = null;
+    return undefined;
   }
-  return (administrator = null);
+  if (verdict === "administrator") use.checkedAt = Date.now();
+  return use.token;
+}
+
+/** Reads with `token` from now on, until a check or Emby refuses it. */
+function use(token: string | null): string | null {
+  inUse = token ? { token, checkedAt: Date.now() } : null;
+  return token;
 }
 
 /**
@@ -153,7 +194,8 @@ async function firstAdministrator(base: string, tokens: string[]): Promise<strin
  * config predates the pool mounts; Docker always can, over the daemon socket the HexOS container
  * has for its host commands.
  */
-async function harvestToken(ctx: WidgetContext, base: string): Promise<string | null> {
+async function harvestToken(ctx: WidgetContext, base: string, started: number): Promise<string | null> {
+  const previous = inUse?.token;
   const config =
     ctx.mounts.find((m) => m.containerPath === "/config") ??
     ctx.mounts.find((m) => m.hostPath.endsWith("/emby/config"));
@@ -168,9 +210,21 @@ async function harvestToken(ctx: WidgetContext, base: string): Promise<string | 
     } finally {
       db?.close();
     }
-    if (tokens) return firstAdministrator(base, tokens);
+    if (tokens) {
+      const kept = await keep(base, previous !== undefined && tokens.includes(previous), started);
+      if (kept) return kept;
+      const candidates = tokens.filter((token) => token !== previous);
+      const key = candidates.join("\n");
+      if (fruitless?.tokens === key && Date.now() < fruitless.until) return null;
+      const found = use(await search(base, candidates, started));
+      fruitless = found ? null : { tokens: key, until: Date.now() + SEARCH_RETRY_MS };
+      return found;
+    }
   }
-  const found = await firstAdministrator(base, await tokensThroughDocker(ctx.appId, (config?.containerPath ?? "/config") + DB_RELATIVE));
+  const tokens = await tokensThroughDocker(ctx.appId, (config?.containerPath ?? "/config") + DB_RELATIVE);
+  const kept = await keep(base, previous !== undefined && tokens.includes(previous), started);
+  if (kept) return kept;
+  const found = use(await search(base, tokens.filter((token) => token !== previous), started));
   dockerTokens = found ? [found] : [];
   return found;
 }
@@ -339,15 +393,20 @@ export async function fetchArtwork(
 }
 
 export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
+  const started = Date.now();
   const base = `http://${ctx.host}:${ctx.port ?? 9096}`;
-  const token = await harvestToken(ctx, base);
+  const token = await harvestToken(ctx, base, started);
   if (!token) return { needsSetup: true, reason: SETUP_REASON };
 
   const headers = { Accept: "application/json", "X-Emby-Token": token };
 
   const response = await fetch(`${base}/emby/Sessions?ActiveWithinSeconds=960`, { headers });
-  // A sign-in's token dies when its device signs out; the next run's check refuses it and picks another.
-  if (response.status === 401) return { needsSetup: true, reason: SETUP_REASON };
+  // A sign-in's token dies when its device signs out; the next run picks another.
+  if (response.status === 401) {
+    inUse = null;
+    dockerTokens = [];
+    return { needsSetup: true, reason: SETUP_REASON };
+  }
   if (!response.ok) throw new Error(`Emby sessions query failed (${response.status})`);
   const sessions = ((await response.json()) as EmbySession[]).filter(
     (session): session is EmbySession & { NowPlayingItem: EmbyItem } => !!session.NowPlayingItem,
