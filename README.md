@@ -219,7 +219,7 @@ A collection is a curated set of apps installed in one walk ("Media library": a 
   "groups": [
     { "id": "download", "type": "multiple", "min": 1, "title": "Download clients",
       "options": [{ "app": "qbittorrent", "default": true }, { "app": "sabnzbd" }] },
-    { "id": "managers", "type": "multiple", "min": 1, "title": "Media managers",
+    { "id": "managers", "type": "multiple", "title": "Media managers",
       "options": [{ "app": "radarr", "default": true }, { "app": "sonarr", "default": true }] },
     { "id": "indexer", "type": "fixed", "title": "Indexer manager", "options": [{ "app": "prowlarr" }] },
     { "id": "player", "type": "single", "title": "Media server",
