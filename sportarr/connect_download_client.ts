@@ -277,6 +277,33 @@ async function sportarrSees(ctx: HookContext, apiKey: string, folder: string): P
 }
 
 /**
+ * A restart of Sportarr in flight. Sportarr's links all run in this one
+ * module, and two of them may run at once from its card, so a link that finds a folder missing while
+ * another restarts Sportarr waits for that restart rather than queue a second one (app.redeploy
+ * takes a lock per app), which would stop Sportarr under the other link.
+ */
+const restarting = new Map<string, Promise<{ refused?: unknown; answered: boolean }>>();
+
+/** Restarts Sportarr once for every link that needs it now, and waits until it answers again. */
+function restartSportarr(ctx: HookContext) {
+  const key = ctx.resourceId;
+  const running = restarting.get(key);
+  if (running) return running;
+  const restart = (async () => {
+    const refused = await ctx.restartApp?.().then(
+      () => undefined,
+      (error: unknown) => error ?? new Error("The restart failed"),
+    );
+    if (refused !== undefined) return { refused, answered: false };
+    return { answered: await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 60) };
+  })().finally(() => {
+    restarting.delete(key);
+  });
+  restarting.set(key, restart);
+  return restart;
+}
+
+/**
  * Makes sure Sportarr sees the client's folder, restarting Sportarr once when it doesn't: a restart
  * mounts Downloads again, with the client's folder in it. Only Sportarr restarts, never the client.
  * A Sportarr without Downloads, a folder the box doesn't have, and a Sportarr that can't say what it
@@ -290,6 +317,8 @@ async function seeClientFolder(ctx: HookContext, apiKey: string, client: Client,
     .sort((a, b) => (b.containerPath?.length ?? 0) - (a.containerPath?.length ?? 0))[0];
   if (!own?.containerPath || !existsSync(`${own.localPath}${folder.slice(own.containerPath.length)}`)) return;
 
+  // A restart another link started may be all this one needs, so look once it's done
+  await restarting.get(ctx.resourceId);
   const sees = await sportarrSees(ctx, apiKey, folder);
   if (sees === undefined) ctx.log(`${MANAGER} couldn't look at ${folder}, so HexOS didn't check it sees ${name}'s folder`);
   if (sees !== false) return;
@@ -298,14 +327,9 @@ async function seeClientFolder(ctx: HookContext, apiKey: string, client: Client,
   const stuck = `${MANAGER} can't see ${name}'s downloads folder yet. Stop ${MANAGER} and start it again, then run Connect to ${name} again.`;
   if (typeof ctx.restartApp !== "function") ctx.fail(stuck, context);
   await ctx.updateCheckpointMessage("prepare", `Restarting ${MANAGER} so it sees ${name}'s downloads folder`);
-  const refused = await ctx.restartApp().then(
-    () => undefined,
-    (error: unknown) => error,
-  );
+  const { refused, answered } = await restartSportarr(ctx);
   if (refused !== undefined) ctx.fail(stuck, [...context, { label: "Reason", value: refused instanceof Error ? refused.message : String(refused) }]);
-  if (!(await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 60))) {
-    ctx.fail(`${MANAGER} didn't answer after HexOS restarted it. Try again once it has started.`);
-  }
+  if (!answered) ctx.fail(`${MANAGER} didn't answer after HexOS restarted it. Try again once it has started.`);
   // Its API answers a little after its port does
   let after: boolean | undefined;
   for (let attempt = 0; attempt < 30 && after === undefined; attempt++) {

@@ -40,12 +40,18 @@ interface Options {
   unvalidatable?: boolean;
   /** Every ValidatePath is a 404, as a server without the route answers. */
   routeless?: boolean;
+  /** Also link this companion's folders in the same fake, at the same time. */
+  also?: "sportarr" | "chaptarr";
+  /** The second list of libraries is held until the server starts restarting. */
+  holdSecondList?: boolean;
 }
 
 function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Options) {
   const media = join(root, "Media");
   // The companion made its folders on the box
-  for (const folder of companion === "sportarr" ? ["sports"] : ["books", "audiobooks"]) mkdirSync(join(media, folder), { recursive: true });
+  for (const each of [companion, ...(options.also ? [options.also] : [])]) {
+    for (const folder of each === "sportarr" ? ["sports"] : ["books", "audiobooks"]) mkdirSync(join(media, folder), { recursive: true });
+  }
   const config = join(root, server, "config");
   mkdirSync(join(config, "data"), { recursive: true });
   const db = new Database(join(config, "data", server === "jellyfin" ? "jellyfin.db" : "authentication.db"));
@@ -62,6 +68,8 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
   const libraries: string[] = [];
   const restarts: number[] = [];
   const looks: string[] = [];
+  let restartingNow = false;
+  let lists = 0;
   // Whether the server sees a path under /media: a library folder is there either way, what's inside only when not stale
   const sees = (path: string) => {
     const inside = path.split("/").length > 3;
@@ -72,13 +80,20 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
+    if (restartingNow) throw new TypeError("fetch failed");
     const path = url.pathname.replace(/^\/emby/, "");
     const headers = new Headers(init?.headers);
     const token = headers.get("X-Emby-Token") ?? headers.get("Authorization")?.match(/Token="([^"]+)"/)?.[1];
     if (path === "/System/Info/Public") return Response.json({ Version: "1" });
     if (token !== TOKEN) return new Response(null, { status: 401 });
     if (path === "/System/Configuration") return Response.json({});
-    if (path === "/Library/VirtualFolders" && method === "GET") return Response.json(libraries.map((folder) => ({ Locations: [folder] })));
+    if (path === "/Library/VirtualFolders" && method === "GET") {
+      lists++;
+      if (options.holdSecondList && lists === 2) {
+        while (restarts.length === 0) await new Promise((resolve) => setTimeout(resolve, 1));
+      }
+      return Response.json(libraries.map((folder) => ({ Locations: [folder] })));
+    }
     if (path === "/Library/VirtualFolders" && method === "POST") {
       libraries.push(url.searchParams.get("paths") ?? url.searchParams.get("Paths") ?? "");
       return new Response(null, { status: 204 });
@@ -106,6 +121,11 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
       : {
           restartApp: async () => {
             restarts.push(looks.length);
+            // A redeploy takes a while, long enough for another link to find a folder missing, and
+            // the server answers nothing until it's back
+            restartingNow = true;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            restartingNow = false;
             if (options.media === "after restart") stale = false;
           },
         }),
@@ -206,5 +226,21 @@ for (const server of ["jellyfin", "emby"] as const) {
     expect(existsSync(join(holding, "keep.txt"))).toBe(true);
     expect(existsSync(others)).toBe(true);
     expect(leftovers().sort()).toEqual([holding, join(holding, "keep.txt"), others].map((path) => path.slice(media.length + 1)).sort());
+  });
+
+  test(`${name}: Connect to Sportarr and Connect to Chaptarr at once share one restart`, async () => {
+    const { ctx, libraries, restarts } = fakes(server, "sportarr", { media: "after restart", also: "chaptarr" });
+    await Promise.all([LINKS[server].sportarr(ctx), LINKS[server].chaptarr(ctx)]);
+    expect(restarts).toHaveLength(1);
+    expect(libraries.sort()).toEqual(["/media/audiobooks", "/media/books", "/media/sports"]);
+  });
+}
+
+for (const server of ["jellyfin", "emby"] as const) {
+  test(`${NAMES[server]}: a link that reaches its look while the other link restarts it waits for that restart, and doesn't restart it again`, async () => {
+    const { ctx, libraries, restarts } = fakes(server, "sportarr", { media: "after restart", also: "chaptarr", holdSecondList: true });
+    await Promise.all([LINKS[server].sportarr(ctx), LINKS[server].chaptarr(ctx)]);
+    expect(restarts).toHaveLength(1);
+    expect(libraries.sort()).toEqual(["/media/audiobooks", "/media/books", "/media/sports"]);
   });
 }

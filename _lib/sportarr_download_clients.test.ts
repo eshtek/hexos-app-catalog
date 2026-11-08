@@ -64,6 +64,10 @@ interface Options {
   downloads?: "visible" | "after restart" | "hidden" | "unlistable" | "shapeless";
   /** What Sportarr's refusal says for a folder it can't find, when not its own "Directory does not exist". */
   refusal?: string;
+  /** A second client installed beside the first, whose link runs at the same time. */
+  also?: ClientId;
+  /** The second client holds its first answer until the manager starts restarting. */
+  holdAlso?: boolean;
   /** A box from before ctx.restartApp. */
   noRestart?: boolean;
 }
@@ -92,27 +96,31 @@ const CLIENT_FOLDERS: Record<ClientId, string | undefined> = {
 function fakes(clientId: ClientId, options: Options = {}) {
   const takes = { username: SIGN_IN.username, ...(options.takes ?? SIGN_IN) };
   const downloads = dir("Downloads");
-  const ownFolder = `/downloads/${clientId}`;
+  const clients: ClientId[] = [clientId, ...(options.also ? [options.also] : [])];
+  const ownFolders = clients.map((id) => `/downloads/${id}`);
   if (options.downloads) {
-    dir("Downloads", clientId);
-    for (const folder of [CLIENT_FOLDERS[clientId], clientId === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
-      if (folder) dir("Downloads", folder.slice("/downloads/".length));
+    for (const id of clients) {
+      dir("Downloads", id);
+      for (const folder of [CLIENT_FOLDERS[id], id === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
+        if (folder) dir("Downloads", folder.slice("/downloads/".length));
+      }
     }
   }
   let stale = options.downloads === "after restart" || options.downloads === "hidden";
   const restarts: number[] = [];
   const listings: string[] = [];
+  let restartingNow = false;
   // Sportarr's /api/filesystem (RootFolderAndNotificationEndpoints at 4.1.11) refuses a folder it can't find
   const listing = (path: string) => {
     listings.push(path);
     if (options.downloads === "unlistable") return Response.json({ error: "Access denied to this directory" }, { status: 400 });
     if (options.downloads === "shapeless") return Response.json({ ok: true });
-    const hidden = stale && path.startsWith(`${ownFolder}/`);
+    const hidden = stale && ownFolders.some((own) => path.startsWith(`${own}/`));
     const local = join(downloads, path.slice("/downloads".length));
     if (hidden || !path.startsWith("/downloads") || !existsSync(local)) {
       return Response.json({ error: options.refusal ?? "Directory does not exist" }, { status: 400 });
     }
-    const names = stale && path === ownFolder ? [] : readdirSync(local, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    const names = stale && ownFolders.includes(path) ? [] : readdirSync(local, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
     return Response.json({ parent: path.slice(0, path.lastIndexOf("/")), directories: names.map((name) => ({ type: "folder", name, path: `${path}/${name}` })), files: null });
   };
   const secrets: Record<ClientId, Record<string, string>> = {
@@ -129,10 +137,13 @@ function fakes(clientId: ClientId, options: Options = {}) {
 
   // Sportarr's test reaches the client at the address it's given with the secrets it's given
   const passes = (entry: Entry) =>
-    entry.type === TYPES[clientId] &&
-    entry.host === BOX &&
-    entry.port === PORTS[clientId] &&
-    Object.entries(secrets[clientId]).every(([field, value]) => entry[field as keyof Entry] === value);
+    clients.some(
+      (id) =>
+        entry.type === TYPES[id] &&
+        entry.host === BOX &&
+        entry.port === PORTS[id] &&
+        Object.entries(secrets[id]).every(([field, value]) => entry[field as keyof Entry] === value),
+    );
 
   const sportarr = (url: URL, method: string, body: Entry) => {
     if (url.pathname === "/api/filesystem" && method === "GET") return listing(url.searchParams.get("path") ?? "");
@@ -155,15 +166,15 @@ function fakes(clientId: ClientId, options: Options = {}) {
     throw new Error(`Unexpected Sportarr request: ${method} ${url.pathname}`);
   };
 
-  const client = (url: URL, init: RequestInit | undefined, body: { method?: string; params?: unknown[] } | undefined) => {
-    if (clientId === "qbittorrent") {
+  const client = (id: ClientId, url: URL, init: RequestInit | undefined, body: { method?: string; params?: unknown[] } | undefined) => {
+    if (id === "qbittorrent") {
       if (url.pathname === "/api/v2/app/version") return new Response("Forbidden", { status: 403 });
       if (url.pathname === "/api/v2/auth/login") {
         const form = new URLSearchParams(String(init?.body));
         return new Response(form.get("username") === takes.username && form.get("password") === takes.password ? "Ok." : "Fails.");
       }
     }
-    if (clientId === "deluge") {
+    if (id === "deluge") {
       const result: Record<string, unknown> = {
         "auth.login": body?.params?.[0] === takes.password,
         "web.connected": true,
@@ -171,13 +182,13 @@ function fakes(clientId: ClientId, options: Options = {}) {
       };
       if (body?.method && body.method in result) return Response.json({ result: result[body.method], error: null, id: 1 });
     }
-    if (clientId === "sabnzbd") {
+    if (id === "sabnzbd") {
       if (url.searchParams.get("apikey") !== SAB_KEY) return Response.json({ error: "API Key Incorrect" }, { status: 403 });
       const mode = url.searchParams.get("mode");
       if (mode === "get_config") return Response.json({ config: { misc: { download_dir: "/downloads/sabnzbd/incomplete", complete_dir: "/downloads/sabnzbd/complete" } } });
       if (mode === "get_cats") return Response.json({ categories: ["*", "sportarr"] });
     }
-    if (clientId === "nzbget") {
+    if (id === "nzbget") {
       const auth = Buffer.from(`${takes.username}:${takes.password}`).toString("base64");
       if (new Headers(init?.headers).get("Authorization") !== `Basic ${auth}`) return new Response(null, { status: 401 });
       return Response.json({
@@ -189,7 +200,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
         error: null,
       });
     }
-    throw new Error(`Unexpected ${clientId} request: ${url.pathname}`);
+    throw new Error(`Unexpected ${id} request: ${url.pathname}`);
   };
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -197,20 +208,26 @@ function fakes(clientId: ClientId, options: Options = {}) {
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : undefined;
     if (url.hostname === BOX && Number(url.port) === SPORTARR.port) {
-      if (options.sportarrDown) throw new TypeError("fetch failed");
+      if (options.sportarrDown || restartingNow) throw new TypeError("fetch failed");
       if (url.pathname === "/ping") return Response.json({ status: "OK" });
       if (new Headers(init?.headers).get("X-Api-Key") !== SPORTARR.key) return new Response(null, { status: 401 });
       return sportarr(url, method, body);
     }
-    if (url.hostname === BOX && Number(url.port) === PORTS[clientId]) return client(url, init, body);
+    const target = clients.find((id) => Number(url.port) === PORTS[id]);
+    if (url.hostname === BOX && target === options.also && options.holdAlso) {
+      while (restarts.length === 0) await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    if (url.hostname === BOX && target) return client(target, url, init, body);
     if (live.has(url.host)) return new Response("a web page");
     throw new TypeError("fetch failed");
   }) as typeof fetch;
 
-  const clientConfig = dir(clientId, "config");
-  writeFileSync(join(clientConfig, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
-  writeFileSync(join(clientConfig, "nzbget.conf"), `ControlUsername=${takes.username}\nControlPassword=${takes.password}\n`);
-  writeFileSync(join(clientConfig, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  for (const id of clients) {
+    const config = dir(id, "config");
+    writeFileSync(join(config, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
+    writeFileSync(join(config, "nzbget.conf"), `ControlUsername=${takes.username}\nControlPassword=${takes.password}\n`);
+    writeFileSync(join(config, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  }
   if (options.takes && !options.unsaved && (clientId === "qbittorrent" || clientId === "deluge")) {
     // HexOS keeps the sign-in it gave the client when the owner chose none
     writeFileSync(join(dir(clientId, "config", "hexos"), "webui.json"), JSON.stringify(takes));
@@ -226,11 +243,11 @@ function fakes(clientId: ClientId, options: Options = {}) {
       ...(options.downloads ? [{ containerPath: "/downloads", hostPath: "/mnt/pool/Downloads", localPath: downloads }] : []),
     ],
     signIn: options.takes ? undefined : SIGN_IN,
-    getInstalledAppUrl: async (app: string) => (app === clientId ? `http://${BOX}:${PORTS[clientId]}` : null),
-    getInstalledAppMounts: async () => [
-      { containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig },
-      ...(options.downloads && clientId !== "qbittorrent"
-        ? [{ containerPath: ownFolder, hostPath: `/mnt/pool/Downloads/${clientId}`, localPath: join(downloads, clientId) }]
+    getInstalledAppUrl: async (app: string) => (clients.includes(app as ClientId) ? `http://${BOX}:${PORTS[app as ClientId]}` : null),
+    getInstalledAppMounts: async (app: string) => [
+      { containerPath: "/config", hostPath: `/mnt/pool/apps/${app}/config`, localPath: join(root, app, "config") },
+      ...(options.downloads && app !== "qbittorrent"
+        ? [{ containerPath: `/downloads/${app}`, hostPath: `/mnt/pool/Downloads/${app}`, localPath: join(downloads, app) }]
         : []),
     ],
     ...(options.noRestart
@@ -238,6 +255,11 @@ function fakes(clientId: ClientId, options: Options = {}) {
       : {
           restartApp: async () => {
             restarts.push(listings.length);
+            // A redeploy takes a while, long enough for another link to find the same folder missing,
+            // and Sportarr answers nothing until it's back
+            restartingNow = true;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            restartingNow = false;
             if (options.downloads === "after restart") stale = false;
           },
         }),
@@ -450,3 +472,17 @@ for (const [label, options] of [
     expect(entries()).toHaveLength(1);
   });
 }
+
+test("Sportarr: two links that find their folders missing at once share one restart", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget" });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
+});
+
+test("Sportarr: a link that reaches its look while another link restarts Sportarr waits for that restart, and doesn't restart it again", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget", holdAlso: true });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
+});

@@ -92,14 +92,16 @@ async function finds(ctx: HookContext, token: string, path: string): Promise<boo
  * Jellyfin's bind mount of Media was made, which passes no later mount on (rprivate, the apps
  * library's default). Jellyfin then sees an empty folder there, and never what the companion puts in
  * it, until a restart mounts Media again. The folder is there either way, so HexOS puts an empty
- * folder of its own in it for the check and takes it out after: rmdir removes only an empty folder.
- * Only a 404 for that folder, from a Jellyfin that finds the library folder itself, says it's
- * missing. Only Jellyfin restarts, never the companion. A folder the box doesn't have, and a Jellyfin that can't
- * say what it sees, are left as they are.
+ * folder of its own in it for the check and takes it out after. Only a 404 for that folder, from a
+ * Jellyfin that finds the library folder itself, says it's missing. Only Jellyfin restarts, never the
+ * companion. A folder the box doesn't have, and a Jellyfin that can't say what it sees, are left as
+ * they are.
  */
 async function seeFolders(ctx: HookContext, token: string, media: ContextMount, libraries: Library[], companion: string) {
   const marks: Array<{ library: Library; local: string; path: string }> = [];
   try {
+    // A restart another link started may be all this one needs, so look once it's done
+    await restarting.get(ctx.resourceId);
     for (const library of libraries) {
       const local = `${media.localPath}${library.path.slice("/media".length)}`;
       if (!existsSync(local)) continue;
@@ -129,19 +131,9 @@ async function seeFolders(ctx: HookContext, token: string, media: ContextMount, 
     const stuck = `Jellyfin can't see your ${first.name} folder yet. Stop Jellyfin and start it again, then run Connect to ${companion} again.`;
     if (typeof ctx.restartApp !== "function") ctx.fail(stuck);
     await ctx.updateCheckpointMessage(first.path, `Restarting Jellyfin so it sees your ${first.name} folder`);
-    const refused = await ctx.restartApp().then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const { refused, answered } = await restartServer(ctx);
     if (refused !== undefined) ctx.fail(stuck, [{ label: "Reason", value: refused instanceof Error ? refused.message : String(refused) }]);
-    let up = false;
-    for (let attempt = 0; attempt < 90 && !up; attempt++) {
-      const response = await fetch(`${ctx.baseUrl}/System/Info/Public`, { signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
-      await response?.body?.cancel().catch(() => undefined);
-      up = response?.ok === true;
-      if (!up) await ctx.sleep(2_000);
-    }
-    if (!up) ctx.fail("Jellyfin didn't answer after HexOS restarted it. Try again once it's running.");
+    if (!answered) ctx.fail("Jellyfin didn't answer after HexOS restarted it. Try again once it's running.");
     for (const mark of missing) {
       // Its API answers a little after it starts
       let found: boolean | undefined;
@@ -189,6 +181,39 @@ function clearOldMarks(ctx: HookContext, local: string) {
       ctx.log(`HexOS left ${local}/${entry.name} as it is: ${error}`);
     }
   }
+}
+
+/**
+ * A restart of Jellyfin in flight. Connect to Sportarr and Connect to Chaptarr
+ * run in this one module and may run at once from Jellyfin's card, so a link that finds a folder
+ * missing while the other restarts Jellyfin waits for that restart rather than queue a second one
+ * (app.redeploy takes a lock per app), which would stop Jellyfin under the other link.
+ */
+const restarting = new Map<string, Promise<{ refused?: unknown; answered: boolean }>>();
+
+/** Restarts Jellyfin once for every link that needs it now, and waits until it answers again. */
+function restartServer(ctx: HookContext) {
+  const key = ctx.resourceId;
+  const running = restarting.get(key);
+  if (running) return running;
+  const restart = (async () => {
+    const refused = await ctx.restartApp?.().then(
+      () => undefined,
+      (error: unknown) => error ?? new Error("The restart failed"),
+    );
+    if (refused !== undefined) return { refused, answered: false };
+    for (let attempt = 0; attempt < 90; attempt++) {
+      const response = await fetch(`${ctx.baseUrl}/System/Info/Public`, { signal: AbortSignal.timeout(5_000) }).catch(() => undefined);
+      await response?.body?.cancel().catch(() => undefined);
+      if (response?.ok) return { answered: true };
+      await ctx.sleep(2_000);
+    }
+    return { answered: false };
+  })().finally(() => {
+    restarting.delete(key);
+  });
+  restarting.set(key, restart);
+  return restart;
 }
 
 async function add(ctx: HookContext, libraries: Library[], companion: string) {

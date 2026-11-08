@@ -74,6 +74,10 @@ interface Options {
    * folder whatever happens; or nothing it can say, its listing refused.
    */
   downloads?: "visible" | "after restart" | "hidden" | "unlistable" | "shapeless";
+  /** A second client installed beside the first, whose link runs at the same time. */
+  also?: ClientId;
+  /** The second client holds its first answer until the manager starts restarting. */
+  holdAlso?: boolean;
   /** Radarr has no Downloads mount, as Prowlarr has none. */
   noDownloadsMount?: boolean;
   /** A box from before ctx.restartApp. */
@@ -104,17 +108,22 @@ const CLIENT_FOLDERS: Record<ClientId, string | undefined> = {
 function fakes(clientId: ClientId, options: Options = {}) {
   const nzbgetSignIn = options.nzbgetSignIn ?? SIGN_IN;
   const downloads = dir("Downloads");
-  const ownFolder = `/downloads/${clientId}`;
-  // The client's folders on the box, as the client made them
+  const clients: ClientId[] = [clientId, ...(options.also ? [options.also] : [])];
+  const ownFolders = clients.map((id) => `/downloads/${id}`);
+  const ownFolder = ownFolders[0];
+  // The clients' folders on the box, as each client made them
   if (options.downloads) {
-    dir("Downloads", clientId);
-    for (const folder of [CLIENT_FOLDERS[clientId], clientId === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
-      if (folder) dir("Downloads", folder.slice("/downloads/".length));
+    for (const id of clients) {
+      dir("Downloads", id);
+      for (const folder of [CLIENT_FOLDERS[id], id === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
+        if (folder) dir("Downloads", folder.slice("/downloads/".length));
+      }
     }
   }
   let stale = options.downloads === "after restart" || options.downloads === "hidden";
   const restarts: number[] = [];
   const listings: string[] = [];
+  let restartingNow = false;
   // What each of this box's clients takes, at its address
   const secrets: Record<ClientId, Record<string, string>> = {
     qbittorrent: SIGN_IN,
@@ -163,7 +172,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
     // An answer that says nothing about folders, as a proxy's page or another app's would
     if (options.downloads === "shapeless") return Response.json({ parent: "/downloads/" });
     const path = query.replace(/\/+$/, "");
-    const hidden = stale && (path === ownFolder || path.startsWith(`${ownFolder}/`));
+    const hidden = stale && ownFolders.some((own) => path === own || path.startsWith(`${own}/`));
     const local = join(downloads, path.slice("/downloads".length));
     const names =
       hidden || !path.startsWith("/downloads") || !existsSync(local)
@@ -227,12 +236,16 @@ function fakes(clientId: ClientId, options: Options = {}) {
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : init?.body;
     if (url.hostname === BOX && Number(url.port) === RADARR.port) {
-      if (options.radarrDown) throw new TypeError("fetch failed");
+      if (options.radarrDown || restartingNow) throw new TypeError("fetch failed");
       if (url.pathname === "/ping") return Response.json({ status: "OK" });
       if (new Headers(init?.headers).get("X-Api-Key") !== RADARR.key) return new Response(null, { status: 401 });
       return radarr(url, method, body);
     }
-    if (url.hostname === BOX && Number(url.port) === PORTS[clientId]) return client(clientId, url, init, body);
+    const target = clients.find((id) => Number(url.port) === PORTS[id]);
+    if (url.hostname === BOX && target === options.also && options.holdAlso) {
+      while (restarts.length === 0) await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    if (url.hostname === BOX && target) return client(target, url, init, body);
     probes.push(url.host);
     if (live.has(url.host)) return new Response("a web page");
     throw new TypeError("fetch failed");
@@ -277,10 +290,12 @@ function fakes(clientId: ClientId, options: Options = {}) {
   };
 
   // Each client's settings, where the link reads its key or sign-in
-  const clientConfig = dir(clientId, "config");
-  writeFileSync(join(clientConfig, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
-  writeFileSync(join(clientConfig, "nzbget.conf"), `ControlUsername=${nzbgetSignIn.username}\nControlPassword=${nzbgetSignIn.password}\n`);
-  writeFileSync(join(clientConfig, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  for (const id of clients) {
+    const config = dir(id, "config");
+    writeFileSync(join(config, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
+    writeFileSync(join(config, "nzbget.conf"), `ControlUsername=${nzbgetSignIn.username}\nControlPassword=${nzbgetSignIn.password}\n`);
+    writeFileSync(join(config, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  }
   const radarrConfig = dir("radarr", "config");
   writeFileSync(join(radarrConfig, "config.xml"), `<Config><ApiKey>${RADARR.key}</ApiKey></Config>`);
 
@@ -293,11 +308,11 @@ function fakes(clientId: ClientId, options: Options = {}) {
       ...(options.downloads && !options.noDownloadsMount ? [{ containerPath: "/downloads", hostPath: "/mnt/pool/Downloads", localPath: downloads }] : []),
     ],
     signIn: SIGN_IN,
-    getInstalledAppUrl: async (app: string) => (app === clientId ? `http://${BOX}:${PORTS[clientId]}` : null),
-    getInstalledAppMounts: async () => [
-      { containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig },
-      ...(options.downloads && clientId !== "qbittorrent"
-        ? [{ containerPath: ownFolder, hostPath: `/mnt/pool/Downloads/${clientId}`, localPath: join(downloads, clientId) }]
+    getInstalledAppUrl: async (app: string) => (clients.includes(app as ClientId) ? `http://${BOX}:${PORTS[app as ClientId]}` : null),
+    getInstalledAppMounts: async (app: string) => [
+      { containerPath: "/config", hostPath: `/mnt/pool/apps/${app}/config`, localPath: join(root, app, "config") },
+      ...(options.downloads && app !== "qbittorrent"
+        ? [{ containerPath: `/downloads/${app}`, hostPath: `/mnt/pool/Downloads/${app}`, localPath: join(downloads, app) }]
         : []),
     ],
     ...(options.noRestart
@@ -305,6 +320,11 @@ function fakes(clientId: ClientId, options: Options = {}) {
       : {
           restartApp: async () => {
             restarts.push(listings.length);
+            // A redeploy takes a while, long enough for another link to find the same folder missing,
+            // and Radarr answers nothing until it's back
+            restartingNow = true;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            restartingNow = false;
             if (options.downloads === "after restart") stale = false;
           },
         }),
@@ -585,4 +605,18 @@ test("an answer with no folder list says nothing, so Radarr isn't restarted and 
   expect(listings).toHaveLength(1);
   expect(restarts).toEqual([]);
   expect(entries()).toHaveLength(1);
+});
+
+test("two links on one Radarr that find their folders missing at once share one restart", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget" });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
+});
+
+test("a link that reaches its look while another link restarts Radarr waits for that restart, and doesn't restart it again", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget", holdAlso: true });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
 });
