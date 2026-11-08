@@ -615,6 +615,12 @@ describe("emby, whose card reads sessions as an administrator", () => {
       at(5_000);
       expect(streams(await run(ctx))).toBe("1");
       expect(asked(app, DEVICES)).toEqual([]);
+      // Checked again once five minutes are up, then left for another five
+      at(300_000);
+      expect(streams(await run(ctx))).toBe("1");
+      at(305_000);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["setup"]);
     });
 
     test("on an Emby from before /Devices, a sign-in it refuses is never the one read with", async () => {
@@ -624,6 +630,22 @@ describe("emby, whose card reads sessions as an administrator", () => {
       const { ctx } = open([...signIns(["signed-out", 300], ["member", 200]), "INSERT INTO Devices2 VALUES (1, 'hexos-emby-setup')"], app);
       expect(streams(await run(ctx))).toBe("1");
       expect(asked(app, SESSIONS)).toEqual(["member"]);
+    });
+
+    test("a five-minute check Emby doesn't answer keeps the sign-in, and asks again at the next refresh", async () => {
+      const { run } = await fresh(script);
+      at(0);
+      const app = emby("owner");
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      expect(streams(await run(ctx))).toBe("1");
+      app.asked.length = 0;
+      at(300_000);
+      app.gate = () => Promise.reject(new Error("timed out"));
+      expect(streams(await run(ctx))).toBe("1");
+      app.gate = undefined;
+      at(305_000);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["owner", "owner"]);
     });
 
     test("an Emby that doesn't answer is never read as having no administrator", async () => {
