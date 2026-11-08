@@ -83,7 +83,8 @@ async function askAccount(ctx: HookContext): Promise<{ email: string; password: 
 
 /** An administrator's token: the run's sign-in, else the owner's, asked for. */
 async function adminToken(ctx: HookContext): Promise<string> {
-  if (ctx.signIn?.email) {
+  // One the owner already had in a collection run never took the run's sign-in, so it isn't tried
+  if (ctx.signIn?.email && !ctx.keptApps?.includes(ctx.resourceId)) {
     const result = await signIn(ctx.baseUrl, ctx.signIn.email, ctx.signIn.password);
     if ("token" in result) return result.token;
     if ("unreachable" in result) unreachable(ctx, result.unreachable);

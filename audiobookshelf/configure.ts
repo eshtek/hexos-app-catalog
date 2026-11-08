@@ -41,6 +41,24 @@ async function isInitialized(ctx: HookContext): Promise<boolean> {
   ctx.fail("Audiobookshelf didn't start. Try again once it's running.");
 }
 
+/** The owner's own account's token, on one they already had: undefined when Audiobookshelf refuses it. */
+async function ownToken(ctx: HookContext, account: { username: string; password: string }): Promise<string | undefined> {
+  const response = await fetch(`${ctx.baseUrl}/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: account.username, password: account.password }),
+    signal: AbortSignal.timeout(30_000),
+  }).catch(() => undefined);
+  if (!response) ctx.fail("Audiobookshelf didn't answer. Try again once it's running.");
+  if (response.status === 401 || response.status === 403) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  if (!response.ok) ctx.fail(`Audiobookshelf didn't answer its sign-in (${response.status}). Try again once it's running.`);
+  const answer = (await response.json().catch(() => undefined)) as { user?: { token?: string; accessToken?: string } } | undefined;
+  return answer?.user?.accessToken ?? answer?.user?.token;
+}
+
 const logIn = (ctx: HookContext, username: string, password: string) =>
   shelf<{ user?: { token?: string; accessToken?: string } }>(ctx, "/login", { body: { username, password } })
     .then((answer) => answer.user?.accessToken ?? answer.user?.token)
@@ -56,10 +74,10 @@ export async function configure(ctx: HookContext) {
   const initialized = await isInitialized(ctx);
   await ctx.emitCheckpoint("start");
 
-  const given = ctx.existingSignIns?.[ctx.resourceId];
-  const own = given?.username && given.password ? given : undefined;
-  // One that has a root user signs in as the owner's own, and one with none makes the account they gave
-  const wanted = initialized ? (own ?? ctx.signIn) : (ctx.signIn ?? own);
+  const kept = ctx.keptApps?.includes(ctx.resourceId) === true;
+  const given = kept && !ctx.refusedSignIns?.includes(ctx.resourceId) ? ctx.existingSignIns?.[ctx.resourceId] : undefined;
+  // One with no root user yet makes the chosen account, else the one the owner gave
+  const wanted = ctx.signIn ?? (given?.username ? given : undefined);
   if (!initialized) {
     if (!wanted) {
       await ctx.skipCheckpoint("signIn", "Audiobookshelf asks you to create your account the first time you open it");
@@ -74,11 +92,23 @@ export async function configure(ctx: HookContext) {
     await ctx.emitCheckpoint("signIn");
   }
 
-  const token = wanted ? await logIn(ctx, wanted.username, wanted.password) : undefined;
+  // One the owner already had signs in as their own account, tried once in the run
+  const own =
+    initialized && kept
+      ? await ctx.tryExistingSignIn?.(ctx.resourceId, (account) => ownToken(ctx, account), {
+          title: "Sign in to Audiobookshelf",
+          description: "Audiobookshelf refused the account you gave. Enter it again so HexOS can use it.",
+          username: true,
+          app: "Audiobookshelf",
+        })
+      : undefined;
+  if (own === "refused") {
+    const message = "Audiobookshelf refused the account you gave, so HexOS left Audiobookshelf as it is. Add your libraries in Audiobookshelf's settings.";
+    if (ctx.skip) ctx.skip(message);
+    ctx.fail(message);
+  }
+  const token = initialized && kept ? own : wanted ? await logIn(ctx, wanted.username, wanted.password) : undefined;
   if (!token) {
-    if (initialized && own) {
-      ctx.fail("Audiobookshelf didn't accept the sign-in you gave for it, so HexOS left it as it is. Check it, then run this again from Audiobookshelf's Connections tab.");
-    }
     if (initialized) {
       await ctx.skipCheckpoint("signIn", "Audiobookshelf keeps the account it has");
       for (const library of LIBRARIES) await ctx.skipCheckpoint(library.folder, "Audiobookshelf keeps the libraries it has");
@@ -87,7 +117,7 @@ export async function configure(ctx: HookContext) {
     ctx.fail("Audiobookshelf took your sign-in but won't sign in with it. Try again.");
   }
   if (initialized) {
-    await ctx.skipCheckpoint("signIn", own ? "Audiobookshelf keeps the account it has" : "Audiobookshelf already uses the sign-in you chose");
+    await ctx.skipCheckpoint("signIn", kept ? "Audiobookshelf keeps the account it has" : "Audiobookshelf already uses the sign-in you chose");
   }
 
   const present = await shelf<{ libraries: Array<{ folders?: Array<{ fullPath?: string }> }> }>(ctx, "/api/libraries", { token });

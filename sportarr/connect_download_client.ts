@@ -419,6 +419,21 @@ async function qbittorrentOpen(url: string): Promise<boolean> {
   return response?.status === 200;
 }
 
+/** Whether qBittorrent's WebUI answers at all: a failed sign-in is a refusal only when it does. */
+async function qbittorrentAnswers(url: string): Promise<boolean> {
+  const response = await fetch(`${url}/api/v2/app/version`, { headers: qbittorrentHeaders(url), signal: AbortSignal.timeout(10_000) }).catch(
+    () => undefined,
+  );
+  await response?.body?.cancel();
+  return response !== undefined;
+}
+
+/** Ends a link whose client refused the account the owner gave for it: trying again can't help. */
+function stopRefused(ctx: HookContext, message: string): never {
+  if (ctx.skip) ctx.skip(message);
+  ctx.fail(message);
+}
+
 export const qbittorrent = (ctx: HookContext) =>
   link(ctx, "qbittorrent", "qBittorrent", async ({ url, mounts }) => {
     // A download in progress kept apart from the finished ones, when qBittorrent lets HexOS in to say so
@@ -450,6 +465,27 @@ export const qbittorrent = (ctx: HookContext) =>
       lockout: `qBittorrent is locking ${MANAGER} out for now after sign-ins with an old password failed. ${MANAGER} has the new sign-in and connects on its own within the hour.`,
       signIn: {
         known: async () => {
+          // A qBittorrent the owner already had: the account they gave, tried once in the run. The
+          // run's sign-in never is, since it never took it and each refusal counts toward its lockout
+          const name = ctx.linkedApp?.("qbittorrent")?.name ?? "qbittorrent";
+          if (ctx.keptApps?.includes(name)) {
+            const own = await ctx.tryExistingSignIn?.(
+              name,
+              async (account) => {
+                if (await qbittorrentSignsIn(url, account)) return account;
+                if (!(await qbittorrentAnswers(url))) ctx.fail("HexOS couldn't reach qBittorrent. Try again once it's running.");
+                return undefined;
+              },
+              {
+                title: "Sign in to qBittorrent",
+                description: "qBittorrent refused the account you gave. Enter it again so HexOS can use it.",
+                username: true,
+                app: "qBittorrent",
+              },
+            );
+            if (own === "refused") stopRefused(ctx, `qBittorrent refused the account you gave, so ${MANAGER} wasn't connected to it.`);
+            return own ? { username: own.username, password: own.password } : undefined;
+          }
           for (const candidate of [ctx.signIn, saved]) {
             if (candidate && (await qbittorrentSignsIn(url, candidate))) {
               return { username: candidate.username, password: candidate.password };
@@ -521,12 +557,23 @@ export const deluge = (ctx: HookContext) =>
         ]),
       );
     let password: string | undefined;
-    // A Deluge the owner already had keeps its own password, which they gave in the walk
-    const own = ctx.existingSignIns?.deluge?.password;
-    for (const candidate of new Set([own, ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
-      if (candidate && (await signsIn(candidate))) {
-        password = candidate;
-        break;
+    const name = ctx.linkedApp?.("deluge")?.name ?? "deluge";
+    if (ctx.keptApps?.includes(name)) {
+      // A Deluge the owner already had: the password they gave, tried once in the run, and no guesses
+      const own = await ctx.tryExistingSignIn?.(name, async (account) => ((await signsIn(account.password)) ? account.password : undefined), {
+        title: "Sign in to Deluge",
+        description: "Deluge refused the password you gave. Enter it again so HexOS can use it.",
+        username: false,
+        app: "Deluge",
+      });
+      if (own === "refused") stopRefused(ctx, `Deluge refused the password you gave, so ${MANAGER} wasn't connected to it.`);
+      password = own;
+    } else {
+      for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
+        if (candidate && (await signsIn(candidate))) {
+          password = candidate;
+          break;
+        }
       }
     }
     if (!password) {

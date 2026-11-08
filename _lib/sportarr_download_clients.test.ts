@@ -486,3 +486,38 @@ test("Sportarr: a link that reaches its look while another link restarts Sportar
   expect(restarts).toHaveLength(1);
   expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
 });
+
+// A client the owner already had keeps its sign-in (Aaron, 2026-11-08): the run's chosen sign-in is
+// never tried against it, and the account the owner gave is tried once in the whole run
+test("qBittorrent and Deluge: a kept client gets its own account, never the run's sign-in, and a refused one stops the link", async () => {
+  for (const clientId of ["qbittorrent", "deluge"] as const) {
+    for (const given of [SIGN_IN, { username: SIGN_IN.username, password: "a typo" }]) {
+      const { ctx } = fakes(clientId);
+      const tried: string[] = [];
+      const served = globalThis.fetch;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === "/api/v2/auth/login") tried.push(new URLSearchParams(String(init?.body)).get("password") ?? "");
+        if (url.pathname === "/json" && String(init?.body).includes("auth.login")) tried.push(JSON.parse(String(init?.body)).params[0]);
+        return served(input, init);
+      }) as typeof fetch;
+      const refused: string[] = [];
+      Object.assign(ctx, {
+        signIn: { username: "admin", password: "the-runs-new-password" },
+        keptApps: [clientId],
+        existingSignIns: { [clientId]: given },
+        tryExistingSignIn: async <T,>(name: string, signsIn: (account: typeof given) => Promise<T | undefined>) => {
+          const taken = await signsIn(given);
+          if (taken !== undefined) return taken;
+          refused.push(name);
+          return "refused";
+        },
+      });
+      const run = links[clientId](ctx);
+      if (given.password === SIGN_IN.password) await run;
+      else await expect(run).rejects.toThrow(Skipped);
+      expect(tried).toEqual([given.password]);
+      expect(refused).toEqual(given.password === SIGN_IN.password ? [] : [clientId]);
+    }
+  }
+});

@@ -8,7 +8,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * install or collection, and a folder for downloads in progress when it keeps them with the
  * finished ones. A qBittorrent HexOS just installed has both from seed-webui, so this only checks
  * them; one the owner already had, which a collection brings in, gets them here through its own
- * WebUI. With no sign-in chosen (a run from the app's card) its sign-in stays as it is. The Radarr,
+ * WebUI. One a collection keeps (`ctx.keptApps`) keeps its sign-in too: HexOS gets in as the home
+ * network, else with the account the owner gave for it, tried once. With no sign-in chosen (a run
+ * from the app's card) its sign-in stays as it is. The Radarr,
  * Sonarr, Lidarr and Prowlarr installed beside it get the chosen sign-in at once (`shareSignIn`), so
  * none is locked out for using the old one before its link runs. Read at qBittorrent 5.3.0, the version
  * TrueNAS pins.
@@ -175,6 +177,31 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
 async function enter(ctx: HookContext, credentialsPath: string): Promise<{ session: Session; with?: SignIn } | undefined> {
   const open: Session = { base: ctx.baseUrl };
   if ((await versionStatus(open)) === 200) return { session: open };
+  // One the owner already had: the account they gave, tried once in the run, and no guesses, since
+  // every refusal counts toward qBittorrent's lockout of HexOS's address
+  if (ctx.keptApps?.includes(ctx.resourceId)) {
+    const own = await ctx.tryExistingSignIn?.(
+      ctx.resourceId,
+      async (account) => {
+        const session = await signsIn(ctx.baseUrl, account);
+        if (session) return { session, with: account };
+        if ((await versionStatus(open)) === undefined) ctx.fail("qBittorrent didn't answer. Try again once it's running.");
+        return undefined;
+      },
+      {
+        title: "Sign in to qBittorrent",
+        description: "qBittorrent refused the account you gave. Enter it again so HexOS can use it.",
+        username: true,
+        app: "qBittorrent",
+      },
+    );
+    if (own === "refused") {
+      const message = "qBittorrent refused the account you gave, so HexOS left qBittorrent as it is. Run Pre-configure qBittorrent from its Connections tab to set it up.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
+    }
+    return own;
+  }
   for (const known of [ctx.signIn, savedSignIn(credentialsPath)]) {
     if (!known) continue;
     const session = await signsIn(ctx.baseUrl, known);
