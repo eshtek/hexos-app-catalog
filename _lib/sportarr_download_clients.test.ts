@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookContext } from "./hook_context";
@@ -56,6 +56,14 @@ interface Options {
   /** HexOS kept no sign-in for the client, so it knows none that works. */
   unsaved?: boolean;
   sportarrDown?: boolean;
+  /**
+   * Sportarr mounts the Downloads location at /downloads and the client its own folder of it. What
+   * Sportarr sees of that folder: all of it; only an empty folder until it restarts; only an empty
+   * folder whatever happens; or nothing it can say.
+   */
+  downloads?: "visible" | "after restart" | "hidden" | "unlistable";
+  /** A box from before ctx.restartApp. */
+  noRestart?: boolean;
 }
 
 class Skipped extends Error {}
@@ -71,8 +79,37 @@ function dir(...parts: string[]) {
   return path;
 }
 
+/** The folder each client has made in its own folder of Downloads by the time it's linked. */
+const CLIENT_FOLDERS: Record<ClientId, string | undefined> = {
+  qbittorrent: undefined,
+  deluge: "/downloads/deluge/complete",
+  sabnzbd: "/downloads/sabnzbd/complete",
+  nzbget: "/downloads/nzbget/completed/sportarr",
+};
+
 function fakes(clientId: ClientId, options: Options = {}) {
   const takes = { username: SIGN_IN.username, ...(options.takes ?? SIGN_IN) };
+  const downloads = dir("Downloads");
+  const ownFolder = `/downloads/${clientId}`;
+  if (options.downloads) {
+    dir("Downloads", clientId);
+    for (const folder of [CLIENT_FOLDERS[clientId], clientId === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
+      if (folder) dir("Downloads", folder.slice("/downloads/".length));
+    }
+  }
+  let stale = options.downloads === "after restart" || options.downloads === "hidden";
+  const restarts: number[] = [];
+  const listings: string[] = [];
+  // Sportarr's /api/filesystem (RootFolderAndNotificationEndpoints at 4.1.11) refuses a folder it can't find
+  const listing = (path: string) => {
+    listings.push(path);
+    if (options.downloads === "unlistable") return Response.json({ error: "Access denied to this directory" }, { status: 400 });
+    const hidden = stale && path.startsWith(`${ownFolder}/`);
+    const local = join(downloads, path.slice("/downloads".length));
+    if (hidden || !path.startsWith("/downloads") || !existsSync(local)) return Response.json({ error: "Directory does not exist" }, { status: 400 });
+    const names = stale && path === ownFolder ? [] : readdirSync(local, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    return Response.json({ parent: path.slice(0, path.lastIndexOf("/")), directories: names.map((name) => ({ type: "folder", name, path: `${path}/${name}` })), files: null });
+  };
   const secrets: Record<ClientId, Record<string, string>> = {
     qbittorrent: { username: takes.username, password: takes.password },
     deluge: { password: takes.password },
@@ -93,6 +130,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
     Object.entries(secrets[clientId]).every(([field, value]) => entry[field as keyof Entry] === value);
 
   const sportarr = (url: URL, method: string, body: Entry) => {
+    if (url.pathname === "/api/filesystem" && method === "GET") return listing(url.searchParams.get("path") ?? "");
     if (url.pathname === "/api/downloadclient" && method === "GET") return Response.json(entries.toSorted((a, b) => (a.priority ?? 1) - (b.priority ?? 1)));
     if (url.pathname === "/api/downloadclient/test") {
       return passes(body) ? Response.json({ success: true }) : Response.json({ success: false, message: "Connection failed" }, { status: 400 });
@@ -137,7 +175,14 @@ function fakes(clientId: ClientId, options: Options = {}) {
     if (clientId === "nzbget") {
       const auth = Buffer.from(`${takes.username}:${takes.password}`).toString("base64");
       if (new Headers(init?.headers).get("Authorization") !== `Basic ${auth}`) return new Response(null, { status: 401 });
-      return Response.json({ result: [{ Name: "MainDir", Value: "/downloads/nzbget" }, { Name: "Category1.Name", Value: "sportarr" }], error: null });
+      return Response.json({
+        result: [
+          { Name: "MainDir", Value: "/downloads/nzbget" },
+          { Name: "DestDir", Value: "${MainDir}/completed" },
+          { Name: "Category1.Name", Value: "sportarr" },
+        ],
+        error: null,
+      });
     }
     throw new Error(`Unexpected ${clientId} request: ${url.pathname}`);
   };
@@ -171,10 +216,27 @@ function fakes(clientId: ClientId, options: Options = {}) {
   const ctx = {
     resourceId: "sportarr",
     baseUrl: `http://${BOX}:${SPORTARR.port}`,
-    mounts: [{ containerPath: "/config", hostPath: "/mnt/pool/apps/sportarr/config", localPath: sportarrConfig }],
+    mounts: [
+      { containerPath: "/config", hostPath: "/mnt/pool/apps/sportarr/config", localPath: sportarrConfig },
+      ...(options.downloads ? [{ containerPath: "/downloads", hostPath: "/mnt/pool/Downloads", localPath: downloads }] : []),
+    ],
     signIn: options.takes ? undefined : SIGN_IN,
     getInstalledAppUrl: async (app: string) => (app === clientId ? `http://${BOX}:${PORTS[clientId]}` : null),
-    getInstalledAppMounts: async () => [{ containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig }],
+    getInstalledAppMounts: async () => [
+      { containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig },
+      ...(options.downloads && clientId !== "qbittorrent"
+        ? [{ containerPath: ownFolder, hostPath: `/mnt/pool/Downloads/${clientId}`, localPath: join(downloads, clientId) }]
+        : []),
+    ],
+    ...(options.noRestart
+      ? {}
+      : {
+          restartApp: async () => {
+            restarts.push(listings.length);
+            if (options.downloads === "after restart") stale = false;
+          },
+        }),
+    updateCheckpointMessage: async () => {},
     registerCheckpoints: async () => {},
     emitCheckpoint: async (id: string, message?: string) => {
       checkpoints.push({ id, message });
@@ -202,7 +264,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
       throw new Skipped(message);
     },
   } as unknown as HookContext;
-  return { ctx, entries: () => entries, questions, checkpoints };
+  return { ctx, entries: () => entries, questions, checkpoints, restarts, listings };
 }
 
 const links = { qbittorrent, deluge, sabnzbd, nzbget };
@@ -322,4 +384,52 @@ test("of two entries where nothing answers, the one holding this client's sign-i
 test("a Sportarr that isn't answering yet fails with a plain message before anything is changed", async () => {
   const { ctx } = fakes("qbittorrent", { sportarrDown: true });
   await expect(qbittorrent(ctx)).rejects.toThrow("Sportarr isn't answering yet. Try again once it has started.");
+});
+
+// A client installed after Sportarr started is a dataset TrueNAS mounts after Sportarr's bind mount
+// of Downloads was made, so Sportarr sees an empty folder there until it restarts. The link asks
+// Sportarr for the client's folder and restarts Sportarr once when it can't find it.
+for (const clientId of ["deluge", "sabnzbd", "nzbget"] as const) {
+  const folder = CLIENT_FOLDERS[clientId]!;
+
+  test(`${NAMES[clientId]}: a folder Sportarr can't see gets one restart and a second look, then the client is added`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "after restart" });
+    await links[clientId](ctx);
+    expect(restarts).toEqual([1]);
+    expect(listings).toEqual([folder, folder]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder Sportarr sees gets no restart`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "visible" });
+    await links[clientId](ctx);
+    expect(restarts).toEqual([]);
+    expect(listings).toEqual([folder]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder still missing after the restart fails the link with what to do, and the client isn't added`, async () => {
+    const { ctx, entries, restarts } = fakes(clientId, { downloads: "hidden" });
+    await expect(links[clientId](ctx)).rejects.toThrow(
+      `Sportarr still can't see ${NAMES[clientId]}'s downloads folder after HexOS restarted it. Stop Sportarr and start it again, then run Connect to ${NAMES[clientId]} again.`,
+    );
+    expect(restarts).toEqual([1]);
+    expect(entries()).toEqual([]);
+  });
+}
+
+test("Sportarr: a box that can't restart it fails the link with what to do", async () => {
+  const { ctx, entries } = fakes("nzbget", { downloads: "after restart", noRestart: true });
+  await expect(nzbget(ctx)).rejects.toThrow(
+    "Sportarr can't see NZBGet's downloads folder yet. Stop Sportarr and start it again, then run Connect to NZBGet again.",
+  );
+  expect(entries()).toEqual([]);
+});
+
+test("Sportarr: a refused listing that doesn't say the folder is missing isn't a reason to restart", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "unlistable" });
+  await nzbget(ctx);
+  expect(listings).toHaveLength(1);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
 });

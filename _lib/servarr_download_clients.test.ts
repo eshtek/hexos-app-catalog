@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookContext } from "./hook_context";
@@ -67,6 +67,17 @@ interface Options {
   radarrDown?: boolean;
   /** Entries Radarr has but leaves out of its list, as one added while the link runs would be. */
   unlisted?: Stored[];
+  /**
+   * Radarr mounts the Downloads location at /downloads and the client its own folder of it, which
+   * holds what the client made there. What Radarr sees of that folder: all of it; only an empty
+   * folder until it restarts, as when the folder was mounted after Radarr started; only an empty
+   * folder whatever happens; or nothing it can say, its listing refused.
+   */
+  downloads?: "visible" | "after restart" | "hidden" | "unlistable";
+  /** Radarr has no Downloads mount, as Prowlarr has none. */
+  noDownloadsMount?: boolean;
+  /** A box from before ctx.restartApp. */
+  noRestart?: boolean;
 }
 
 class Skipped extends Error {}
@@ -82,8 +93,28 @@ function dir(...parts: string[]) {
   return path;
 }
 
+/** The folder each client has made in its own folder of Downloads by the time it's linked. */
+const CLIENT_FOLDERS: Record<ClientId, string | undefined> = {
+  qbittorrent: undefined,
+  deluge: "/downloads/deluge/complete",
+  sabnzbd: "/downloads/sabnzbd/complete",
+  nzbget: "/downloads/nzbget/completed/Movies",
+};
+
 function fakes(clientId: ClientId, options: Options = {}) {
   const nzbgetSignIn = options.nzbgetSignIn ?? SIGN_IN;
+  const downloads = dir("Downloads");
+  const ownFolder = `/downloads/${clientId}`;
+  // The client's folders on the box, as the client made them
+  if (options.downloads) {
+    dir("Downloads", clientId);
+    for (const folder of [CLIENT_FOLDERS[clientId], clientId === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
+      if (folder) dir("Downloads", folder.slice("/downloads/".length));
+    }
+  }
+  let stale = options.downloads === "after restart" || options.downloads === "hidden";
+  const restarts: number[] = [];
+  const listings: string[] = [];
   // What each of this box's clients takes, at its address
   const secrets: Record<ClientId, Record<string, string>> = {
     qbittorrent: SIGN_IN,
@@ -125,9 +156,30 @@ function fakes(clientId: ClientId, options: Options = {}) {
   const refuse = (errorMessage: string, propertyName = "") => Response.json([{ propertyName, errorMessage }], { status: 400 });
   const clash = (name: string, id?: number) => [...stored.values()].some((entry) => entry.name.toLowerCase() === name.toLowerCase() && entry.id !== id);
 
+  // FileSystemLookupService: a folder that isn't there lists as empty, as an empty one does
+  const listing = (query: string) => {
+    listings.push(query);
+    if (options.downloads === "unlistable") return new Response("Internal Server Error", { status: 500 });
+    const path = query.replace(/\/+$/, "");
+    const hidden = stale && (path === ownFolder || path.startsWith(`${ownFolder}/`));
+    const local = join(downloads, path.slice("/downloads".length));
+    const names =
+      hidden || !path.startsWith("/downloads") || !existsSync(local)
+        ? []
+        : readdirSync(local, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name);
+    return Response.json({
+      parent: `${path.slice(0, path.lastIndexOf("/"))}/`,
+      directories: names.map((name) => ({ type: "folder", name, path: `${path}/${name}/` })),
+      files: [],
+    });
+  };
+
   const radarr = (url: URL, method: string, body: unknown) => {
     const path = url.pathname.replace("/api/v3", "");
     const force = url.searchParams.get("forceSave") === "true";
+    if (path === "/filesystem" && method === "GET") return listing(url.searchParams.get("path") ?? "");
     if (path === "/downloadclient" && method === "GET") return Response.json([...stored.values()].filter((e) => !unlisted.has(e.id)).map(masked));
     if (path === "/downloadclient/schema") {
       return Response.json(Object.keys(FIELDS).map((implementation) => ({ name: "", implementation, enable: true, priority: 1, fields: FIELDS[implementation].map((name) => ({ name, value: "" })) })));
@@ -214,6 +266,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
       if (new Headers(init?.headers).get("Authorization") !== `Basic ${auth}`) return new Response(null, { status: 401 });
       const options = [
         { Name: "MainDir", Value: "/downloads/nzbget" },
+        { Name: "DestDir", Value: "${MainDir}/completed" },
         { Name: "Category1.Name", Value: "Movies" },
       ];
       return Response.json({ result: options, error: null });
@@ -233,10 +286,27 @@ function fakes(clientId: ClientId, options: Options = {}) {
     resourceId: "radarr",
     catalogAppId: "radarr",
     baseUrl: `http://${BOX}:${RADARR.port}`,
-    mounts: [{ containerPath: "/config", hostPath: "/mnt/pool/apps/radarr/config", localPath: radarrConfig }],
+    mounts: [
+      { containerPath: "/config", hostPath: "/mnt/pool/apps/radarr/config", localPath: radarrConfig },
+      ...(options.downloads && !options.noDownloadsMount ? [{ containerPath: "/downloads", hostPath: "/mnt/pool/Downloads", localPath: downloads }] : []),
+    ],
     signIn: SIGN_IN,
     getInstalledAppUrl: async (app: string) => (app === clientId ? `http://${BOX}:${PORTS[clientId]}` : null),
-    getInstalledAppMounts: async () => [{ containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig }],
+    getInstalledAppMounts: async () => [
+      { containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig },
+      ...(options.downloads && clientId !== "qbittorrent"
+        ? [{ containerPath: ownFolder, hostPath: `/mnt/pool/Downloads/${clientId}`, localPath: join(downloads, clientId) }]
+        : []),
+    ],
+    ...(options.noRestart
+      ? {}
+      : {
+          restartApp: async () => {
+            restarts.push(listings.length);
+            if (options.downloads === "after restart") stale = false;
+          },
+        }),
+    updateCheckpointMessage: async () => {},
     registerCheckpoints: async () => {},
     emitCheckpoint: async (id: string, message?: string) => {
       checkpoints.push({ id, message });
@@ -265,7 +335,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
     },
   } as unknown as HookContext;
   const entries = () => [...stored.values()];
-  return { ctx, entries, tests, questions, probes, checkpoints };
+  return { ctx, entries, tests, questions, probes, checkpoints, restarts, listings };
 }
 
 const links = { qbittorrent, deluge, sabnzbd, nzbget };
@@ -436,4 +506,73 @@ test("a second entry under the name that Radarr doesn't list yet is reported as 
 test("a Radarr that isn't answering yet fails with a plain message before anything is changed", async () => {
   const { ctx } = fakes("qbittorrent", { radarrDown: true });
   await expect(qbittorrent(ctx)).rejects.toThrow("Radarr isn't answering yet. Try again once it has started.");
+});
+
+// A client installed after Radarr started gets its folder of Downloads as a dataset of its own,
+// which TrueNAS mounts after Radarr's bind mount of Downloads was made. That mount passes nothing
+// on (rprivate), so Radarr sees only an empty folder there until it restarts, and reports the
+// client's downloads folder missing. The link asks Radarr what it sees, and restarts Radarr once.
+for (const clientId of ["deluge", "sabnzbd", "nzbget"] as const) {
+  const folder = CLIENT_FOLDERS[clientId]!;
+  const parent = folder.slice(0, folder.lastIndexOf("/") + 1);
+
+  test(`${NAMES[clientId]}: a folder Radarr can't see gets one restart and a second look, then the client is added`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "after restart" });
+    await links[clientId](ctx);
+    // Once, after the first look found nothing
+    expect(restarts).toEqual([1]);
+    expect(listings).toEqual([parent, parent]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder Radarr sees gets no restart`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "visible" });
+    await links[clientId](ctx);
+    expect(restarts).toEqual([]);
+    expect(listings).toEqual([parent]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder still missing after the restart fails the link with what to do, and the client isn't added`, async () => {
+    const { ctx, entries, restarts } = fakes(clientId, { downloads: "hidden" });
+    const run = links[clientId](ctx);
+    await expect(run).rejects.toThrow(
+      `Radarr still can't see ${NAMES[clientId]}'s downloads folder after HexOS restarted it. Stop Radarr and start it again, then run Connect to ${NAMES[clientId]} again.`,
+    );
+    await expect(run).rejects.not.toThrow(Skipped);
+    expect(restarts).toEqual([1]);
+    expect(entries()).toEqual([]);
+  });
+}
+
+test("a box that can't restart Radarr fails the link with what to do, and the client isn't added", async () => {
+  const { ctx, entries } = fakes("nzbget", { downloads: "after restart", noRestart: true });
+  await expect(nzbget(ctx)).rejects.toThrow(
+    "Radarr can't see NZBGet's downloads folder yet. Stop Radarr and start it again, then run Connect to NZBGet again.",
+  );
+  expect(entries()).toEqual([]);
+});
+
+test("a Radarr that can't list its folders isn't restarted, and the client is added", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "unlistable" });
+  await nzbget(ctx);
+  expect(listings).toHaveLength(1);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+test("a manager without the Downloads location, as Prowlarr is, is never asked or restarted", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "hidden", noDownloadsMount: true });
+  await nzbget(ctx);
+  expect(listings).toEqual([]);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+test("qBittorrent, whose folder Radarr mounts itself, is never asked about or restarted for", async () => {
+  const { ctx, entries, restarts, listings } = fakes("qbittorrent", { downloads: "hidden" });
+  await qbittorrent(ctx);
+  expect(listings).toEqual([]);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
 });
