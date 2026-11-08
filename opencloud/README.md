@@ -8,6 +8,8 @@ Files for your household, on your own server, in your browser. Open it with Laun
 
 **New documents.** "New documents are made as" sets what the New menu creates. You can change it on the Settings tab. Every format still opens.
 
+**Editing documents.** Install Euro-Office and connect it from OpenCloud's Connections tab. There's nothing to copy.
+
 **Calendars and contacts** work with any CalDAV or CardDAV app, and you can turn them off on the Settings tab.
 
 **Search** finds file names. "Search inside documents" also finds words inside files. It's off unless you turn it on, since it uses about 1 GB more memory.
