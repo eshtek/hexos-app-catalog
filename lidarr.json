@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.4.0",
-    "changeLog": "A server can run several copies of Lidarr, each with its own settings, library folder and download category"
+    "version": "1.4.1",
+    "changeLog": "Makes a folder in Downloads for each download client as it installs, so Lidarr sees what a client you add later downloads"
   },
   "sign_in": {
     "username": true
@@ -10,7 +10,10 @@
   "requirements": {
     "instances": "many",
     "shared_folders": [
-      "$LOCATION(Downloads)/qbittorrent"
+      "$LOCATION(Downloads)/qbittorrent",
+      "$LOCATION(Downloads)/deluge",
+      "$LOCATION(Downloads)/sabnzbd",
+      "$LOCATION(Downloads)/nzbget"
     ],
     "copy_libraries": [
       "Music"
@@ -49,6 +52,15 @@
     },
     {
       "path": "$LOCATION(Downloads)/qbittorrent"
+    },
+    {
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(lidarr)/config",
@@ -191,7 +203,7 @@
       "rerun": "converge",
       "script": "servarr/connect_download_client.ts",
       "entrypoint": "sabnzbd",
-      "timeout": 120,
+      "timeout": 900,
       "retries": 0
     },
     {
@@ -219,7 +231,7 @@
       "rerun": "converge",
       "script": "servarr/connect_download_client.ts",
       "entrypoint": "nzbget",
-      "timeout": 120,
+      "timeout": 900,
       "retries": 0
     }
   ]
