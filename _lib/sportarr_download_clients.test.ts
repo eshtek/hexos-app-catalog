@@ -61,7 +61,9 @@ interface Options {
    * Sportarr sees of that folder: all of it; only an empty folder until it restarts; only an empty
    * folder whatever happens; or nothing it can say.
    */
-  downloads?: "visible" | "after restart" | "hidden" | "unlistable";
+  downloads?: "visible" | "after restart" | "hidden" | "unlistable" | "shapeless";
+  /** What Sportarr's refusal says for a folder it can't find, when not its own "Directory does not exist". */
+  refusal?: string;
   /** A box from before ctx.restartApp. */
   noRestart?: boolean;
 }
@@ -104,9 +106,12 @@ function fakes(clientId: ClientId, options: Options = {}) {
   const listing = (path: string) => {
     listings.push(path);
     if (options.downloads === "unlistable") return Response.json({ error: "Access denied to this directory" }, { status: 400 });
+    if (options.downloads === "shapeless") return Response.json({ ok: true });
     const hidden = stale && path.startsWith(`${ownFolder}/`);
     const local = join(downloads, path.slice("/downloads".length));
-    if (hidden || !path.startsWith("/downloads") || !existsSync(local)) return Response.json({ error: "Directory does not exist" }, { status: 400 });
+    if (hidden || !path.startsWith("/downloads") || !existsSync(local)) {
+      return Response.json({ error: options.refusal ?? "Directory does not exist" }, { status: 400 });
+    }
     const names = stale && path === ownFolder ? [] : readdirSync(local, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
     return Response.json({ parent: path.slice(0, path.lastIndexOf("/")), directories: names.map((name) => ({ type: "folder", name, path: `${path}/${name}` })), files: null });
   };
@@ -433,3 +438,15 @@ test("Sportarr: a refused listing that doesn't say the folder is missing isn't a
   expect(restarts).toEqual([]);
   expect(entries()).toHaveLength(1);
 });
+
+for (const [label, options] of [
+  ["a refusal that only sounds like a missing folder", { downloads: "hidden", refusal: "Drive does not exist" }],
+  ["an answer with no folder list", { downloads: "shapeless" }],
+] as const) {
+  test(`Sportarr: ${label} says nothing, so Sportarr isn't restarted and the client is added`, async () => {
+    const { ctx, entries, restarts } = fakes("nzbget", options);
+    await nzbget(ctx);
+    expect(restarts).toEqual([]);
+    expect(entries()).toHaveLength(1);
+  });
+}

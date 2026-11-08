@@ -97,7 +97,8 @@ async function finds(ctx: HookContext, token: string, path: string): Promise<boo
  * library's default). Emby then sees an empty folder there, and never what the companion puts in
  * it, until a restart mounts Media again. The folder is there either way, so HexOS puts an empty
  * folder of its own in it for the check and takes it out after: rmdir removes only an empty folder.
- * Only Emby restarts, never the companion. A folder the box doesn't have, and a Emby that can't
+ * Only a 404 for that folder, from a Emby that finds the library folder itself, says it's
+ * missing. Only Emby restarts, never the companion. A folder the box doesn't have, and a Emby that can't
  * say what it sees, are left as they are.
  */
 async function seeFolders(ctx: HookContext, token: string, media: ContextMount, libraries: Library[], companion: string) {
@@ -106,6 +107,10 @@ async function seeFolders(ctx: HookContext, token: string, media: ContextMount, 
     for (const library of libraries) {
       const local = `${media.localPath}${library.path.slice("/media".length)}`;
       if (!existsSync(local)) continue;
+      if ((await finds(ctx, token, library.path)) !== true) {
+        ctx.log(`Emby couldn't say whether it sees ${library.path}, so HexOS didn't check it`);
+        continue;
+      }
       const mark = `/.hexos-check-${randomUUID()}`;
       try {
         mkdirSync(`${local}${mark}`);

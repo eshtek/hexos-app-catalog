@@ -266,12 +266,13 @@ async function link(ctx: HookContext, appId: ClientId, name: string, prepare: (c
 
 /**
  * Whether Sportarr sees a folder: its /api/filesystem lists one it finds and refuses one it doesn't
- * (RootFolderAndNotificationEndpoints at 4.1.11). Undefined when it refuses for another reason.
+ * with "Directory does not exist" (RootFolderAndNotificationEndpoints at 4.1.11). Undefined when it
+ * refuses with anything else.
  */
 async function sportarrSees(ctx: HookContext, apiKey: string, folder: string): Promise<boolean | undefined> {
   return sportarrApi(ctx, apiKey, `/filesystem?${new URLSearchParams({ path: folder })}`).then(
     () => true,
-    (error: unknown) => (error instanceof Error && /does not exist/i.test(error.message) ? false : undefined),
+    (error: unknown) => (error instanceof Error && error.message === "Directory does not exist" ? false : undefined),
   );
 }
 

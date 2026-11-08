@@ -73,7 +73,7 @@ interface Options {
    * folder until it restarts, as when the folder was mounted after Radarr started; only an empty
    * folder whatever happens; or nothing it can say, its listing refused.
    */
-  downloads?: "visible" | "after restart" | "hidden" | "unlistable";
+  downloads?: "visible" | "after restart" | "hidden" | "unlistable" | "shapeless";
   /** Radarr has no Downloads mount, as Prowlarr has none. */
   noDownloadsMount?: boolean;
   /** A box from before ctx.restartApp. */
@@ -160,6 +160,8 @@ function fakes(clientId: ClientId, options: Options = {}) {
   const listing = (query: string) => {
     listings.push(query);
     if (options.downloads === "unlistable") return new Response("Internal Server Error", { status: 500 });
+    // An answer that says nothing about folders, as a proxy's page or another app's would
+    if (options.downloads === "shapeless") return Response.json({ parent: "/downloads/" });
     const path = query.replace(/\/+$/, "");
     const hidden = stale && (path === ownFolder || path.startsWith(`${ownFolder}/`));
     const local = join(downloads, path.slice("/downloads".length));
@@ -573,6 +575,14 @@ test("qBittorrent, whose folder Radarr mounts itself, is never asked about or re
   const { ctx, entries, restarts, listings } = fakes("qbittorrent", { downloads: "hidden" });
   await qbittorrent(ctx);
   expect(listings).toEqual([]);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+test("an answer with no folder list says nothing, so Radarr isn't restarted and the client is added", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "shapeless" });
+  await nzbget(ctx);
+  expect(listings).toHaveLength(1);
   expect(restarts).toEqual([]);
   expect(entries()).toHaveLength(1);
 });

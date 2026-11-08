@@ -13,7 +13,8 @@ import type { HookContext } from "./hook_context";
 // media server started is mounted after the server's bind mount of Media was made. That mount
 // passes no later mount on (rprivate), so the server sees an empty folder there, and nothing put in
 // it, until it restarts. The folder itself is there either way, so the link puts an empty folder of
-// its own in it for a moment and asks the server for that one.
+// its own in it for a moment and asks the server for that one, and for the library folder itself,
+// which proves the server answers ValidatePath: only then is a 404 for its own folder a missing one.
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -37,6 +38,8 @@ interface Options {
   noRestart?: boolean;
   /** ValidatePath refuses for a reason other than a missing folder. */
   unvalidatable?: boolean;
+  /** Every ValidatePath is a 404, as a server without the route answers. */
+  routeless?: boolean;
 }
 
 function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Options) {
@@ -85,6 +88,7 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
       const asked = body.Path ?? url.searchParams.get("Path") ?? "";
       looks.push(asked);
       if (options.unvalidatable) return new Response("Forbidden", { status: 403 });
+      if (options.routeless) return new Response(null, { status: 404 });
       return new Response(null, { status: sees(asked) ? 204 : 404 });
     }
     throw new Error(`Unexpected ${server} request: ${method} ${url.pathname}`);
@@ -126,9 +130,11 @@ for (const server of ["jellyfin", "emby"] as const) {
   test(`${name}: a Sports folder it can't see inside gets one restart and a second look, then the library is added`, async () => {
     const { ctx, libraries, restarts, looks, leftovers } = fakes(server, "sportarr", { media: "after restart" });
     await LINKS[server].sportarr(ctx);
-    expect(restarts).toEqual([1]);
-    expect(looks).toHaveLength(2);
-    expect(looks[0]).toStartWith("/media/sports/.hexos-");
+    // The library folder, then HexOS's own in it, before the restart; HexOS's own again after
+    expect(restarts).toEqual([2]);
+    expect(looks).toHaveLength(3);
+    expect(looks[0]).toBe("/media/sports");
+    expect(looks[1]).toStartWith("/media/sports/.hexos-check-");
     expect(libraries).toEqual(["/media/sports"]);
     expect(leftovers()).toEqual([]);
   });
@@ -137,7 +143,7 @@ for (const server of ["jellyfin", "emby"] as const) {
     const { ctx, libraries, restarts, looks, leftovers } = fakes(server, "chaptarr", { media: "visible" });
     await LINKS[server].chaptarr(ctx);
     expect(restarts).toEqual([]);
-    expect(looks).toHaveLength(2);
+    expect(looks).toHaveLength(4);
     expect(libraries).toEqual(["/media/books", "/media/audiobooks"]);
     expect(leftovers()).toEqual([]);
   });
@@ -145,8 +151,8 @@ for (const server of ["jellyfin", "emby"] as const) {
   test(`${name}: both of Chaptarr's folders missing take one restart between them`, async () => {
     const { ctx, libraries, restarts, looks } = fakes(server, "chaptarr", { media: "after restart" });
     await LINKS[server].chaptarr(ctx);
-    expect(restarts).toEqual([2]);
-    expect(looks).toHaveLength(4);
+    expect(restarts).toEqual([4]);
+    expect(looks).toHaveLength(6);
     expect(libraries).toEqual(["/media/books", "/media/audiobooks"]);
   });
 
@@ -155,7 +161,7 @@ for (const server of ["jellyfin", "emby"] as const) {
     await expect(LINKS[server].sportarr(ctx)).rejects.toThrow(
       `${name} still can't see your Sports folder after HexOS restarted it. Stop ${name} and start it again, then run Connect to Sportarr again.`,
     );
-    expect(restarts).toEqual([1]);
+    expect(restarts).toEqual([2]);
     expect(libraries).toEqual([]);
     expect(leftovers()).toEqual([]);
   });
@@ -171,6 +177,17 @@ for (const server of ["jellyfin", "emby"] as const) {
 
   test(`${name}: a refusal that doesn't say the folder is missing isn't a reason to restart`, async () => {
     const { ctx, libraries, restarts } = fakes(server, "sportarr", { media: "hidden", unvalidatable: true });
+    await LINKS[server].sportarr(ctx);
+    expect(restarts).toEqual([]);
+    expect(libraries).toEqual(["/media/sports"]);
+  });
+}
+
+for (const server of ["jellyfin", "emby"] as const) {
+  const name = NAMES[server];
+
+  test(`${name}: a server that answers 404 for every path says nothing, so it isn't restarted`, async () => {
+    const { ctx, libraries, restarts } = fakes(server, "sportarr", { media: "hidden", routeless: true });
     await LINKS[server].sportarr(ctx);
     expect(restarts).toEqual([]);
     expect(libraries).toEqual(["/media/sports"]);

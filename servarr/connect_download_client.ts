@@ -355,18 +355,18 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
 }
 
 /**
- * Whether the manager sees a folder, by its own listing of the folder above it: a folder that isn't
- * there lists as empty (FileSystemLookupService). Undefined when the manager can't list it.
+ * Whether the manager sees a folder, by its own listing of the folder above it. A folder that isn't
+ * there lists as an empty list of directories (FileSystemLookupService and FileSystemResult, the same
+ * in Radarr, Sonarr, Lidarr and Chaptarr 0.9.965). Undefined for anything else: a refusal, or an
+ * answer without that list.
  */
 async function managerSees(ctx: HookContext, apiKey: string, folder: string): Promise<boolean | undefined> {
   const parent = folder.slice(0, folder.lastIndexOf("/") + 1);
-  const listing = await managerApi<{ directories?: Array<{ name?: string }> }>(
-    ctx,
-    apiKey,
-    `/filesystem?${new URLSearchParams({ path: parent })}`,
-  ).catch(() => undefined);
-  if (!listing) return undefined;
-  return (listing.directories ?? []).some((entry) => entry.name === folder.slice(parent.length));
+  const listing = await managerApi<{ directories?: unknown }>(ctx, apiKey, `/filesystem?${new URLSearchParams({ path: parent })}`).catch(
+    () => undefined,
+  );
+  if (!Array.isArray(listing?.directories)) return undefined;
+  return listing.directories.some((entry) => (entry as { name?: unknown } | null)?.name === folder.slice(parent.length));
 }
 
 /**
