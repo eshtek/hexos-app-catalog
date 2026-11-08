@@ -77,8 +77,34 @@ describe("plex, how a stream is served", () => {
     expect(how(result)).toBe("DirectPlay · 8.2 Mbps");
   });
 
-  test("with no version marked as playing, the first one's bitrate shows", async () => {
-    expect(how(await card({ Media: [{ bitrate: 8200 }, { bitrate: 20000 }] }))).toBe("DirectPlay · 8.2 Mbps");
+  test("a single version not marked as playing shows its bitrate", async () => {
+    expect(how(await card({ Media: [{ bitrate: 8200 }] }))).toBe("DirectPlay · 8.2 Mbps");
+  });
+
+  test("several versions with none marked as playing show no figure, since any could be the one", async () => {
+    expect(how(await card({ Media: [{ bitrate: 8200 }, { bitrate: 20000 }] }))).toBe("DirectPlay");
+  });
+
+  test("a transcode with no reserved bandwidth shows no figure, not the file's bitrate", async () => {
+    const result = await card({ Media: [{ bitrate: 8200 }], TranscodeSession: { videoDecision: "transcode", audioDecision: "copy" } });
+    expect(how(result)).toBe("Transcode");
+  });
+
+  test("re-encoded audio alone shows no figure either, as what's sent isn't the file", async () => {
+    const result = await card({ Media: [{ bitrate: 8200 }], TranscodeSession: { videoDecision: "copy", audioDecision: "transcode" } });
+    expect(how(result)).toBe("DirectPlay");
+  });
+
+  test("a part Plex says it transcodes shows no figure, with no transcoder details", async () => {
+    expect(how(await card({ Media: [{ bitrate: 8200, Part: [{ decision: "transcode" }] }] }))).toBe("DirectPlay");
+  });
+
+  test("a remux, which sends the file's own streams, shows the file's bitrate", async () => {
+    const result = await card({
+      Media: [{ bitrate: 8200, Part: [{ decision: "copy" }] }],
+      TranscodeSession: { videoDecision: "copy", audioDecision: "copy" },
+    });
+    expect(how(result)).toBe("DirectPlay · 8.2 Mbps");
   });
 
   test("with no bitrate anywhere, the line shows no figure", async () => {
