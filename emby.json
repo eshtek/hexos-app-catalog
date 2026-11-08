@@ -189,7 +189,7 @@
       "rerun": "converge",
       "script": "emby/add_library.ts",
       "entrypoint": "sportarr",
-      "timeout": 180,
+      "timeout": 900,
       "retries": 0
     },
     {
@@ -217,7 +217,7 @@
       "rerun": "converge",
       "script": "emby/add_library.ts",
       "entrypoint": "chaptarr",
-      "timeout": 180,
+      "timeout": 900,
       "retries": 0
     }
   ],

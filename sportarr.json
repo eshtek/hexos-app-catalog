@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Joins the Media library with the sign-in you choose for it, and connects to your download clients and Prowlarr in one click."
+    "version": "1.1.1",
+    "changeLog": "Makes a folder in Downloads for each download client as it installs, so Sportarr sees what a client you add later downloads"
   },
   "sign_in": {
     "username": true
@@ -27,6 +27,15 @@
     },
     {
       "path": "$LOCATION(Downloads)/qbittorrent"
+    },
+    {
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
     },
     {
       "path": "$LOCATION(Media)/sports"
@@ -158,7 +167,7 @@
       "rerun": "converge",
       "script": "sportarr/connect_download_client.ts",
       "entrypoint": "sabnzbd",
-      "timeout": 120,
+      "timeout": 900,
       "retries": 0
     },
     {
@@ -186,7 +195,7 @@
       "rerun": "converge",
       "script": "sportarr/connect_download_client.ts",
       "entrypoint": "nzbget",
-      "timeout": 120,
+      "timeout": 900,
       "retries": 0
     }
   ]

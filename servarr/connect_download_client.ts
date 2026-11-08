@@ -1,5 +1,5 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
-import { chownSync, mkdirSync, readFileSync } from "node:fs";
+import { chownSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
@@ -15,6 +15,12 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * /config/Downloads, which the managers mount too). So a finished download is where the manager
  * looks, with no remote path mapping: a mapping belongs to the box's address, not to one client,
  * and would send every other client's downloads astray.
+ *
+ * A client installed after the manager started gets its folder of Downloads as a dataset of its own,
+ * which TrueNAS mounts after the manager's bind mount of Downloads was made. That mount passes no
+ * later mount on (rprivate, the apps library's default), so the manager sees an empty folder there
+ * until it restarts, and reports the client's downloads folder missing. So the link asks the manager
+ * whether it sees a folder the client has made, and restarts the manager once when it doesn't.
  *
  * The manager gets the client's sign-in HexOS has just signed in with: the one the owner chose for
  * the install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
@@ -91,6 +97,11 @@ interface ClientPlan {
    * one toward its lockout, and a sign-in every install starts with is anyone's.
    */
   proof?: "key" | "sign-in";
+  /**
+   * A folder the client has made in its own folder of Downloads, at the path the manager sees it
+   * at: the one the manager reports missing when it can't see the client's folder.
+   */
+  folder?: string;
 }
 
 interface Client {
@@ -203,6 +214,7 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
   await ctx.emitCheckpoint("locate");
 
   const plan = await prepare(client);
+  if (plan.folder) await seeClientFolder(ctx, apiKey, client, name, plan.folder);
   await ctx.emitCheckpoint("prepare");
 
   const connection: Record<string, unknown> = { host: client.host, port: client.port, useSsl: false, ...plan.connection };
@@ -340,6 +352,91 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
     ctx.fail(message, [{ label: "Reason", value: reasonOf(refused) }]);
   }
   await ctx.emitCheckpoint("configure", existing && !atThisAddress ? `${manager.name} reaches ${name} at its new address` : undefined);
+}
+
+/**
+ * Whether the manager sees a folder, by its own listing of the folder above it. A folder that isn't
+ * there lists as an empty list of directories (FileSystemLookupService and FileSystemResult, the same
+ * in Radarr, Sonarr, Lidarr and Chaptarr 0.9.965). Undefined for anything else: a refusal, or an
+ * answer without that list.
+ */
+async function managerSees(ctx: HookContext, apiKey: string, folder: string): Promise<boolean | undefined> {
+  const parent = folder.slice(0, folder.lastIndexOf("/") + 1);
+  const listing = await managerApi<{ directories?: unknown }>(ctx, apiKey, `/filesystem?${new URLSearchParams({ path: parent })}`).catch(
+    () => undefined,
+  );
+  if (!Array.isArray(listing?.directories)) return undefined;
+  return listing.directories.some((entry) => (entry as { name?: unknown } | null)?.name === folder.slice(parent.length));
+}
+
+/**
+ * A manager's restart in flight, by its TrueNAS name. A
+ * manager's links all run in this one module, and two of them may run at once (Connect to SABnzbd
+ * and Connect to NZBGet from the card), so a link that finds a folder missing while another link
+ * restarts the manager waits for that restart rather than queue a second one (app.redeploy takes a
+ * lock per app), which would stop the manager under the other link.
+ */
+const restarting = new Map<string, Promise<{ refused?: unknown; answered: boolean }>>();
+
+/** Restarts the manager once for every link that needs it now, and waits until it answers again. */
+function restartManager(ctx: HookContext) {
+  const key = ctx.resourceId;
+  const running = restarting.get(key);
+  if (running) return running;
+  const restart = (async () => {
+    const refused = await ctx.restartApp?.().then(
+      () => undefined,
+      (error: unknown) => error ?? new Error("The restart failed"),
+    );
+    if (refused !== undefined) return { refused, answered: false };
+    return { answered: await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 60) };
+  })().finally(() => {
+    restarting.delete(key);
+  });
+  restarting.set(key, restart);
+  return restart;
+}
+
+/**
+ * Makes sure the manager sees the client's folder, restarting the manager once when it doesn't: a
+ * restart mounts Downloads again, with the client's folder in it. Only the manager restarts, never
+ * the client. A manager without Downloads (Prowlarr imports nothing), a folder the box doesn't have,
+ * and a manager that can't say what it sees are left as they are.
+ */
+async function seeClientFolder(ctx: HookContext, apiKey: string, client: Client, name: string, path: string) {
+  const managerName = client.managerName;
+  const folder = path.replace(/\/+/g, "/").replace(/(.)\/$/, "$1");
+  if (!ctx.mounts.some((m) => m.containerPath === "/downloads")) return;
+  const own = client.mounts
+    .filter((m) => m.containerPath && (folder === m.containerPath || folder.startsWith(`${m.containerPath}/`)))
+    .sort((a, b) => (b.containerPath?.length ?? 0) - (a.containerPath?.length ?? 0))[0];
+  if (!own?.containerPath || !existsSync(`${own.localPath}${folder.slice(own.containerPath.length)}`)) return;
+
+  // A restart another link started may be all this one needs, so look once it's done
+  await restarting.get(ctx.resourceId);
+  const sees = await managerSees(ctx, apiKey, folder);
+  if (sees === undefined) ctx.log(`${managerName} couldn't list ${folder}, so HexOS didn't check it sees ${name}'s folder`);
+  if (sees !== false) return;
+
+  const context = [{ label: "Folder", value: folder }];
+  const stuck = `${managerName} can't see ${name}'s downloads folder yet. Stop ${managerName} and start it again, then run Connect to ${name} again.`;
+  if (typeof ctx.restartApp !== "function") ctx.fail(stuck, context);
+  await ctx.updateCheckpointMessage("prepare", `Restarting ${managerName} so it sees ${name}'s downloads folder`);
+  const { refused, answered } = await restartManager(ctx);
+  if (refused !== undefined) ctx.fail(stuck, [...context, { label: "Reason", value: refused instanceof Error ? refused.message : String(refused) }]);
+  if (!answered) ctx.fail(`${managerName} didn't answer after HexOS restarted it. Try again once it has started.`);
+  // Its API answers a little after its port does
+  let after: boolean | undefined;
+  for (let attempt = 0; attempt < 30 && after === undefined; attempt++) {
+    after = await managerSees(ctx, apiKey, folder);
+    if (after === undefined) await ctx.sleep(1_000);
+  }
+  if (!after) {
+    ctx.fail(
+      `${managerName} still can't see ${name}'s downloads folder after HexOS restarted it. Stop ${managerName} and start it again, then run Connect to ${name} again.`,
+      context,
+    );
+  }
 }
 
 /**
@@ -590,6 +687,7 @@ export const deluge = (ctx: HookContext) =>
       signIn: { known: async () => signIn, ask: async () => signIn },
       // Deluge's own folder in Downloads, which HexOS mounts in Deluge at the path the managers see it at
       preferences: DELUGE_FOLDERS,
+      folder: DELUGE_FOLDERS.completedDirectory,
     };
   });
 
@@ -623,14 +721,18 @@ export const sabnzbd = (ctx: HookContext) =>
     if (!apiKey) ctx.fail("HexOS couldn't read SABnzbd's API key yet. Try again once it has started.");
     // Listing the categories is what makes SABnzbd's own (movies, tv, audio, software) the first time
     const categories = async () => (await sabnzbdApi<{ categories: string[] }>(url, apiKey, { mode: "get_cats" })).categories;
+    // Where a category with no folder of its own finishes, which SABnzbd makes as it starts (cfg.py)
+    let completeDir: string | undefined;
     try {
       const { misc } = (await sabnzbdApi<{ config: SabnzbdConfig }>(url, apiKey, { mode: "get_config", section: "misc" })).config;
       // A SABnzbd HexOS didn't set up finishes downloads where the managers can see them
       for (const [keyword, stock] of Object.entries(SABNZBD_STOCK_FOLDERS) as Array<[keyof typeof SABNZBD_FOLDERS, string]>) {
         if (misc[keyword] === stock) {
           await sabnzbdApi(url, apiKey, { mode: "set_config", section: "misc", keyword, value: SABNZBD_FOLDERS[keyword] });
+          misc[keyword] = SABNZBD_FOLDERS[keyword];
         }
       }
+      if (typeof misc.complete_dir === "string") completeDir = misc.complete_dir.replace(/\/+$/, "");
       if (!(await categories()).includes(category)) {
         await sabnzbdApi(url, apiKey, { mode: "set_config", section: "categories", keyword: category });
       }
@@ -641,7 +743,7 @@ export const sabnzbd = (ctx: HookContext) =>
     }
     if (!(await categories()).includes(category)) ctx.fail(`SABnzbd didn't make its ${category} category`);
     // SABnzbd makes its API key at random when it first starts
-    return { name: "SABnzbd", implementation: "Sabnzbd", connection: { apiKey, urlBase: "" }, proof: "key" };
+    return { name: "SABnzbd", implementation: "Sabnzbd", connection: { apiKey, urlBase: "" }, proof: "key", folder: completeDir };
   });
 
 // --- NZBGet ------------------------------------------------------------------
@@ -679,14 +781,15 @@ async function nzbgetApi<T>(url: string, signIn: { username: string; password: s
 
 /**
  * NZBGet makes a category's folder at its first download, and until then the managers' health check
- * says the folder is missing. It's made now, worked out as the managers work it out (Nzbget.cs).
+ * says the folder is missing. It's made now, worked out as the managers work it out (Nzbget.cs), and
+ * returned when it's in NZBGet's own folder of Downloads.
  */
 async function makeCategoryFolder(
   url: string,
   signIn: { username: string; password: string },
   category: string,
   mounts: ContextMount[],
-) {
+): Promise<string | undefined> {
   const active = await nzbgetApi<NzbgetOption[]>(url, signIn, "config");
   const valueOf = (name: string) => active.find((option) => option.Name === name)?.Value ?? "";
   const index = active
@@ -698,13 +801,15 @@ async function makeCategoryFolder(
     if (valueOf("AppendCategoryDir") !== "no") folder = `${folder}/${category}`;
   }
   const downloads = mounts.find((m) => m.containerPath === NZBGET_MAIN_DIR);
-  if (!downloads || !folder.startsWith(`${NZBGET_MAIN_DIR}/`)) return;
+  if (!downloads || !folder.startsWith(`${NZBGET_MAIN_DIR}/`)) return undefined;
   const local = `${downloads.localPath}${folder.slice(NZBGET_MAIN_DIR.length)}`;
   const first = mkdirSync(local, { recursive: true });
-  if (!first) return;
-  for (let dir = local; dir.length >= first.length; dir = dir.slice(0, dir.lastIndexOf("/"))) {
-    chownSync(dir, APPS_UID, APPS_UID);
+  if (first) {
+    for (let dir = local; dir.length >= first.length; dir = dir.slice(0, dir.lastIndexOf("/"))) {
+      chownSync(dir, APPS_UID, APPS_UID);
+    }
   }
+  return folder;
 }
 
 export const nzbget = (ctx: HookContext) =>
@@ -715,6 +820,7 @@ export const nzbget = (ctx: HookContext) =>
       username: conf.match(/^ControlUsername=(.*)$/m)?.[1] ?? NZBGET_STOCK.username,
       password: conf.match(/^ControlPassword=(.*)$/m)?.[1] ?? NZBGET_STOCK.password,
     };
+    let folder: string | undefined;
     try {
       const options = await nzbgetApi<NzbgetOption[]>(url, signIn, "loadconfig");
       const changes: NzbgetOption[] = [];
@@ -747,7 +853,7 @@ export const nzbget = (ctx: HookContext) =>
         );
         if (!taken) throw new Error("NZBGet didn't take its new settings");
       }
-      await makeCategoryFolder(url, signIn, category, mounts);
+      folder = await makeCategoryFolder(url, signIn, category, mounts);
     } catch (error) {
       ctx.fail(`HexOS couldn't get NZBGet ready for ${managerName}. Try again once it's running.`, [
         { label: "Reason", value: error instanceof Error ? error.message : String(error) },
@@ -762,5 +868,6 @@ export const nzbget = (ctx: HookContext) =>
       connection: { urlBase: "" },
       signIn: { known: async () => current, ask: async () => current },
       proof: shared ? undefined : "sign-in",
+      folder,
     };
   });
