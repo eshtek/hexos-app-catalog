@@ -11,6 +11,7 @@
   },
   "localAi": {
     "minVramGB": 4,
+    "sharedMemory": true,
     "uses": [
       {
         "id": "everyday",
@@ -183,7 +184,8 @@
           "answers": {
             "image": "image",
             "context_length": "8192",
-            "model": ""
+            "model": "",
+            "integrated_gpu": ""
           }
         }
       ]
