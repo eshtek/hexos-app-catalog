@@ -67,15 +67,19 @@ interface Options {
   /** The name the app runs under: `radarr-2` for a later copy. */
   runsAs?: string;
   naming?: Record<string, unknown>;
-  /** What the app's library holds. */
-  library?: unknown[];
+  /** What the app answers for its library: a list of what it holds, unless it answers something else. */
+  library?: unknown;
   libraryDown?: boolean;
+  /** How many times the app fails to give its naming once it has taken a change. */
+  readBackFails?: number;
   /** The app refuses the change, with this reason. */
   refuses?: string;
   /** The app answers the change, and keeps what it had. */
   drops?: boolean;
   keptApps?: string[];
   note?: boolean;
+  /** The app answers nothing. */
+  down?: boolean;
 }
 
 let root: string;
@@ -93,11 +97,13 @@ function fakes(appId: AppId, options: Options = {}) {
   const puts: Array<Record<string, unknown>> = [];
   const checkpoints: Array<{ id: string; message?: string; skipped?: boolean }> = [];
   let registered: string[] = [];
+  let readBackFails = options.readBackFails ?? 0;
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
     if (url.origin !== base) throw new Error(`Unexpected request: ${method} ${url}`);
+    if (options.down) throw new TypeError("fetch failed");
     const path = url.pathname.startsWith(`/api/${api}`) ? url.pathname.slice(`/api/${api}`.length) : url.pathname;
     requests.push(`${method} ${path}`);
     if (path === "/system/status") return Response.json({ startTime: "2026-11-11T00:00:00Z" });
@@ -109,7 +115,10 @@ function fakes(appId: AppId, options: Options = {}) {
       if (options.libraryDown) return Response.json({ message: "Database is locked" }, { status: 500 });
       return Response.json(options.library ?? []);
     }
-    if (path === "/config/naming" && method === "GET") return Response.json(naming);
+    if (path === "/config/naming" && method === "GET") {
+      if (puts.length > 0 && readBackFails-- > 0) return Response.json({ message: "Database is locked" }, { status: 500 });
+      return Response.json(naming);
+    }
     if (path === `/config/naming/${naming.id}` && method === "PUT") {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       puts.push(body);
@@ -155,6 +164,8 @@ function fakes(appId: AppId, options: Options = {}) {
     puts,
     requests,
     note: () => (existsSync(note) ? (JSON.parse(readFileSync(note, "utf-8")) as unknown) : undefined),
+    /** Whether HexOS noted the app as one the owner already had. */
+    notedKept: () => existsSync(join(config, "hexos", "kept.json")),
     step: () => checkpoints.find((each) => each.id === "naming"),
     registered: () => registered,
   };
@@ -228,6 +239,13 @@ for (const appId of ["radarr", "sonarr"] as const) {
     expect(run.note()).toBeUndefined();
   });
 
+  test(`a ${name} whose library read answers something other than a list is never taken for an empty one`, async () => {
+    const run = fakes(appId, { library: { message: "Not a list" } });
+    await configure(run.ctx);
+    leftAlone(run, STOCK[appId], `${name} already has ${appId === "radarr" ? "movies" : "shows"}, so it keeps the naming they have`);
+    expect(run.note()).toBeUndefined();
+  });
+
   test(`a ${name} that can't list its library is never taken for an empty one`, async () => {
     const run = fakes(appId, { libraryDown: true });
     await expect(configure(run.ctx)).rejects.toThrow(`HexOS couldn't read ${name}'s naming | Reason: Database is locked`);
@@ -246,16 +264,53 @@ for (const appId of ["radarr", "sonarr"] as const) {
     await expect(configure(run.ctx)).rejects.toThrow(`${name} saved its naming, but HexOS couldn't find it there. Run this again.`);
     expect(run.note()).toBeUndefined();
   });
+
+  test(`a ${name} that takes the naming and then can't be read fails plainly, and the next run leaves the note`, async () => {
+    const first = fakes(appId, { readBackFails: 1 });
+    await expect(configure(first.ctx)).rejects.toThrow(`HexOS couldn't check the naming it gave ${name}. Run this again. | Reason: Database is locked`);
+    expect(first.naming()).toEqual({ ...STOCK[appId], ...HEXOS[appId] });
+    expect(first.note()).toBeUndefined();
+
+    const second = fakes(appId, { naming: first.naming() });
+    await configure(second.ctx);
+    leftAlone(second, first.naming(), `${name}'s naming was set up before`);
+    expect(second.note()).toEqual(HEXOS[appId]);
+
+    // So naming the owner later puts back to how the app started stays theirs
+    const third = fakes(appId);
+    await configure(third.ctx);
+    leftAlone(third, STOCK[appId], `${name}'s naming was set up before`);
+  });
+
+  test(`a ${name} a collection brought in as the owner's own is noted as kept, before anything is asked of it`, async () => {
+    const kept = fakes(appId, { keptApps: [appId] });
+    await configure(kept.ctx);
+    expect(kept.notedKept()).toBe(true);
+  });
+
+  test(`a ${name} HexOS installed is not noted as kept`, async () => {
+    const run = fakes(appId, { keptApps: ["seerr"] });
+    await configure(run.ctx);
+    expect(run.notedKept()).toBe(false);
+  });
 }
 
-test("a later copy is judged by the name it runs under, not by the first copy's", async () => {
-  const kept = fakes("radarr", { runsAs: "radarr-2", keptApps: ["radarr-2"] });
-  await configure(kept.ctx);
-  leftAlone(kept, STOCK.radarr, "Radarr keeps the naming it has");
+test("the kept note is left even when the app never answers", async () => {
+  const run = fakes("radarr", { keptApps: ["radarr"], down: true });
+  await expect(configure(run.ctx)).rejects.toThrow("Radarr didn't start. Try again once it's running.");
+  expect(run.notedKept()).toBe(true);
+});
 
+test("a later copy is judged by the name it runs under, not by the first copy's", async () => {
   const fresh = fakes("radarr", { runsAs: "radarr-2", keptApps: ["radarr"] });
   await configure(fresh.ctx);
   expect(fresh.naming()).toEqual({ ...STOCK.radarr, ...HEXOS.radarr });
+  expect(fresh.notedKept()).toBe(false);
+
+  const kept = fakes("radarr", { runsAs: "radarr-2", keptApps: ["radarr-2"] });
+  await configure(kept.ctx);
+  leftAlone(kept, STOCK.radarr, "Radarr keeps the naming it has");
+  expect(kept.notedKept()).toBe(true);
 });
 
 for (const appId of ["lidarr", "prowlarr"] as const) {

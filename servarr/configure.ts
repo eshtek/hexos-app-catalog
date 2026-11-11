@@ -20,6 +20,13 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * movie's or show's id, on an app that is still as it started: renaming off, its own name formats,
  * nothing in its library, and not one the owner already had. What the owner sets is theirs, and so
  * is what they change afterwards, which a note in hexos/naming.json keeps true.
+ *
+ * Two more notes in hexos/ say where the app came from, for the links that take out the profiles a
+ * manager starts with (profilarr/profilarr_hook.ts, seerr/connect_arr.ts). A run only knows which
+ * apps the owner already had while a collection installs (`ctx.keptApps`), and a link run from a
+ * card later doesn't. So seed-sign-in leaves fresh.json when it finds no settings and the app is
+ * new, and configure-<app> leaves kept.json on an app a collection brought in as the owner's own.
+ * Those links remove nothing from a manager without the first, or with the second.
  */
 
 interface Library {
@@ -164,6 +171,12 @@ function keepDefault(config: ContextMount): SignIn {
 /** Once the app has the owner's sign-in, the default kept beside it no longer says anything true. */
 const forgetDefault = (config: ContextMount) => rmSync(signInPath(config), { force: true });
 
+/** A note of HexOS's own beside the app's settings, with when it was left. */
+function leaveNote(config: ContextMount, name: "fresh" | "kept") {
+  mkdirSync(`${config.localPath}/hexos`, { recursive: true, mode: 0o700 });
+  writeFileSync(`${config.localPath}/hexos/${name}.json`, JSON.stringify({ at: new Date().toISOString() }), { mode: 0o600 });
+}
+
 function appOf(ctx: HookContext) {
   const catalogId = ctx.catalogAppId ?? ctx.resourceId;
   const app = APPS[catalogId];
@@ -208,6 +221,8 @@ export async function seed(ctx: HookContext) {
     await ctx.skipCheckpoint("signIn", `${app.name} keeps its settings from before`);
     return;
   }
+  // No settings yet, so the app is new: the only proof a later run has that nothing in it is the owner's
+  leaveNote(config, "fresh");
 
   let signIn: SignIn;
   if (ctx.signIn) {
@@ -553,10 +568,24 @@ async function ensureNaming(ctx: HookContext, app: (typeof APPS)[string], config
   const read = () => call<Record<string, unknown> & { id: number }>(api, "/config/naming");
   const matches = (settings: Record<string, unknown>, rename: boolean, which: "stock" | "hexos") =>
     settings[naming.rename] === rename && Object.entries(naming.formats).every(([field, format]) => settings[field] === format[which]);
+  const wanted = {
+    [naming.rename]: true,
+    ...Object.fromEntries(Object.entries(naming.formats).map(([field, format]) => [field, format.hexos])),
+  };
+  const note = () => {
+    mkdirSync(`${config.localPath}/hexos`, { recursive: true, mode: 0o700 });
+    writeFileSync(namingPath(config), JSON.stringify(wanted));
+  };
   let current: Awaited<ReturnType<typeof read>>;
   let held: unknown;
   try {
     current = await read();
+    // A run that set the naming and stopped before its note: without one, naming the owner later
+    // puts back to how the app started would be changed again
+    if (matches(current, true, "hexos")) {
+      note();
+      return keeps(`${app.name}'s naming was set up before`);
+    }
     if (!matches(current, false, "stock")) return keeps();
     held = await call<unknown>(api, naming.holds.path);
   } catch (error) {
@@ -567,18 +596,19 @@ async function ensureNaming(ctx: HookContext, app: (typeof APPS)[string], config
     return keeps(`${app.name} already has ${naming.holds.name}, so it keeps the naming they have`);
   }
 
-  const wanted = {
-    [naming.rename]: true,
-    ...Object.fromEntries(Object.entries(naming.formats).map(([field, format]) => [field, format.hexos])),
-  };
+  let sent = false;
+  let after: Awaited<ReturnType<typeof read>>;
   try {
     await call(api, `/config/naming/${current.id}`, { method: "PUT", body: JSON.stringify({ ...current, ...wanted }) });
+    sent = true;
+    after = await read();
   } catch (error) {
-    ctx.fail(`${app.name} didn't take its naming`, [{ label: "Reason", value: reason(error) }]);
+    ctx.fail(sent ? `HexOS couldn't check the naming it gave ${app.name}. Run this again.` : `${app.name} didn't take its naming`, [
+      { label: "Reason", value: reason(error) },
+    ]);
   }
-  if (!matches(await read(), true, "hexos")) ctx.fail(`${app.name} saved its naming, but HexOS couldn't find it there. Run this again.`);
-  mkdirSync(`${config.localPath}/hexos`, { recursive: true, mode: 0o700 });
-  writeFileSync(namingPath(config), JSON.stringify(wanted));
+  if (!matches(after, true, "hexos")) ctx.fail(`${app.name} saved its naming, but HexOS couldn't find it there. Run this again.`);
+  note();
   await ctx.emitCheckpoint("naming");
 }
 
@@ -593,6 +623,8 @@ export async function configure(ctx: HookContext) {
     })),
     ...(app.naming ? [{ id: "naming", message: `Turning on renaming in ${app.name}` }] : []),
   ]);
+  // Noted before anything else, so a run that stops early still leaves it
+  if (ctx.keptApps?.includes(ctx.resourceId)) leaveNote(config, "kept");
   const api = await reach(ctx, app, config);
   await ctx.emitCheckpoint("start");
   await ensureSignIn(ctx, app, config, api);
