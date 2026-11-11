@@ -99,6 +99,8 @@ interface Options {
   testSays?: (connection: Connection) => string;
   /** The manager answers a save and keeps nothing of it. */
   forgets?: boolean;
+  /** This server answers, but not with its public id. */
+  noIdentity?: boolean;
 }
 
 let root: string;
@@ -269,8 +271,9 @@ function fakes(serverId: ServerId, options: Options = {}) {
     if (!reached) throw new TypeError("fetch failed");
     const path = url.pathname;
     if (url.origin === serverUrl) serverRequests.push({ method, path: path + url.search, headers });
-    if (reached.kind === "PlexServer" && path === "/identity") return Response.json({ MediaContainer: { machineIdentifier: reached.id } });
-    if (reached.kind === "MediaBrowser" && path === "/System/Info/Public") return Response.json({ Id: reached.id });
+    const hidesId = options.noIdentity && reached === self;
+    if (reached.kind === "PlexServer" && path === "/identity" && !hidesId) return Response.json({ MediaContainer: { machineIdentifier: reached.id } });
+    if (reached.kind === "MediaBrowser" && path === "/System/Info/Public" && !hidesId) return Response.json({ Id: reached.id });
     // Anything else asked of a server that is up gets an answer, which is all "is anything there" needs
     if (url.origin !== serverUrl || reached.kind === "PlexServer") return new Response(null, { status: 404 });
     // Jellyfin 12 takes a token in Authorization alone; Emby takes X-Emby-Token
@@ -555,11 +558,26 @@ describe.each(["jellyfin", "emby", "plex"] as const)("%s", (serverId) => {
     expect(world.connections()).toEqual([]);
   });
 
-  test("a later copy's connection maps its library to the folder the server sees it in, and its key is named for the copy", async () => {
-    const world = fakes(serverId, { copy: "radarr-2" });
+  test("a connection of another kind at this server's address is not this server's, and this server's is added beside it", async () => {
+    // A connection the owner pointed at the wrong port, say: the manager's own test would refuse it
+    const otherKind = server.kind === "PlexServer" ? "MediaBrowser" : "PlexServer";
+    const wrong = connection("radarr", otherKind, "Wrong port", { ...here, [otherKind === "PlexServer" ? "authToken" : "apiKey"]: "theirs" });
+    const world = fakes(serverId, { connections: [wrong] });
     await world.run();
-    expect(values(world.connections()[0])).toMatchObject({ ...here, mapFrom: "/movies", mapTo: "/movies/radarr-2" });
-    if (serverId !== "plex") expect(world.keys.map((key) => key.AppName)).toEqual(["Radarr 2"]);
+    expect(world.connections()).toHaveLength(2);
+    expect(world.connections()[0]).toEqual(world.start[0]);
+    expect(world.connections()[1]).toMatchObject({ name: server.name, implementation: server.kind });
+    expect(world.tests.filter((sent) => sent.name === "Wrong port")).toEqual([]);
+  });
+
+  test("a server that can't give its own id never takes a connection nothing answers at for its own", async () => {
+    // With no id on either side there is nothing to compare, which is not a match
+    const elsewhere = connection("radarr", server.kind, "Basement", { host: OLD_BOX, port: server.port, [server.secret]: "another-servers-key" });
+    const world = fakes(serverId, { connections: [elsewhere], noIdentity: true });
+    await world.run();
+    expect(world.connections()).toHaveLength(2);
+    expect(world.connections()[0]).toEqual(world.start[0]);
+    expect(values(world.connections()[1])).toMatchObject(here);
   });
 
   test("a server that doesn't mount the manager's library has nothing to be told, and gets no connection or key", async () => {
@@ -610,6 +628,27 @@ describe.each(["jellyfin", "emby", "plex"] as const)("%s", (serverId) => {
 describe.each(["jellyfin", "emby"] as const)("%s keys", (serverId) => {
   const server = SERVERS[serverId];
   const here = { host: BOX, port: server.port };
+
+  test("a later copy's connection maps its library to the folder the server sees it in, and its key is named for the copy", async () => {
+    const world = fakes(serverId, { copy: "radarr-2" });
+    await world.run();
+    expect(values(world.connections()[0])).toMatchObject({ ...here, mapFrom: "/movies", mapTo: "/movies/radarr-2" });
+    expect(world.keys.map((key) => key.AppName)).toEqual(["Radarr 2"]);
+  });
+
+  test("a connection to the other server of this kind on the same box, at its own port, is left alone, and this server's is added beside it", async () => {
+    // Emby beside Jellyfin: the same kind of connection at the box's address, and a key this server never made
+    const other = serverId === "jellyfin" ? SERVERS.emby : SERVERS.jellyfin;
+    const theirs = connection("radarr", "MediaBrowser", other.name, { host: BOX, port: other.port, apiKey: "the-other-servers-key" });
+    const another = { kind: "MediaBrowser" as const, id: "the-other-server", takes: ["the-other-servers-key"] };
+    const world = fakes(serverId, { connections: [theirs], others: { [`${BOX}:${other.port}`]: another } });
+    await world.run();
+    expect(world.connections()).toHaveLength(2);
+    expect(world.connections()[0]).toEqual(world.start[0]);
+    expect(values(world.connections()[1])).toMatchObject({ ...here, apiKey: `${serverId}-key-for-Radarr-1` });
+    // Its key is never tried against this server, and never replaced
+    expect(world.tests.filter((sent) => field(sent, "apiKey") === "the-other-servers-key")).toEqual([]);
+  });
 
   test("a key already named for the manager is used, and none is made", async () => {
     const keys = [
@@ -688,6 +727,19 @@ test("Plex's connection from the box's old address is never moved on a passing t
   await world.run();
   expect(world.connections()).toHaveLength(2);
   expect(world.connections()[0]).toEqual(world.start[0]);
+});
+
+test("a later copy gets no connection to Plex, which would be told of folders it doesn't have, and the step says Plex finds them itself", async () => {
+  // Plex's connection names a title's folder under Plex's own library folder, never under the mapped one
+  const world = fakes("plex", { copy: "radarr-2" });
+  const error = await world.run().catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(Skipped);
+  expect((error as Error).message).toBe(
+    "Plex finds what Radarr 2 adds when it next scans its library. Radarr 2 can't tell Plex sooner, because the two see Radarr 2's Movies folder at different paths.",
+  );
+  expect(world.connections()).toEqual([]);
+  expect(world.writes).toEqual([]);
+  expect(world.tests).toEqual([]);
 });
 
 test("a Plex with no library of the manager's kind fails the step with the manager's reason", async () => {

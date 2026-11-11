@@ -20,7 +20,12 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  *
  * Both apps mount a library at the same path (/movies, /shows), so the server finds what the
  * manager names. A later copy keeps its library in a folder of the location, which the server sees
- * one folder down, so its connection maps the path.
+ * one folder down. Jellyfin's and Emby's connection maps the path, and is sent the mapped folder of
+ * each title (MediaBrowserService.Update). Plex's can't: it uses the mapping only to pick which of
+ * Plex's library folders is the manager's, then names the title's folder under that one
+ * (PlexServerService.UpdateSections). Plex's library is the whole location, so the mapped folder
+ * matches none, and the manager would name a folder Plex doesn't have. So a manager whose library
+ * Plex sees at another path gets no connection, and Plex finds what it adds on Plex's own scan.
  *
  * Run again, the link changes nothing in a connection that works: its events, its name and its
  * other choices are the owner's, and so is one that reaches this server by another name or
@@ -73,6 +78,8 @@ interface Server {
    * takes it. Plex's is its owner's account token, which every Plex server of theirs takes.
    */
   provesItself: boolean;
+  /** Whether the connection reaches a library the server sees at another path than the manager does. */
+  mapsPaths: boolean;
   /** Where the server answers its public id without a sign-in, and where the id is in the answer. */
   identity: { path: string; read: (body: unknown) => unknown };
 }
@@ -255,6 +262,7 @@ const SERVERS: Record<string, Server> = {
     implementation: "MediaBrowser",
     secret: "apiKey",
     provesItself: true,
+    mapsPaths: true,
     identity: MEDIA_BROWSER_ID,
     step: (managerName) => `Making ${managerName} a key in Jellyfin`,
     credential: async (ctx: HookContext, keyName: string) => {
@@ -269,6 +277,7 @@ const SERVERS: Record<string, Server> = {
     implementation: "MediaBrowser",
     secret: "apiKey",
     provesItself: true,
+    mapsPaths: true,
     identity: MEDIA_BROWSER_ID,
     step: (managerName) => `Making ${managerName} a key in Emby`,
     credential: async (ctx: HookContext, keyName: string) => {
@@ -282,6 +291,7 @@ const SERVERS: Record<string, Server> = {
     implementation: "PlexServer",
     secret: "authToken",
     provesItself: false,
+    mapsPaths: false,
     identity: {
       path: "/identity",
       read: (body) => (body as { MediaContainer?: { machineIdentifier?: unknown } } | undefined)?.MediaContainer?.machineIdentifier,
@@ -392,6 +402,13 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
   const mapping = pathMapping(managerMounts, ctx.mounts, manager.library.path);
   // The server has to hold the folder the manager fills, or there is nothing to tell it about
   if (!mapping) stop(ctx, `${server.name} can't see ${manager.name}'s ${manager.library.name} folder, so ${manager.name} has nothing to tell it about.`);
+  // A connection that would name folders the server doesn't have is worse than none
+  if (mapping.mapTo && !server.mapsPaths) {
+    stop(
+      ctx,
+      `${server.name} finds what ${manager.name} adds when it next scans its library. ${manager.name} can't tell ${server.name} sooner, because the two see ${manager.name}'s ${manager.library.name} folder at different paths.`,
+    );
+  }
   await ctx.emitCheckpoint("locate");
 
   const api = <T>(path: string, init?: RequestInit) => managerApi<T>(managerUrl, managerKey, path, init);
