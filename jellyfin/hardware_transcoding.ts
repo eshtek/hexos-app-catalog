@@ -6,7 +6,8 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
 // until a short test encode passes, and an owner's own choice is left alone. The platform runs this
 // again after a restart that changes what the GPU can do, and after the owner picks another card
 // for Jellyfin in HexOS: its settings then follow that card. They also follow the card on a
-// reinstall that finds settings for a kind of card it wasn't given. This also limits remote streams.
+// reinstall that finds settings for a kind of card it wasn't given. In both cases a card of another
+// kind that can't be set up puts Jellyfin on software. This also limits remote streams.
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
 const FFMPEG = "/usr/lib/jellyfin-ffmpeg/ffmpeg";
@@ -315,19 +316,30 @@ async function enableHardware(ctx: HookContext, headers: Record<string, string>)
     }
     return;
   }
-  // A reinstall can find settings from before it, set for a card the new install wasn't given.
-  const cannotRun = ctx.event === "onAfterInstall" && cannotRunOn(current.HardwareAccelerationType, card?.vendor);
-  // Only that, or a card the owner picked in HexOS, moves an acceleration that is already set.
-  if (isSet && !pickedByOwner && !cannotRun) {
+  // The acceleration is for a kind of card HexOS didn't give Jellyfin, so its container has no card it can run on.
+  const otherKind = cannotRunOn(current.HardwareAccelerationType, card?.vendor);
+  // A reinstall can find such settings from before it. Only that, or a card the owner picked in
+  // HexOS, moves an acceleration that is already set.
+  if (isSet && !pickedByOwner && !(ctx.event === "onAfterInstall" && otherKind)) {
     ctx.log(`Jellyfin already uses ${current.HardwareAccelerationType}, so it is left as it is.`);
     return;
   }
 
-  // What Jellyfin is left on when the card can't be set up: an acceleration it already had stays.
-  const leftOn = isSet ? "its settings are left as they were" : "it stays on software transcoding";
+  // What Jellyfin is left on when the card can't be set up. An acceleration for the same kind of
+  // card stays, since its card is still in the container. One for another kind would fail every transcode.
+  const backToSoftware = isSet && otherKind;
+  const leftOn = backToSoftware
+    ? "it is on software transcoding"
+    : isSet
+      ? "its settings are left as they were"
+      : "it stays on software transcoding";
+  const giveUp = async (message: string): Promise<void> => {
+    if (backToSoftware) await save({ HardwareAccelerationType: "none" });
+    ctx.log(message);
+  };
   const gpu = await detectGpu(ctx, card);
   if (!gpu) {
-    ctx.log(`No GPU Jellyfin can use, so ${leftOn}.`);
+    await giveUp(`No GPU Jellyfin can use, so ${leftOn}${backToSoftware ? " until the card works" : ""}.`);
     return;
   }
   if (isSet && alreadyUses(current, gpu)) {
@@ -338,10 +350,10 @@ async function enableHardware(ctx: HookContext, headers: Record<string, string>)
     // A low-power Intel chip can need firmware that only loads at boot. The platform sets that up
     // and runs this hook again after the restart.
     const restart = await ctx.prepareHardwareVideo?.({ rerunHook: HOOK_ID });
-    ctx.log(
+    await giveUp(
       restart?.restartNeeded
         ? `This GPU needs a server restart first. Until then ${leftOn}.`
-        : `The ${gpu.kind} GPU failed a test encode, so ${leftOn}.`,
+        : `The ${gpu.kind} GPU failed a test encode, so ${leftOn}${backToSoftware ? " until the card works" : ""}.`,
     );
     return;
   }

@@ -379,6 +379,17 @@ describe("the hook", () => {
         expect(saved[0]).toMatchObject({ HardwareAccelerationType: "nvenc" });
       });
 
+      test("NVENC goes back to software when the Intel card the new install was given fails its test encode", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          ...install,
+          encodes: false,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none" }]);
+      });
+
       test("an acceleration the card can run is left alone, device and all", async () => {
         const { saved, commands } = await hook({
           ...TWO_CARDS,
@@ -451,12 +462,67 @@ describe("the hook", () => {
         expect(commands.some((cmd) => cmd[0]?.endsWith("ffmpeg"))).toBe(false);
       });
 
-      test("a card that fails its test encode leaves Jellyfin's settings as they were", async () => {
-        const { saved } = await hook({
+      test("a card of another kind that fails its test encode puts Jellyfin on software, since its old card is gone from it", async () => {
+        const { saved, logs } = await hook({
           ...TWO_CARDS,
           encodes: false,
+          current: { HardwareAccelerationType: "nvenc", TonemappingPeak: 100 },
+          card: picked(ARC, "INTEL"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none", TonemappingPeak: 100 }]);
+        expect(logs.join(" ")).toContain("on software transcoding until");
+      });
+
+      test("an Intel card vainfo can't read puts a Jellyfin on NVENC on software", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          vainfoByNode: {},
           current: { HardwareAccelerationType: "nvenc" },
           card: picked(ARC, "INTEL"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none" }]);
+      });
+
+      test("an NVIDIA card whose driver doesn't answer puts a Jellyfin on Quick Sync on software", async () => {
+        const { saved, commands } = await hook({
+          nvidia: false,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: NODE },
+          card: picked("0000:01:00.0", "NVIDIA"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none", QsvDevice: NODE }]);
+        expect(commands.some((cmd) => cmd[0]?.endsWith("ffmpeg"))).toBe(false);
+      });
+
+      test("a chip that needs a restart for its firmware leaves Jellyfin on software until then, and runs again after", async () => {
+        const { saved, prepared, logs } = await hook({
+          vainfo: JASPER_LAKE,
+          encodes: false,
+          restartNeeded: true,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: picked(IGPU, "INTEL"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none" }]);
+        expect(prepared).toEqual([{ rerunHook: "hardware-transcoding" }]);
+        expect(logs.join(" ")).toContain("needs a server restart");
+      });
+
+      test("another card of the same kind that fails its test encode leaves Jellyfin's settings as they were, since it still has its old card", async () => {
+        const { saved, logs } = await hook({
+          ...TWO_CARDS,
+          encodes: false,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: ARC_NODE, VaapiDevice: ARC_NODE },
+          card: picked(IGPU, "INTEL"),
+        });
+        expect(saved).toEqual([]);
+        expect(logs.join(" ")).toContain("left as they were");
+      });
+
+      test("another card of the same kind that can't be read leaves Jellyfin's settings as they were", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          vainfoByNode: {},
+          current: { HardwareAccelerationType: "vaapi", VaapiDevice: ARC_NODE },
+          card: picked(IGPU, "INTEL"),
         });
         expect(saved).toEqual([]);
       });
