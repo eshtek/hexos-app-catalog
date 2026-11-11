@@ -300,6 +300,70 @@
       "entrypoint": "chaptarr",
       "timeout": 900,
       "retries": 0
+    },
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Shows what Radarr adds, renames or removes in Jellyfin right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "radarr",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Shows what Sonarr adds, renames or removes in Jellyfin right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "sonarr",
+      "timeout": 300,
+      "retries": 0
     }
   ],
   "widgetsSchema": 3,
