@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookContext } from "./hook_context";
 import { radarr, sonarr } from "../seerr/connect_arr";
+import { type StarterProfile, starterProfile, withCutoff, withQuality } from "./starter_profiles.fixture";
 
 // Seerr's link to Radarr, against fakes of Seerr's Radarr settings (read at Seerr 3.5.1) and two
 // copies of Radarr on the box. Seerr's list gives each server's API key as it is, and saving a default
@@ -15,6 +16,12 @@ import { radarr, sonarr } from "../seerr/connect_arr";
 // its first start, as Profilarr's link does (profilarr_links.test.ts has the rules), after moving a
 // default that only Seerr keeps on one of them to Profilarr's everyday profile. The fake manager
 // refuses a delete as the real one does, and knows nothing of Seerr.
+//
+// The fake manager carries the note HexOS leaves beside a new app's settings (hexos/fresh.json),
+// unless a test takes it away: without it, or with the note of an app the owner already had
+// (hexos/kept.json), no default moves and nothing is removed, whoever runs the link. The fake Seerr
+// lists its requests as the real one does (routes/request.ts, read at 3.5.1): by status and by
+// kind, a page at a time.
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -33,19 +40,19 @@ const COPIES: Record<string, { port: number; key: string; displayName: string }>
 const STARTERS = ["Any", "SD", "HD-720p", "HD-1080p", "Ultra-HD", "HD - 720p/1080p"];
 const HEXOS = ["1080p Balanced", "1080p Quality", "1080p Quality HDR", "2160p Balanced", "2160p Quality", "2160p Remux"];
 
-interface Profile {
-  id: number;
-  name: string;
-  upgradeAllowed?: boolean;
-  minFormatScore?: number;
-  cutoffFormatScore?: number;
-  formatItems?: Array<{ score: number }>;
-}
+type Profile = Partial<StarterProfile> & { id: number; name: string };
 
 /** A manager's profiles after Profilarr's sync: its own six, untouched (ids 1 to 6), then Profilarr's (7 to 12). */
-const synced = (): Profile[] => [
-  ...STARTERS.map((name, at) => ({ id: at + 1, name, upgradeAllowed: false, minFormatScore: 0, cutoffFormatScore: 0, formatItems: [{ score: 0 }] })),
-  ...HEXOS.map((name, at) => ({ id: at + 7, name, upgradeAllowed: true, minFormatScore: 20000, cutoffFormatScore: 400000, formatItems: [{ score: -999999 }] })),
+const synced = (managerId: "radarr" | "sonarr" = "radarr"): Profile[] => [
+  ...STARTERS.map((name, at) => starterProfile(managerId, name, at + 1)),
+  ...HEXOS.map((name, at) => ({
+    ...starterProfile(managerId, "HD-1080p", at + 7),
+    name,
+    upgradeAllowed: true,
+    minFormatScore: 20000,
+    cutoffFormatScore: 400000,
+    formatItems: [{ format: 1, name: "Not English", score: -999999 }],
+  })),
 ];
 const ID = Object.fromEntries([...STARTERS, ...HEXOS].map((name, at) => [name, at + 1])) as Record<string, number>;
 
@@ -77,7 +84,25 @@ interface Options {
   ignoresRemoval?: boolean;
   /** Seerr's override rules, or "down" for a Seerr that won't list them. */
   rules?: unknown[] | "down";
+  /** Seerr's requests, "down" for a Seerr that won't list them, or "short" for one that says there are more than it gives. */
+  requests?: SeerrRequest[] | "down" | "short";
   keptApps?: string[];
+  /** The notes HexOS left beside the manager's settings: one of a new app, unless given. */
+  notes?: Array<"fresh" | "kept">;
+  /** Seerr carries the note of an app the owner already had, from a collection run before this one. */
+  seerrKept?: boolean;
+  /** Seerr answers a save and keeps this profile id as the entry's default instead. */
+  savesProfile?: number;
+  /** Removing a profile also costs the manager this one of Profilarr's. */
+  losesOnRemoval?: string;
+}
+
+/** A request in Seerr: its kind, its status (1 waiting, 2 approved, 3 declined, 4 failed, 5 completed), and what it names. */
+interface SeerrRequest {
+  type: "movie" | "tv";
+  status: number;
+  serverId?: number | null;
+  profileId?: number | null;
 }
 
 let root: string;
@@ -121,7 +146,21 @@ function fakes(options: Options = {}) {
       if (url.pathname === "/api/v1/overrideRule") {
         return options.rules === "down" ? Response.json({ message: "no" }, { status: 500 }) : Response.json(options.rules ?? []);
       }
+      if (url.pathname === "/api/v1/request") {
+        const all = options.requests ?? [];
+        if (all === "down") return Response.json({ message: "no" }, { status: 500 });
+        const statuses = { pending: [1], failed: [4] }[url.searchParams.get("filter") ?? ""] ?? [1, 2, 3, 4, 5];
+        const kind = url.searchParams.get("mediaType") ?? "all";
+        const matching = all === "short" ? [] : all.filter((each) => statuses.includes(each.status) && (kind === "all" || each.type === kind));
+        const take = Number(url.searchParams.get("take") ?? 10);
+        const skip = Number(url.searchParams.get("skip") ?? 0);
+        return Response.json({
+          pageInfo: { pages: Math.ceil(matching.length / take), pageSize: take, results: all === "short" ? 3 : matching.length, page: Math.ceil(skip / take) + 1 },
+          results: matching.slice(skip, skip + take),
+        });
+      }
       if (url.pathname === `/api/v1/settings/${managerId}` && method === "GET") return Response.json(servers);
+      if (body && options.savesProfile !== undefined) body.activeProfileId = options.savesProfile;
       if (url.pathname === `/api/v1/settings/${managerId}` && method === "POST") {
         clearDefaults(body);
         const created = { ...body, id: (servers.at(-1)?.id ?? -1) + 1 };
@@ -154,7 +193,7 @@ function fakes(options: Options = {}) {
         const name = profiles.find((each) => each.id === id)?.name ?? String(id);
         removals.push(name);
         if (inUse(id) || options.wontRemove?.includes(name)) return Response.json({ message: `QualityProfile [${id}] is in use.` }, { status: 500 });
-        if (!options.ignoresRemoval) profiles = profiles.filter((each) => each.id !== id);
+        if (!options.ignoresRemoval) profiles = profiles.filter((each) => each.id !== id && each.name !== options.losesOnRemoval);
         return Response.json({});
       }
     }
@@ -164,8 +203,15 @@ function fakes(options: Options = {}) {
 
   const seerrConfig = dir("seerr");
   writeFileSync(join(seerrConfig, "settings.json"), JSON.stringify({ main: { apiKey: SEERR.key } }));
+  if (options.seerrKept) {
+    mkdirSync(join(seerrConfig, "hexos"), { recursive: true });
+    writeFileSync(join(seerrConfig, "hexos", "kept.json"), "{}");
+  }
   const radarrConfig = dir(copy);
   writeFileSync(join(radarrConfig, "config.xml"), `<Config><ApiKey>${COPIES[copy].key}</ApiKey></Config>`);
+  rmSync(join(radarrConfig, "hexos"), { recursive: true, force: true });
+  mkdirSync(join(radarrConfig, "hexos"));
+  for (const note of options.notes ?? ["fresh"]) writeFileSync(join(radarrConfig, "hexos", `${note}.json`), "{}");
   const ctx = {
     resourceId: "seerr",
     baseUrl: SEERR.url,
@@ -194,6 +240,8 @@ function fakes(options: Options = {}) {
     names: () => profiles.map((each) => each.name),
     removals,
     step: (id: string) => checkpoints.find((each) => each.id === id),
+    /** Whether Seerr carries HexOS's note of an app the owner already had. */
+    seerrNotedKept: () => existsSync(join(seerrConfig, "hexos", "kept.json")),
   };
 }
 
@@ -309,7 +357,7 @@ test("a default on a starter profile only Seerr was holding moves to Profilarr's
 
 test("Sonarr's anime default moves with its everyday one, each off the starter it was on", async () => {
   const start = entry("sonarr", { activeAnimeProfileId: ID.SD, activeAnimeProfileName: "SD", activeAnimeDirectory: "/movies" });
-  const { ctx, servers, names, step } = fakes({ manager: "sonarr", profiles: synced(), servers: [start] });
+  const { ctx, servers, names, step } = fakes({ manager: "sonarr", profiles: synced("sonarr"), servers: [start] });
   await sonarr(ctx);
   expect(servers()[0]).toMatchObject({
     activeProfileId: ID["1080p Balanced"],
@@ -437,7 +485,7 @@ for (const { label, lists, words } of [
 }
 
 test("a show on a starter profile keeps it in Sonarr", async () => {
-  const { ctx, names, removals } = fakes({ manager: "sonarr", profiles: synced(), lists: { "/series": [{ qualityProfileId: ID.SD }] } });
+  const { ctx, names, removals } = fakes({ manager: "sonarr", profiles: synced("sonarr"), lists: { "/series": [{ qualityProfileId: ID.SD }] } });
   await sonarr(ctx);
   expect(removals).not.toContain("SD");
   expect(names()).toEqual(["SD", ...HEXOS]);
@@ -477,7 +525,7 @@ for (const { label, change } of [
   { label: "allows upgrades", change: { upgradeAllowed: true } },
   { label: "has a minimum score", change: { minFormatScore: 10 } },
   { label: "has a cutoff score", change: { cutoffFormatScore: 100 } },
-  { label: "scores a format", change: { formatItems: [{ score: 50 }] } },
+  { label: "scores a format", change: { formatItems: [{ format: 1, name: "Not English", score: 50 }] } },
 ] as Array<{ label: string; change: Partial<Profile> }>) {
   test(`a starter profile the owner changed so it ${label} stays, with nothing using it`, async () => {
     const { ctx, names, removals, step } = fakes({ profiles: synced().map((each) => (each.name === "SD" ? { ...each, ...change } : each)) });
@@ -487,3 +535,194 @@ for (const { label, change } of [
     expect(step("tidy")?.message).toBe("Radarr keeps SD because its settings were changed.");
   });
 }
+
+for (const manager of ["radarr", "sonarr"] as const) {
+  const name = manager === "radarr" ? "Radarr" : "Sonarr";
+  const link = manager === "radarr" ? radarr : sonarr;
+  const hd = () => synced(manager).find((each) => each.name === "HD-1080p") as StarterProfile;
+  // A quality HD-1080p doesn't take as it starts
+  const added = manager === "radarr" ? "Bluray-720p" : "Bluray-1080p Remux";
+  for (const { label, changed } of [
+    { label: "takes one more quality", changed: () => withQuality(hd(), added, true) },
+    { label: "takes one quality fewer", changed: () => withQuality(hd(), "HDTV-1080p", false) },
+    { label: "takes one group of qualities fewer", changed: () => withQuality(hd(), "WEBDL-1080p", false) },
+    { label: "takes another quality in place of one", changed: () => withQuality(withQuality(hd(), "HDTV-1080p", false), added, true) },
+    { label: "stops at another quality", changed: () => withCutoff(hd(), manager === "radarr" ? "Remux-1080p" : "Bluray-1080p") },
+    { label: "lists no qualities at all", changed: () => ({ ...hd(), items: undefined }) as unknown as StarterProfile },
+    { label: "has another score increment for upgrades", changed: () => ({ ...hd(), minUpgradeFormatScore: 50 }) },
+  ]) {
+    test(`a ${name} starter profile the owner changed so it ${label} stays, and a default on it stays too`, async () => {
+      const start = entry(manager, { activeProfileId: ID["HD-1080p"], activeProfileName: "HD-1080p" });
+      const { ctx, servers, names, removals, step } = fakes({
+        manager,
+        profiles: synced(manager).map((each) => (each.name === "HD-1080p" ? changed() : each)),
+        servers: [start],
+      });
+      await link(ctx);
+      expect(servers()[0]).toMatchObject({ activeProfileId: ID["HD-1080p"], activeProfileName: "HD-1080p" });
+      expect(removals).not.toContain("HD-1080p");
+      expect(names()).toEqual(["HD-1080p", ...HEXOS]);
+      expect(step("tidy")?.message).toBe(`${name} keeps HD-1080p because Seerr sends requests to it.`);
+    });
+  }
+}
+
+test("a Radarr starter profile given another language stays, with nothing using it", async () => {
+  const { ctx, names, step } = fakes({ profiles: synced().map((each) => (each.name === "SD" ? { ...each, language: { id: 1, name: "English" } } : each)) });
+  await radarr(ctx);
+  expect(names()).toEqual(["SD", ...HEXOS]);
+  expect(step("tidy")?.message).toBe("Radarr keeps SD because its settings were changed.");
+});
+
+// --- a manager or a Seerr the owner already had, on a run from a card -----------
+
+test("a Radarr with no note that it was new keeps Seerr's default and every profile, on a run from a card", async () => {
+  // No collection is running, so nothing says which apps the owner already had
+  const { ctx, servers, names, removals, step } = fakes({ profiles: synced(), servers: [entry("radarr")], notes: [] });
+  await radarr(ctx);
+  expect(servers()).toEqual([entry("radarr")]);
+  expect(removals).toEqual([]);
+  expect(names()).toEqual([...STARTERS, ...HEXOS]);
+  expect(step("tidy")).toEqual({ id: "tidy", message: "HexOS can't tell that Radarr was new when it was installed, so it keeps every profile it has", skipped: true });
+});
+
+test("a Radarr noted as one the owner already had keeps Seerr's default and every profile, on a run from a card", async () => {
+  const { ctx, servers, names, removals, step } = fakes({ profiles: synced(), servers: [entry("radarr")], notes: ["fresh", "kept"] });
+  await radarr(ctx);
+  expect(servers()).toEqual([entry("radarr")]);
+  expect(removals).toEqual([]);
+  expect(names()).toEqual([...STARTERS, ...HEXOS]);
+  expect(step("tidy")).toEqual({ id: "tidy", message: "Radarr is one you already had, so it keeps every profile it has", skipped: true });
+});
+
+test("a Seerr a collection brings in as the owner's own is noted as kept, and one HexOS installed is not", async () => {
+  const kept = fakes({ profiles: synced(), servers: [entry("radarr")], keptApps: ["seerr"] });
+  await radarr(kept.ctx);
+  expect(kept.seerrNotedKept()).toBe(true);
+
+  root = mkdtempSync(join(tmpdir(), "seerr-arr-"));
+  const installed = fakes({ profiles: synced(), servers: [entry("radarr")], keptApps: ["radarr"] });
+  await radarr(installed.ctx);
+  expect(installed.seerrNotedKept()).toBe(false);
+});
+
+test("a Seerr noted as one the owner already had keeps the default they chose, on a run from a card", async () => {
+  const { ctx, servers, names, removals, step } = fakes({ profiles: synced(), servers: [entry("radarr")], seerrKept: true });
+  await radarr(ctx);
+  expect(servers()).toEqual([entry("radarr")]);
+  expect(removals).not.toContain("Any");
+  expect(names()).toEqual(["Any", ...HEXOS]);
+  expect(step("tidy")?.message).toBe("Radarr keeps Any because Seerr sends requests to it.");
+});
+
+test("a Seerr the owner already had keeps a Sonarr anime default on a starter profile, and Sonarr keeps that profile", async () => {
+  const start = entry("sonarr", {
+    activeProfileId: ID["1080p Balanced"],
+    activeProfileName: "1080p Balanced",
+    activeAnimeProfileId: ID.SD,
+    activeAnimeProfileName: "SD",
+    activeAnimeDirectory: "/movies",
+  });
+  const { ctx, servers, names, removals, step } = fakes({ manager: "sonarr", profiles: synced("sonarr"), servers: [start], keptApps: ["seerr"] });
+  await sonarr(ctx);
+  expect(servers()).toEqual([start]);
+  expect(removals).not.toContain("SD");
+  expect(names()).toEqual(["SD", ...HEXOS]);
+  expect(step("tidy")?.message).toBe("Sonarr keeps SD because Seerr sends requests to it.");
+});
+
+// --- Seerr's other entries for the same manager ---------------------------------
+
+for (const { label, where } of [
+  { label: "still at the box's old address, known by this Radarr's key", where: { hostname: OLD_BOX } },
+  { label: "at this Radarr's address with a key from before", where: { apiKey: "a-key-from-before" } },
+]) {
+  test(`Seerr's 4K entry ${label} keeps the starter profile it names`, async () => {
+    const everyday = entry("radarr", { activeProfileId: ID["1080p Balanced"], activeProfileName: "1080p Balanced" });
+    const fourK = entry("radarr", { id: 1, name: "Radarr 4K", is4k: true, activeProfileId: ID["Ultra-HD"], activeProfileName: "Ultra-HD", ...where });
+    const { ctx, servers, names, removals, step } = fakes({ profiles: synced(), servers: [everyday, fourK] });
+    await radarr(ctx);
+    expect(servers()).toEqual([everyday, fourK]);
+    expect(removals).not.toContain("Ultra-HD");
+    expect(names()).toEqual(["Ultra-HD", ...HEXOS]);
+    expect(step("tidy")?.message).toBe("Radarr keeps Ultra-HD because Seerr sends requests to it.");
+  });
+}
+
+// --- requests waiting in Seerr ---------------------------------------------------
+
+for (const { label, status } of [
+  { label: "waiting for a yes", status: 1 },
+  { label: "that failed and can be sent again", status: 4 },
+]) {
+  test(`a profile only a Seerr request ${label} names stays, and the rest go`, async () => {
+    const picked = entry("radarr", { activeProfileId: ID["1080p Quality"], activeProfileName: "1080p Quality" });
+    const requests: SeerrRequest[] = [{ type: "movie", status, serverId: 0, profileId: ID["HD-1080p"] }];
+    const { ctx, names, removals, step } = fakes({ profiles: synced(), servers: [picked], requests });
+    await radarr(ctx);
+    expect(removals).not.toContain("HD-1080p");
+    expect(names()).toEqual(["HD-1080p", ...HEXOS]);
+    expect(step("tidy")?.message).toBe("Radarr keeps HD-1080p because a request waiting in Seerr uses it.");
+  });
+}
+
+test("a default on a starter profile that a waiting request also names stays, and so does the profile", async () => {
+  const requests: SeerrRequest[] = [{ type: "movie", status: 1, serverId: null, profileId: ID.Any }];
+  const { ctx, servers, names, step } = fakes({ profiles: synced(), servers: [entry("radarr")], requests });
+  await radarr(ctx);
+  expect(servers()).toEqual([entry("radarr")]);
+  expect(names()).toEqual(["Any", ...HEXOS]);
+  expect(step("tidy")?.message).toBe("Radarr keeps Any because Seerr sends requests to it.");
+});
+
+test("requests that reached a manager, were declined, name another entry or are for shows hold nothing of this Radarr's", async () => {
+  const requests: SeerrRequest[] = [
+    { type: "movie", status: 2, serverId: 0, profileId: ID.Any },
+    { type: "movie", status: 3, serverId: 0, profileId: ID.SD },
+    { type: "movie", status: 5, serverId: 0, profileId: ID["HD-720p"] },
+    { type: "movie", status: 1, serverId: 5, profileId: ID["HD-1080p"] },
+    { type: "tv", status: 1, serverId: 0, profileId: ID["Ultra-HD"] },
+    { type: "movie", status: 1, serverId: 0, profileId: null },
+  ];
+  const { ctx, servers, names } = fakes({ profiles: synced(), servers: [entry("radarr")], requests });
+  await radarr(ctx);
+  expect(servers()[0]).toMatchObject({ activeProfileName: "1080p Balanced" });
+  expect(names()).toEqual(HEXOS);
+});
+
+test("a waiting request past Seerr's first page still keeps its profile", async () => {
+  const requests: SeerrRequest[] = [
+    ...Array.from({ length: 230 }, (): SeerrRequest => ({ type: "movie", status: 1, serverId: 0, profileId: null })),
+    { type: "movie", status: 1, serverId: 0, profileId: ID["Ultra-HD"] },
+  ];
+  const { ctx, names } = fakes({ profiles: synced(), requests });
+  await radarr(ctx);
+  expect(names()).toEqual(["Ultra-HD", ...HEXOS]);
+});
+
+for (const { label, requests } of [
+  { label: "won't list its requests", requests: "down" },
+  { label: "gives fewer requests than it counts", requests: "short" },
+] as const) {
+  test(`a Seerr that ${label} moves no default and has nothing removed`, async () => {
+    const { ctx, servers, names, removals, step } = fakes({ profiles: synced(), servers: [entry("radarr")], requests });
+    await radarr(ctx);
+    expect(servers()).toEqual([entry("radarr")]);
+    expect(removals).toEqual([]);
+    expect(names()).toEqual([...STARTERS, ...HEXOS]);
+    expect(step("tidy")).toEqual({ id: "tidy", message: "HexOS couldn't read which profiles Seerr uses, so it removed none from Radarr", skipped: true });
+  });
+}
+
+// --- what Seerr and the manager hold afterwards ----------------------------------
+
+test("a Seerr that reads back a default Radarr doesn't have fails the step, before anything is removed", async () => {
+  const { ctx, removals } = fakes({ profiles: synced(), savesProfile: 99 });
+  await expect(radarr(ctx)).rejects.toThrow("Seerr saved Radarr, but its default profile isn't one Radarr has. Run this again.");
+  expect(removals).toEqual([]);
+});
+
+test("a Radarr that lost one of Profilarr's profiles while its own were removed fails the step", async () => {
+  const { ctx } = fakes({ profiles: synced(), losesOnRemoval: "2160p Remux" });
+  await expect(radarr(ctx)).rejects.toThrow("Radarr is missing some of Profilarr's profiles. Run Connect to Radarr from Profilarr's Connections tab to send them again.");
+});

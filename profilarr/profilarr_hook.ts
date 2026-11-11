@@ -1,5 +1,5 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
@@ -21,10 +21,17 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * Radarr and Sonarr make six profiles of their own at their first start, which score nothing and
  * sit beside Profilarr's in every picker. Once a manager has all six of Profilarr's, a link takes
  * out each starter profile that nothing uses: no movie or show, import list, collection or auto
- * tagging rule in the manager, and no default or override rule in Seerr. One still in use stays and
- * the step says who uses it; nothing is moved off it. A manager the owner already had keeps every
- * profile, and a read that fails never counts as unused. Seerr's link does the same after it has
+ * tagging rule in the manager, and no default, override rule or waiting request in Seerr. One still
+ * in use stays and the step says who uses it; nothing is moved off it. A starter the owner changed
+ * stays too. A read that fails never counts as unused. Seerr's link does the same after it has
  * picked its default (seerr/connect_arr.ts), for the profile only Seerr was holding.
+ *
+ * Only a manager HexOS knows was new is touched. A run knows which apps the owner already had only
+ * while a collection installs (`ctx.keptApps`), and a link run from a card later doesn't. So the
+ * manager's own setup leaves notes beside its settings (servarr/configure.ts): hexos/fresh.json
+ * when HexOS found no settings and wrote the first ones, hexos/kept.json when a collection brought
+ * the manager in as the owner's own. A manager without the first, or with the second, keeps every
+ * profile, whoever runs the link.
  */
 
 const DICTIONARRY = "https://github.com/Dictionarry-Hub/database";
@@ -570,14 +577,59 @@ async function arrCall<T>(url: string, apiKey: string, path: string, init: Reque
 
 // --- the profiles a manager starts with --------------------------------------
 
+/** A quality in a profile, or a group of them (which has an id of its own and no quality). */
+interface QualityItem {
+  id?: number;
+  quality?: { id?: number; name?: string } | null;
+  items?: QualityItem[];
+  allowed?: boolean;
+}
+
 interface ArrProfile {
   id: number;
   name: string;
   upgradeAllowed?: boolean;
+  cutoff?: number;
+  items?: QualityItem[];
   minFormatScore?: number;
   cutoffFormatScore?: number;
+  minUpgradeFormatScore?: number;
   formatItems?: Array<{ score?: number }>;
+  language?: { name?: string };
 }
+
+const RADARR_SD = ["WORKPRINT", "CAM", "TELESYNC", "TELECINE", "DVDSCR", "REGIONAL", "SDTV", "DVD", "WEBDL-480p", "WEBRip-480p", "Bluray-480p", "Bluray-576p"];
+const RADARR_720 = ["HDTV-720p", "WEBDL-720p", "WEBRip-720p", "Bluray-720p"];
+const RADARR_1080 = ["HDTV-1080p", "WEBDL-1080p", "WEBRip-1080p", "Bluray-1080p", "Remux-1080p"];
+const RADARR_2160 = ["HDTV-2160p", "WEBDL-2160p", "WEBRip-2160p", "Bluray-2160p", "Remux-2160p"];
+const SONARR_SD = ["SDTV", "WEBRip-480p", "WEBDL-480p", "DVD", "Bluray-480p", "Bluray-576p"];
+const SONARR_720 = ["HDTV-720p", "WEBRip-720p", "WEBDL-720p", "Bluray-720p"];
+const SONARR_1080 = ["HDTV-1080p", "WEBRip-1080p", "WEBDL-1080p", "Bluray-1080p"];
+const SONARR_2160 = ["HDTV-2160p", "WEBRip-2160p", "WEBDL-2160p", "Bluray-2160p"];
+
+/**
+ * Each starter profile as the manager makes it: the quality it stops upgrading at, and every
+ * quality it takes (the AddDefaultProfile calls in QualityProfileService, read at Radarr 6.4.4 and
+ * Sonarr 5.0.0). None of the cutoffs is in a group, and every group is taken whole.
+ */
+const STARTERS: Record<ManagerId, Record<string, { cutoff: string; allowed: string[] }>> = {
+  radarr: {
+    Any: { cutoff: "Bluray-480p", allowed: [...RADARR_SD, "DVD-R", ...RADARR_720, ...RADARR_1080, ...RADARR_2160, "BR-DISK"] },
+    SD: { cutoff: "Bluray-480p", allowed: RADARR_SD },
+    "HD-720p": { cutoff: "Bluray-720p", allowed: RADARR_720 },
+    "HD-1080p": { cutoff: "Bluray-1080p", allowed: RADARR_1080 },
+    "Ultra-HD": { cutoff: "Remux-2160p", allowed: RADARR_2160 },
+    "HD - 720p/1080p": { cutoff: "Bluray-720p", allowed: [...RADARR_720, ...RADARR_1080] },
+  },
+  sonarr: {
+    Any: { cutoff: "SDTV", allowed: [...SONARR_SD, ...SONARR_720, ...SONARR_1080] },
+    SD: { cutoff: "SDTV", allowed: SONARR_SD },
+    "HD-720p": { cutoff: "HDTV-720p", allowed: SONARR_720 },
+    "HD-1080p": { cutoff: "HDTV-1080p", allowed: SONARR_1080 },
+    "Ultra-HD": { cutoff: "HDTV-2160p", allowed: SONARR_2160 },
+    "HD - 720p/1080p": { cutoff: "HDTV-720p", allowed: [...SONARR_720, ...SONARR_1080] },
+  },
+};
 
 interface StarterPlan {
   /** Why nothing is removed, when nothing may be. */
@@ -588,23 +640,45 @@ interface StarterPlan {
 
 type ArrApi = <T>(path: string, init?: RequestInit) => Promise<T>;
 
-/** A starter profile as the manager made it: no upgrades and no scores (GetDefaultProfile). */
-const asStarted = (profile: ArrProfile) =>
-  profile.upgradeAllowed === false &&
-  profile.minFormatScore === 0 &&
-  profile.cutoffFormatScore === 0 &&
-  Array.isArray(profile.formatItems) &&
-  profile.formatItems.every((item) => item.score === 0);
+/**
+ * A starter profile as the manager made it (GetDefaultProfile): no upgrades, no scores, the
+ * qualities and the cutoff it started with and, in Radarr, the original language. Ticking a quality
+ * is the commonest change an owner makes to one, and leaves the scores as they were.
+ */
+function asStarted(managerId: ManagerId, profile: ArrProfile): boolean {
+  const made = STARTERS[managerId][profile.name];
+  if (!made || !Array.isArray(profile.items) || !Array.isArray(profile.formatItems)) return false;
+  // A group is taken or left as a whole, by its own tick (QualityProfileQualityItem)
+  const names = (item: QualityItem): string[] => (item.quality ? [item.quality.name ?? ""] : (item.items ?? []).flatMap(names));
+  const taken = profile.items.filter((item) => item.allowed === true).flatMap(names);
+  const stopsAt = profile.items.find((item) => (item.quality ? item.quality.id : item.id) === profile.cutoff);
+  return (
+    profile.upgradeAllowed === false &&
+    profile.minFormatScore === 0 &&
+    profile.cutoffFormatScore === 0 &&
+    (profile.minUpgradeFormatScore ?? 1) === 1 &&
+    profile.formatItems.every((item) => item.score === 0) &&
+    stopsAt?.quality?.name === made.cutoff &&
+    taken.length === made.allowed.length &&
+    made.allowed.every((quality) => taken.includes(quality)) &&
+    (managerId !== "radarr" || profile.language?.name === "Original")
+  );
+}
 
 /**
  * The starter profiles a manager still has, and what in the manager itself uses each. Nothing is
- * planned for a manager the owner already had, or one without all six of Profilarr's profiles, and
- * a list the manager doesn't give says nothing about what's unused.
+ * planned for a manager the owner already had, one HexOS can't tell was new (`notes` is the hexos
+ * folder beside its settings), or one without all six of Profilarr's profiles, and a list the
+ * manager doesn't give says nothing about what's unused.
  */
-async function starterPlan(ctx: HookContext, managerId: ManagerId, name: string, api: ArrApi): Promise<StarterPlan> {
+async function starterPlan(ctx: HookContext, managerId: ManagerId, name: string, api: ArrApi, notes: string): Promise<StarterPlan> {
   const leave = (why: string): StarterPlan => ({ leave: why, starters: [] });
-  if (ctx.keptApps?.includes(ctx.linkedApp?.(managerId)?.name ?? managerId)) {
+  if (ctx.keptApps?.includes(ctx.linkedApp?.(managerId)?.name ?? managerId) || existsSync(`${notes}/kept.json`)) {
     return leave(`${name} is one you already had, so it keeps every profile it has`);
+  }
+  // Removing needs the note that says the manager was new: no note is no proof of that
+  if (!existsSync(`${notes}/fresh.json`)) {
+    return leave(`HexOS can't tell that ${name} was new when it was installed, so it keeps every profile it has`);
   }
   const read = <T>(path: string) => api<T>(path).catch(() => undefined);
   const profiles = await read<ArrProfile[]>("/qualityprofile");
@@ -644,13 +718,20 @@ async function starterPlan(ctx: HookContext, managerId: ManagerId, name: string,
  * check stands behind each one: a profile it won't remove stays, and isn't tried again. Then the
  * manager's list is read back, for the ones removed and for Profilarr's six.
  */
-async function removeStarters(ctx: HookContext, name: string, api: ArrApi, plan: StarterPlan, inSeerr: Map<number, string> | undefined) {
+async function removeStarters(
+  ctx: HookContext,
+  managerId: ManagerId,
+  name: string,
+  api: ArrApi,
+  plan: StarterPlan,
+  inSeerr: Map<number, string> | undefined,
+) {
   if (plan.leave) return ctx.skipCheckpoint("tidy", plan.leave);
   if (!inSeerr) return ctx.skipCheckpoint("tidy", `HexOS couldn't read which profiles Seerr uses, so it removed none from ${name}`);
   const kept: string[] = [];
   const removed: ArrProfile[] = [];
   for (const { profile, heldBy } of plan.starters) {
-    let why = heldBy ?? inSeerr.get(profile.id) ?? (asStarted(profile) ? undefined : "its settings were changed");
+    let why = heldBy ?? inSeerr.get(profile.id) ?? (asStarted(managerId, profile) ? undefined : "its settings were changed");
     if (!why) {
       const refused = await api(`/qualityprofile/${profile.id}`, { method: "DELETE" }).then(
         () => false,
@@ -697,12 +778,38 @@ interface SeerrServer {
 }
 
 /**
- * The profiles Seerr sends this manager's requests to: each entry's default, and its override
- * rules. Seerr keeps only a profile's id and the manager never hears of it, so the manager would
- * remove one Seerr names and leave Seerr's requests with nowhere to go. Read from Seerr's settings
- * file, as its entry is known by the manager's key or address, and its rules from Seerr itself.
- * Undefined when HexOS can't tell: only a box that says Seerr isn't installed, or Seerr's own
- * settings and answer, count.
+ * The requests in Seerr that haven't reached a manager yet: the ones waiting for a yes, and the
+ * failed ones Seerr can send again. A request keeps the profile its requester picked, or the one an
+ * override rule gave it, by its id, and Seerr sends that id when the request is approved
+ * (MediaRequestSubscriber, read at Seerr 3.5.1). Undefined when Seerr doesn't give them all.
+ */
+async function waitingRequests(seerrUrl: string, seerrKey: string, managerId: ManagerId): Promise<Array<Record<string, unknown>> | undefined> {
+  const waiting: Array<Record<string, unknown>> = [];
+  for (const filter of ["pending", "failed"]) {
+    for (let skip = 0, total = Number.POSITIVE_INFINITY; skip < total; skip += 100) {
+      const query = new URLSearchParams({ take: "100", skip: String(skip), filter, mediaType: managerId === "radarr" ? "movie" : "tv" });
+      const page = (await fetch(`${seerrUrl}/api/v1/request?${query}`, { headers: { "X-Api-Key": seerrKey }, signal: AbortSignal.timeout(30_000) }).then(
+        (response) => (response.ok ? (response.json() as Promise<unknown>) : response.body?.cancel().then(() => undefined)),
+        () => undefined,
+      )) as { pageInfo?: { results?: unknown }; results?: unknown } | undefined;
+      const count = page?.pageInfo?.results;
+      if (!Array.isArray(page?.results) || typeof count !== "number") return undefined;
+      // A page with nothing on it, short of the count, is a list Seerr didn't finish
+      if (page.results.length === 0 && skip < count) return undefined;
+      waiting.push(...(page.results as Array<Record<string, unknown>>));
+      total = count;
+    }
+  }
+  return waiting;
+}
+
+/**
+ * The profiles Seerr sends this manager's requests to: each entry's default, its override rules,
+ * and the requests still waiting in Seerr. Seerr keeps only a profile's id and the manager never
+ * hears of it, so the manager would remove one Seerr names and leave Seerr's requests with nowhere
+ * to go. Read from Seerr's settings file, as its entry is known by the manager's key or address,
+ * and its rules and requests from Seerr itself. Undefined when HexOS can't tell: only a box that
+ * says Seerr isn't installed, or Seerr's own settings and answers, count.
  */
 async function heldBySeerr(ctx: HookContext, managerId: ManagerId, managerUrl: string, managerKey: string): Promise<Map<number, string> | undefined> {
   if (typeof ctx.installedCopies !== "function") return undefined;
@@ -739,6 +846,15 @@ async function heldBySeerr(ctx: HookContext, managerId: ManagerId, managerUrl: s
       if (typeof rule.profileId !== "number" || !mine.some((server) => server.id === rule[service])) continue;
       if (!held.has(rule.profileId)) held.set(rule.profileId, "a Seerr override rule uses it");
     }
+    const requests = await waitingRequests(seerrUrl, seerrKey, managerId);
+    if (!requests) return undefined;
+    for (const request of requests) {
+      if (typeof request.profileId !== "number") continue;
+      // A request that names no entry goes to Seerr's default one, which may be this manager's
+      const named = typeof request.serverId === "number" && request.serverId >= 0;
+      if (named && !mine.some((server) => server.id === request.serverId)) continue;
+      if (!held.has(request.profileId)) held.set(request.profileId, "a request waiting in Seerr uses it");
+    }
   }
   return held;
 }
@@ -755,10 +871,9 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
 
   const managerUrl = await ctx.getInstalledAppUrl(managerId);
   if (!managerUrl) ctx.fail(`${manager.name} isn't installed, or HexOS can't find its port`);
-  const managerKey = readText(
-    `${configMount(await ctx.getInstalledAppMounts(managerId), managerId)?.localPath}/config.xml`,
-  )?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
-  if (!managerKey) ctx.fail(`HexOS couldn't read ${manager.name}'s API key yet. Try again once it has started.`);
+  const managerConfig = configMount(await ctx.getInstalledAppMounts(managerId), managerId)?.localPath;
+  const managerKey = readText(`${managerConfig}/config.xml`)?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
+  if (!managerConfig || !managerKey) ctx.fail(`HexOS couldn't read ${manager.name}'s API key yet. Try again once it has started.`);
   await ctx.emitCheckpoint("locate");
 
   const signedIn =
@@ -863,10 +978,10 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
   await ctx.emitCheckpoint("sync");
 
   const api: ArrApi = (path, init) => arrCall(managerUrl, managerKey, path, init);
-  const plan = await starterPlan(ctx, managerId, manager.name, api);
+  const plan = await starterPlan(ctx, managerId, manager.name, api, `${managerConfig}/hexos`);
   // Seerr is only asked when there is something to remove
   const inSeerr = plan.leave ? undefined : await heldBySeerr(ctx, managerId, managerUrl, managerKey);
-  await removeStarters(ctx, manager.name, api, plan, inSeerr);
+  await removeStarters(ctx, managerId, manager.name, api, plan, inSeerr);
 }
 
 export const radarr = (ctx: HookContext) => connect(ctx, "radarr");
