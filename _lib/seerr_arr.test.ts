@@ -354,7 +354,7 @@ test("a Radarr the owner already had keeps Seerr's default and every profile", a
   expect(servers()).toEqual([entry("radarr")]);
   expect(removals).toEqual([]);
   expect(names()).toEqual([...STARTERS, ...HEXOS]);
-  expect(step("tidy")).toEqual({ id: "tidy", message: "Radarr was yours before, so it keeps every profile it has", skipped: true });
+  expect(step("tidy")).toEqual({ id: "tidy", message: "Radarr is one you already had, so it keeps every profile it has", skipped: true });
 });
 
 test("a Seerr the owner already had keeps the default they chose, and Radarr keeps that profile", async () => {

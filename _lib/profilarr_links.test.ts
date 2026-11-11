@@ -345,14 +345,14 @@ test("Seerr's entry for another copy of Radarr holds nothing of this copy's", as
 test("a Radarr the owner already had keeps every profile, and isn't asked what uses them", async () => {
   const run = fakes({ keptApps: ["radarr"] });
   await radarr(run.ctx);
-  removedNone(run, "Radarr was yours before, so it keeps every profile it has");
+  removedNone(run, "Radarr is one you already had, so it keeps every profile it has");
   expect(run.requests.filter((request) => request.startsWith("GET manager /api/v3/movie"))).toEqual([]);
 });
 
 test("a later copy is judged by the name it runs under", async () => {
   const kept = fakes({ copy: "radarr-2", keptApps: ["radarr-2"] });
   await radarr(kept.ctx);
-  removedNone(kept, "Radarr 2 was yours before, so it keeps every profile it has");
+  removedNone(kept, "Radarr 2 is one you already had, so it keeps every profile it has");
 
   const fresh = fakes({ copy: "radarr-2", keptApps: ["radarr"] });
   await radarr(fresh.ctx);

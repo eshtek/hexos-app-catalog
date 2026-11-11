@@ -132,7 +132,7 @@ const asStarted = (profile: ArrProfile) =>
 async function starterPlan(ctx: HookContext, managerId: ManagerId, name: string, api: ArrApi): Promise<StarterPlan> {
   const leave = (why: string): StarterPlan => ({ leave: why, starters: [] });
   if (ctx.keptApps?.includes(ctx.linkedApp?.(managerId)?.name ?? managerId)) {
-    return leave(`${name} was yours before, so it keeps every profile it has`);
+    return leave(`${name} is one you already had, so it keeps every profile it has`);
   }
   const read = <T>(path: string) => api<T>(path).catch(() => undefined);
   const profiles = await read<ArrProfile[]>("/qualityprofile");
