@@ -453,6 +453,14 @@ async function getExistingLibraryPaths(ctx: HookContext, token: string): Promise
   }
 }
 
+/**
+ * Whether the app was given the folder a library reads. HexOS leaves a folder's mount out of the
+ * app when its owner turned that location off, and Emby refuses a library at a path it can't see.
+ * Mounts that couldn't be read prove nothing, so every library is asked for then.
+ */
+const hasFolder = (ctx: HookContext, path: string): boolean =>
+  ctx.mounts.length === 0 || ctx.mounts.some((mount) => mount.containerPath === path);
+
 async function createLibraries(ctx: HookContext, token: string): Promise<void> {
   await waitForLibrarySubsystem(ctx, token);
   await ctx.sleep(LIBRARY_PACE_MS);
@@ -472,6 +480,12 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
       ctx.log(`Library already exists: ${lib.name}`);
       await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — already exists`);
       if (i < LIBRARIES.length - 1) await ctx.sleep(LIBRARY_PACE_MS);
+      continue;
+    }
+
+    if (!hasFolder(ctx, lib.path)) {
+      ctx.log(`No ${lib.path} folder in the app, so no library is made for it: ${lib.name}`);
+      await ctx.skipCheckpoint(lib.checkpointId, `HexOS didn't give Emby a ${lib.name} folder, so it has no library to make`);
       continue;
     }
 
