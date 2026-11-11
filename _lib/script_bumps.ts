@@ -29,7 +29,9 @@ const canonical = (value: unknown): string =>
  * does `requirements.instances` change a server that has the app, or `$INSTANCE`, which reads as the
  * folder it names on every app installed so far, or `$PORT`. A hook's `rerunsOn` is read from the
  * catalog's current script too (the box's link list), so it reaches installed apps at the next sync,
- * and so is `requirements.reserved_ports`, the ports HexOS holds for an installed app.
+ * and so is `requirements.reserved_ports`, the ports HexOS holds for an installed app. So are
+ * `requirements.gpu` and `requirements.gpu_hook`: one card is only given to a new install, and an
+ * installed app's card changes only when its owner picks another.
  */
 export function runPart(script: Record<string, unknown>): string {
   const { metadata: _metadata, script: _block, internal: _internal, ...runs } = script;
@@ -46,6 +48,8 @@ export function runPart(script: Record<string, unknown>): string {
       instances: _instances,
       shared_folders: _shared,
       reserved_ports: _reserved,
+      gpu: _gpu,
+      gpu_hook: _gpuHook,
       ...requirements
     } = runs.requirements;
     runs.requirements = requirements;

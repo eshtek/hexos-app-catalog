@@ -31,7 +31,8 @@
     "ports": [
       9096,
       8920
-    ]
+    ],
+    "gpu": "one"
   },
   "ensure_directories_exists": [
     {

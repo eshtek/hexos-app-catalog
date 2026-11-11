@@ -129,6 +129,19 @@ Leave it out when the owner picks the ports inside the app, as with each Minecra
 }
 ```
 
+A media server asks for one graphics card with `requirements.gpu: "one"`. `$GPU_CONFIG()` would otherwise give a new install every card the server has. With an NVIDIA card beside an Intel one, the NVIDIA runtime hides the Intel card from Intel's own drivers, and HDR tone mapping fails. A new install gets the first card the server has in this order: an Intel Arc, an NVIDIA card, Intel integrated graphics, an AMD card. The owner sees the card in the app's Customize tab and can pick another, or none. An app that is already installed keeps the cards it has until its owner picks one. Jellyfin, Plex and Emby set it.
+
+TrueNAS hands a container one NVIDIA card, or every Intel and AMD card at once. So the app's own video settings have to name the device when a server has two Intel or AMD cards. `requirements.gpu_hook` names the hook that does that. The hook reads the card with `ctx.videoCard()`, which gives the card's PCI slot, its vendor and whether the owner picked it. HexOS runs the hook again after every pick, so it has to be one the owner can run from the app's card (`userAction`) and one that may run again (`converge` or `idempotent`). A card the owner picked is one the app's settings follow even when they are already set. Jellyfin names `hardware-transcoding`. Plex and Emby name none, since they choose their own device. Call it as `ctx.videoCard?.()`: a box from before it has no such method, and the hook then looks for a card as it did before.
+
+Both keys are read from the catalog's current script, so changing them needs no new `script.version`. `bun run validate` refuses `gpu` without `$GPU_CONFIG()` in `app_values`, and a `gpu_hook` that names no such hook.
+
+```json
+"requirements": {
+  "gpu": "one",
+  "gpu_hook": "hardware-transcoding"
+}
+```
+
 ## Ports
 
 A script states its ports twice. `requirements.ports` is the list HexOS reads, and its first entry is where HexOS reaches the app. The pins in `app_values` are what TrueNAS applies, so a port the script doesn't pin is published at the chart's default. `network` goes in `app_values`, under the chart's own keys; anywhere else it is never applied. A custom app runs on TrueNAS's `ix-app` chart, whose pins sit directly in `app_values`: `ports`, or `host_network` and `portals`.

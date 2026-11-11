@@ -31,7 +31,9 @@
     "ports": [
       30013,
       30014
-    ]
+    ],
+    "gpu": "one",
+    "gpu_hook": "hardware-transcoding"
   },
   "ensure_directories_exists": [
     {

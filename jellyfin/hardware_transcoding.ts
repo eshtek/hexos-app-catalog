@@ -1,10 +1,11 @@
 import { Database } from "bun:sqlite";
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
-// HexOS gives Jellyfin the server's GPU at install, but Jellyfin stays on software until told
-// otherwise. One setting the GPU can't honour makes every transcode fail, so nothing is saved until
-// a short test encode passes, and an owner's own choice is left alone. The platform runs this again
-// after a restart that changes what the GPU can do. This also limits remote streams.
+// HexOS gives Jellyfin one of the server's GPUs at install, but Jellyfin stays on software until
+// told otherwise. One setting the GPU can't honour makes every transcode fail, so nothing is saved
+// until a short test encode passes, and an owner's own choice is left alone. The platform runs this
+// again after a restart that changes what the GPU can do, and after the owner picks another card
+// for Jellyfin in HexOS: its settings then follow that card. This also limits remote streams.
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
 const FFMPEG = "/usr/lib/jellyfin-ffmpeg/ffmpeg";
@@ -45,8 +46,13 @@ export type Gpu =
 
 interface EncodingOptions {
   HardwareAccelerationType?: string;
+  VaapiDevice?: string;
+  QsvDevice?: string;
   [key: string]: unknown;
 }
+
+/** The card HexOS gave Jellyfin (`ctx.videoCard`), or null when it names none. */
+type VideoCard = Awaited<ReturnType<NonNullable<HookContext["videoCard"]>>>;
 
 const decodes = (gpu: Exclude<Gpu, { kind: "nvidia" }>, profile: string) =>
   gpu.abilities.has(`${profile} VAEntrypointVLD`);
@@ -152,16 +158,58 @@ export async function inContainer(ctx: HookContext, cmd: string[]): Promise<{ ok
   }
 }
 
-/** The GPU Jellyfin's container can reach. An NVIDIA card wins: it is there because the owner added one. */
-export async function detectGpu(ctx: HookContext): Promise<Gpu | null> {
-  if ((await inContainer(ctx, ["nvidia-smi", "-L"])).ok) return { kind: "nvidia" };
+/** Each render node with the PCI device behind it: "/dev/dri/renderD128 /sys/devices/pci0000:00/0000:00:02.0". */
+const RENDER_NODE_DEVICES = 'for n in /dev/dri/renderD*; do echo "$n $(readlink -f "/sys/class/drm/${n##*/}/device")"; done';
+
+/**
+ * The render node of the card at `pciSlot`. The container gets every Intel and AMD card's node at
+ * once, numbered in the order the kernel found them, so the slot is what says which is which.
+ */
+async function renderNodeOf(ctx: HookContext, pciSlot: string): Promise<string | undefined> {
+  const listed = await inContainer(ctx, ["sh", "-c", RENDER_NODE_DEVICES]);
+  if (!listed.ok) return undefined;
+  for (const line of listed.output.split(/\r?\n/)) {
+    const [node, device] = line.trim().split(/\s+/);
+    if (node && device?.toLowerCase().endsWith(`/${pciSlot.toLowerCase()}`)) return node;
+  }
+  return undefined;
+}
+
+async function readGpu(ctx: HookContext, node: string): Promise<Gpu | null> {
+  const info = await inContainer(ctx, [VAINFO, "--display", "drm", "--device", node]);
+  return info.ok ? parseVainfo(info.output, node) : null;
+}
+
+/**
+ * The GPU Jellyfin uses. With a card from HexOS it is that card: an NVIDIA card through its driver,
+ * an Intel or AMD card through its own render node, or the first node that answers when its own
+ * can't be told. A box that names no card gets what the container can reach: an NVIDIA card first,
+ * then the first render node that answers.
+ */
+export async function detectGpu(ctx: HookContext, card?: VideoCard): Promise<Gpu | null> {
+  if (card?.pciSlot && card.vendor === "NVIDIA") {
+    return (await inContainer(ctx, ["nvidia-smi", "-L"])).ok ? { kind: "nvidia" } : null;
+  }
+  if (card?.pciSlot) {
+    const node = await renderNodeOf(ctx, card.pciSlot);
+    if (node) return readGpu(ctx, node);
+  } else if ((await inContainer(ctx, ["nvidia-smi", "-L"])).ok) {
+    return { kind: "nvidia" };
+  }
   const nodes = await inContainer(ctx, ["sh", "-c", "ls /dev/dri/renderD*"]);
   for (const node of nodes.ok ? nodes.output.split(/\s+/).filter(Boolean) : []) {
-    const info = await inContainer(ctx, [VAINFO, "--display", "drm", "--device", node]);
-    const gpu = info.ok ? parseVainfo(info.output, node) : null;
+    const gpu = await readGpu(ctx, node);
     if (gpu) return gpu;
   }
   return null;
+}
+
+/** Whether Jellyfin's settings already send its video through this GPU. */
+function alreadyUses(current: EncodingOptions, gpu: Gpu): boolean {
+  const type = current.HardwareAccelerationType;
+  if (gpu.kind === "nvidia") return type === "nvenc";
+  if (type === "qsv") return current.QsvDevice === gpu.node;
+  return type === "vaapi" && current.VaapiDevice === gpu.node;
 }
 
 function storedToken(ctx: HookContext): string | null {
@@ -236,14 +284,42 @@ async function enableHardware(ctx: HookContext, headers: Record<string, string>)
   const answer = await fetch(`${ctx.baseUrl}${ENCODING_PATH}`, { headers });
   if (!answer.ok) throw new Error(`Jellyfin's encoding settings didn't load (${answer.status})`);
   const current = (await answer.json()) as EncodingOptions;
-  if (current.HardwareAccelerationType && current.HardwareAccelerationType !== "none") {
+  const save = async (settings: EncodingOptions): Promise<void> => {
+    const saved = await fetch(`${ctx.baseUrl}${ENCODING_PATH}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...current, ...settings }),
+    });
+    if (!saved.ok) throw new Error(`Jellyfin refused the hardware settings (${saved.status})`);
+  };
+  const isSet = !!current.HardwareAccelerationType && current.HardwareAccelerationType !== "none";
+  // Absent on a box from before it, and null when HexOS names no single card: both look as before.
+  const card = (await ctx.videoCard?.().catch(() => null)) ?? null;
+  const pickedByOwner = card?.picked === true;
+
+  if (pickedByOwner && card.pciSlot === null) {
+    // The acceleration Jellyfin had would now fail every transcode, since its card is gone.
+    if (isSet) {
+      await save({ HardwareAccelerationType: "none" });
+      ctx.log("Jellyfin has no graphics card in HexOS now, so it is back on software transcoding.");
+    }
+    return;
+  }
+  // Only a card the owner picked in HexOS moves an acceleration that is already set.
+  if (isSet && !pickedByOwner) {
     ctx.log(`Jellyfin already uses ${current.HardwareAccelerationType}, so it is left as it is.`);
     return;
   }
 
-  const gpu = await detectGpu(ctx);
+  // What Jellyfin is left on when the card can't be set up: an acceleration it already had stays.
+  const leftOn = isSet ? "its settings are left as they were" : "it stays on software transcoding";
+  const gpu = await detectGpu(ctx, card);
   if (!gpu) {
-    ctx.log("No GPU Jellyfin can use, so it stays on software transcoding.");
+    ctx.log(`No GPU Jellyfin can use, so ${leftOn}.`);
+    return;
+  }
+  if (isSet && alreadyUses(current, gpu)) {
+    ctx.log(`Jellyfin already uses the ${gpu.kind} GPU picked in HexOS, so it is left as it is.`);
     return;
   }
   if (!(await inContainer(ctx, testEncode(gpu))).ok) {
@@ -252,17 +328,13 @@ async function enableHardware(ctx: HookContext, headers: Record<string, string>)
     const restart = await ctx.prepareHardwareVideo?.({ rerunHook: HOOK_ID });
     ctx.log(
       restart?.restartNeeded
-        ? "This GPU needs a server restart first. Jellyfin uses software transcoding until then."
-        : `The ${gpu.kind} GPU failed a test encode, so Jellyfin stays on software transcoding.`,
+        ? `This GPU needs a server restart first. Until then ${leftOn}.`
+        : `The ${gpu.kind} GPU failed a test encode, so ${leftOn}.`,
     );
     return;
   }
 
-  const saved = await fetch(`${ctx.baseUrl}${ENCODING_PATH}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ ...current, ...encodingSettings(gpu) }),
-  });
-  if (!saved.ok) throw new Error(`Jellyfin refused the hardware settings (${saved.status})`);
+  // Every setting is the card's own, decoders included: one the new card can't decode would fail.
+  await save(encodingSettings(gpu));
   ctx.log(`Hardware transcoding is on, through the ${gpu.kind} GPU.`);
 }

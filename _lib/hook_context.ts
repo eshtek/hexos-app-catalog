@@ -206,6 +206,16 @@ export interface HookContext {
    */
   prepareHardwareVideo?(options?: { rerunHook?: string }): Promise<{ restartNeeded: boolean }>;
   /**
+   * The graphics card this app's own video settings should use, for an app whose script asks for
+   * one card (`requirements.gpu: "one"`): the card a new install was given, or the one the owner
+   * picked in the app's Customize tab (`picked`). A picked card is one the app's settings follow
+   * even when they are already set, and `pciSlot` is null when the owner picked none. The container
+   * gets every Intel and AMD card's render node at once, so match `pciSlot` to its node. Resolves
+   * null when HexOS names no single card (an older install with several): look for one as before.
+   * Absent on a box whose image predates it.
+   */
+  videoCard?(): Promise<{ pciSlot: string | null; vendor?: "NVIDIA" | "INTEL" | "AMD"; picked: boolean } | null>;
+  /**
    * Another installed app's live mounts, resolved as this hook's own `mounts` are: how a link
    * between two apps reads the other one's settings file (an *arr's config.xml for its API key).
    * Empty when the app isn't installed or its mounts can't be read.
