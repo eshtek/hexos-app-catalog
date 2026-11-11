@@ -154,6 +154,8 @@ describe("the hook", () => {
     devices?: string;
     /** vainfo's answer per node, for a server with two cards. */
     vainfoByNode?: Record<string, string>;
+    /** What started the hook. A run from the app's card is "action". */
+    event?: string;
   }
 
   async function hook(world: World) {
@@ -220,6 +222,7 @@ describe("the hook", () => {
 
     const ctx = {
       resourceId: "jellyfin",
+      event: world.event ?? "action",
       baseUrl: "http://app",
       mounts: [{ hostPath: "/mnt/pool/jellyfin/config", containerPath: "/config", localPath: dir }],
       log: (message: string) => logs.push(message),
@@ -351,6 +354,55 @@ describe("the hook", () => {
       });
       expect(saved).toEqual([]);
       expect(commands).toEqual([]);
+    });
+
+    describe("on a reinstall that finds Jellyfin's old settings", () => {
+      const install = { event: "onAfterInstall" };
+
+      test("NVENC is replaced when the new install was given an Intel card, since it would fail every transcode", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          ...install,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved[0]).toMatchObject({ HardwareAccelerationType: "qsv", QsvDevice: ARC_NODE });
+      });
+
+      test("Quick Sync is replaced when the new install was given an NVIDIA card", async () => {
+        const { saved } = await hook({
+          ...install,
+          nvidia: true,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: NODE },
+          card: { pciSlot: "0000:01:00.0", vendor: "NVIDIA", picked: false },
+        });
+        expect(saved[0]).toMatchObject({ HardwareAccelerationType: "nvenc" });
+      });
+
+      test("an acceleration the card can run is left alone, device and all", async () => {
+        const { saved, commands } = await hook({
+          ...TWO_CARDS,
+          ...install,
+          current: { HardwareAccelerationType: "vaapi", VaapiDevice: NODE },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved).toEqual([]);
+        expect(commands).toEqual([]);
+      });
+
+      test("nothing is replaced on a box that names no card", async () => {
+        const { saved } = await hook({ ...install, nvidia: true, current: { HardwareAccelerationType: "qsv" }, card: null });
+        expect(saved).toEqual([]);
+      });
+
+      test("nothing is replaced on a run from the app's card, where only the owner's pick counts", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved).toEqual([]);
+      });
     });
 
     describe("picked by the owner in HexOS", () => {

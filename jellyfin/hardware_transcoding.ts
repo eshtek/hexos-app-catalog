@@ -5,7 +5,8 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
 // told otherwise. One setting the GPU can't honour makes every transcode fail, so nothing is saved
 // until a short test encode passes, and an owner's own choice is left alone. The platform runs this
 // again after a restart that changes what the GPU can do, and after the owner picks another card
-// for Jellyfin in HexOS: its settings then follow that card. This also limits remote streams.
+// for Jellyfin in HexOS: its settings then follow that card. They also follow the card on a
+// reinstall that finds settings for a kind of card it wasn't given. This also limits remote streams.
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
 const FFMPEG = "/usr/lib/jellyfin-ffmpeg/ffmpeg";
@@ -204,6 +205,15 @@ export async function detectGpu(ctx: HookContext, card?: VideoCard): Promise<Gpu
   return null;
 }
 
+/**
+ * Whether the acceleration is for another kind of card than the one HexOS gave: NVENC without an
+ * NVIDIA card, or an Intel or AMD acceleration with only an NVIDIA card. Every transcode would fail.
+ */
+function cannotRunOn(type: string | undefined, vendor: string | undefined): boolean {
+  if (!type || !vendor) return false;
+  return vendor === "NVIDIA" ? ["qsv", "vaapi", "amf"].includes(type) : type === "nvenc";
+}
+
 /** Whether Jellyfin's settings already send its video through this GPU. */
 function alreadyUses(current: EncodingOptions, gpu: Gpu): boolean {
   const type = current.HardwareAccelerationType;
@@ -305,8 +315,10 @@ async function enableHardware(ctx: HookContext, headers: Record<string, string>)
     }
     return;
   }
-  // Only a card the owner picked in HexOS moves an acceleration that is already set.
-  if (isSet && !pickedByOwner) {
+  // A reinstall can find settings from before it, set for a card the new install wasn't given.
+  const cannotRun = ctx.event === "onAfterInstall" && cannotRunOn(current.HardwareAccelerationType, card?.vendor);
+  // Only that, or a card the owner picked in HexOS, moves an acceleration that is already set.
+  if (isSet && !pickedByOwner && !cannotRun) {
     ctx.log(`Jellyfin already uses ${current.HardwareAccelerationType}, so it is left as it is.`);
     return;
   }
