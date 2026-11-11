@@ -14,6 +14,12 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * before they chose one) the app gets admin/admin, kept beside its settings so a later check knows
  * it's HexOS's. Read at Radarr 6.4.4, Sonarr 5.0.0, Lidarr 3.1.6, Chaptarr 0.9.965 and Prowlarr
  * 2.6.5, the versions TrueNAS pins.
+ *
+ * Radarr and Sonarr start with renaming off, so an import keeps its release's file name and only
+ * the folder is named by the app. configure-<app> turns renaming on once, with names that carry the
+ * movie's or show's id, on an app that is still as it started: renaming off, its own name formats,
+ * nothing in its library, and not one the owner already had. What the owner sets is theirs, and so
+ * is what they change afterwards, which a note in hexos/naming.json keeps true.
  */
 
 interface Library {
@@ -23,9 +29,60 @@ interface Library {
   format?: "ebook" | "audiobook";
 }
 
-const APPS: Record<string, { name: string; api: string; libraries?: Library[]; noAllowedHosts?: boolean }> = {
-  radarr: { name: "Radarr", api: "v3", libraries: [{ path: "/movies", name: "Movies" }] },
-  sonarr: { name: "Sonarr", api: "v3", libraries: [{ path: "/shows", name: "Shows" }] },
+interface Naming {
+  /** The app's switch for renaming what it imports. */
+  rename: string;
+  /** Where the app lists what its library holds, and what it calls them. */
+  holds: { path: string; name: string };
+  /** Each name format: the one the app starts with (NamingConfig.Default) and the one HexOS gives it. */
+  formats: Record<string, { stock: string; hexos: string }>;
+}
+
+/**
+ * The folder names carry the id Jellyfin reads ([tmdbid-...], [tvdbid-...]), so a title shared by
+ * two movies or shows is matched to the right one. Emby and Plex match those folders by title and
+ * year. The file names follow the TRaSH guides' shape.
+ */
+const RADARR_NAMING: Naming = {
+  rename: "renameMovies",
+  holds: { path: "/movie", name: "movies" },
+  formats: {
+    movieFolderFormat: {
+      stock: "{Movie Title} ({Release Year})",
+      hexos: "{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]",
+    },
+    standardMovieFormat: {
+      stock: "{Movie Title} ({Release Year}) {Quality Full}",
+      hexos:
+        "{Movie CleanTitle} {(Release Year)} [tmdbid-{TmdbId}] - {Edition Tags }{[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[Mediainfo VideoCodec]}{-Release Group}",
+    },
+  },
+};
+
+const SONARR_NAMING: Naming = {
+  rename: "renameEpisodes",
+  holds: { path: "/series", name: "shows" },
+  formats: {
+    seriesFolderFormat: { stock: "{Series Title}", hexos: "{Series TitleYear} [tvdbid-{TvdbId}]" },
+    seasonFolderFormat: { stock: "Season {season}", hexos: "Season {season:00}" },
+    standardEpisodeFormat: {
+      stock: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}",
+      hexos: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}",
+    },
+    dailyEpisodeFormat: {
+      stock: "{Series Title} - {Air-Date} - {Episode Title} {Quality Full}",
+      hexos: "{Series Title} - {Air-Date} - {Episode Title} - {Quality Full}",
+    },
+    animeEpisodeFormat: {
+      stock: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}",
+      hexos: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}",
+    },
+  },
+};
+
+const APPS: Record<string, { name: string; api: string; libraries?: Library[]; noAllowedHosts?: boolean; naming?: Naming }> = {
+  radarr: { name: "Radarr", api: "v3", libraries: [{ path: "/movies", name: "Movies" }], naming: RADARR_NAMING },
+  sonarr: { name: "Sonarr", api: "v3", libraries: [{ path: "/shows", name: "Shows" }], naming: SONARR_NAMING },
   lidarr: { name: "Lidarr", api: "v1", libraries: [{ path: "/music", name: "Music" }] },
   chaptarr: {
     name: "Chaptarr",
@@ -477,6 +534,54 @@ async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: 
   await ctx.emitCheckpoint(checkpoint);
 }
 
+const namingPath = (config: ContextMount) => `${config.localPath}/hexos/naming.json`;
+
+/**
+ * Renaming on, with HexOS's name formats, once. Only an app still as it started is changed: one the
+ * owner already had, one whose naming they set, and one with anything in its library keep what they
+ * have, since new names there would sit beside the old ones. The app's whole naming goes back with
+ * the change, so the settings HexOS doesn't set stay as they are.
+ */
+async function ensureNaming(ctx: HookContext, app: (typeof APPS)[string], config: ContextMount, api: Api) {
+  const naming = app.naming;
+  if (!naming) return;
+  const keeps = (why = `${app.name} keeps the naming it has`) => ctx.skipCheckpoint("naming", why);
+  if (ctx.keptApps?.includes(ctx.resourceId)) return keeps();
+  // Set once: naming the owner puts back to how the app started is still the owner's choice
+  if (existsSync(namingPath(config))) return keeps(`${app.name}'s naming was set up before`);
+
+  const read = () => call<Record<string, unknown> & { id: number }>(api, "/config/naming");
+  const matches = (settings: Record<string, unknown>, rename: boolean, which: "stock" | "hexos") =>
+    settings[naming.rename] === rename && Object.entries(naming.formats).every(([field, format]) => settings[field] === format[which]);
+  let current: Awaited<ReturnType<typeof read>>;
+  let held: unknown;
+  try {
+    current = await read();
+    if (!matches(current, false, "stock")) return keeps();
+    held = await call<unknown>(api, naming.holds.path);
+  } catch (error) {
+    ctx.fail(`HexOS couldn't read ${app.name}'s naming`, [{ label: "Reason", value: reason(error) }]);
+  }
+  // Only an empty list says the library is empty
+  if (!Array.isArray(held) || held.length > 0) {
+    return keeps(`${app.name} already has ${naming.holds.name}, so it keeps the naming they have`);
+  }
+
+  const wanted = {
+    [naming.rename]: true,
+    ...Object.fromEntries(Object.entries(naming.formats).map(([field, format]) => [field, format.hexos])),
+  };
+  try {
+    await call(api, `/config/naming/${current.id}`, { method: "PUT", body: JSON.stringify({ ...current, ...wanted }) });
+  } catch (error) {
+    ctx.fail(`${app.name} didn't take its naming`, [{ label: "Reason", value: reason(error) }]);
+  }
+  if (!matches(await read(), true, "hexos")) ctx.fail(`${app.name} saved its naming, but HexOS couldn't find it there. Run this again.`);
+  mkdirSync(`${config.localPath}/hexos`, { recursive: true, mode: 0o700 });
+  writeFileSync(namingPath(config), JSON.stringify(wanted));
+  await ctx.emitCheckpoint("naming");
+}
+
 export async function configure(ctx: HookContext) {
   const { app, config } = appOf(ctx);
   await ctx.registerCheckpoints([
@@ -486,6 +591,7 @@ export async function configure(ctx: HookContext) {
       id: `library-${index}`,
       message: `Adding your ${library.name} folder to ${app.name}`,
     })),
+    ...(app.naming ? [{ id: "naming", message: `Turning on renaming in ${app.name}` }] : []),
   ]);
   const api = await reach(ctx, app, config);
   await ctx.emitCheckpoint("start");
@@ -493,4 +599,5 @@ export async function configure(ctx: HookContext) {
   for (const [index, library] of (app.libraries ?? []).entries()) {
     await ensureLibrary(ctx, app, api, library, `library-${index}`);
   }
+  await ensureNaming(ctx, app, config, api);
 }
