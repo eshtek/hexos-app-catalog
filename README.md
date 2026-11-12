@@ -56,6 +56,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Minecraft Bedrock](minecraft-bedrock.json) | Minecraft Bedrock Edition server, for phones, consoles and Windows |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
+| [Nevu](nevu.json) | Front-end interface for Plex |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Nginx Proxy Manager](nginx-proxy-manager.json) | Gives your apps their own web addresses, with HTTPS |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
