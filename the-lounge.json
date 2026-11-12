@@ -1,0 +1,89 @@
+{
+  "version": 6,
+  "custom": true,
+  "metadata": {
+    "name": "The Lounge",
+    "description": "Stay connected to IRC from a browser, with private accounts and chat history kept on your server.",
+    "icon": "the-lounge/icon.svg",
+    "version": "4.5.2",
+    "categories": ["communication"],
+    "keywords": ["irc", "chat", "thelounge", "bouncer"],
+    "homepage": "https://thelounge.chat",
+    "sources": ["https://github.com/thelounge/thelounge", "https://github.com/thelounge/thelounge-docker"],
+    "screenshots": ["the-lounge/screenshot-chat.png", "the-lounge/screenshot-login.png"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Install The Lounge 4.5.2 in private mode, with a persistent account and chat history."
+  },
+  "sign_in": {
+    "username": true,
+    "adds_user": true
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["1CORE", "1GB", "512MBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30900]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/the-lounge/data",
+      "owner": { "user": "apps" },
+      "snapshot": { "id": "data" }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/thelounge/thelounge",
+      "tag": "4.5.2@sha256:00b0f614c4414dbd195ed1ece958095d29c7013ad608c038717076bf8582cb22",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "run_as_custom_user": true,
+    "run_as": { "user": 568, "group": 568 },
+    "ports": [
+      {
+        "bind_mode": "published",
+        "port_number": "$PORT(30900)",
+        "container_port": 9000,
+        "protocol": "tcp",
+        "host_ips": []
+      }
+    ],
+    "portals": [
+      {
+        "name": "Web UI",
+        "scheme": "http",
+        "use_node_ip": true,
+        "host": "",
+        "port": "$PORT(30900)",
+        "path": "/"
+      }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/var/opt/thelounge",
+        "host_path_config": { "path": "$LOCATION(ApplicationsPerformance)/the-lounge/data" }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": { "cpus": "$CPUS(50%, 2)", "memory": "$MEMORY(5%, 1024)" }
+    }
+  },
+  "hooks": [
+    {
+      "id": "create-account",
+      "title": "Create The Lounge account",
+      "description": "Set up admin account",
+      "events": ["onAfterInstall"],
+      "script": "the-lounge/create_account.ts",
+      "entrypoint": "createAccount",
+      "timeout": 120,
+      "retries": 0
+    }
+  ]
+}

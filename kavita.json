@@ -6,7 +6,9 @@
     "changeLog": "Kavita opens ready, with your sign-in and your Books, Comics and Manga libraries."
   },
   "sign_in": {
-    "username": true
+    "username": true,
+    "email": true,
+    "existing": true
   },
   "requirements": {
     "locations": [
