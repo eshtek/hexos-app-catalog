@@ -172,6 +172,7 @@
       "id": "configure-nextcloud",
       "title": "Finish setting up Nextcloud",
       "description": "Waits for Nextcloud to finish its first start, which takes a few minutes.",
+      "summary": "Waits for Nextcloud to finish its first start, which takes a few minutes. Run it again if that wait ran out before Nextcloud was ready.",
       "events": [
         "onAfterInstall",
         "userAction"
