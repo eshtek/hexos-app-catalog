@@ -1,0 +1,18 @@
+{
+  "type": "collection",
+  "version": 1,
+  "internal": true,
+  "name": "Pelican game panel",
+  "description": "Run Minecraft, Valheim, Palworld and hundreds of other game servers from one website, each in its own container.",
+  "groups": [
+    {
+      "id": "panel",
+      "type": "fixed",
+      "title": "Game server panel",
+      "options": [
+        { "app": "pelican-panel", "summary": "The website" },
+        { "app": "pelican-wings", "summary": "Runs the game servers" }
+      ]
+    }
+  ]
+}
