@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookContext } from "./hook_context";
@@ -56,6 +56,20 @@ interface Options {
   /** HexOS kept no sign-in for the client, so it knows none that works. */
   unsaved?: boolean;
   sportarrDown?: boolean;
+  /**
+   * Sportarr mounts the Downloads location at /downloads and the client its own folder of it. What
+   * Sportarr sees of that folder: all of it; only an empty folder until it restarts; only an empty
+   * folder whatever happens; or nothing it can say.
+   */
+  downloads?: "visible" | "after restart" | "hidden" | "unlistable" | "shapeless";
+  /** What Sportarr's refusal says for a folder it can't find, when not its own "Directory does not exist". */
+  refusal?: string;
+  /** A second client installed beside the first, whose link runs at the same time. */
+  also?: ClientId;
+  /** The second client holds its first answer until the manager starts restarting. */
+  holdAlso?: boolean;
+  /** A box from before ctx.restartApp. */
+  noRestart?: boolean;
 }
 
 class Skipped extends Error {}
@@ -71,8 +85,44 @@ function dir(...parts: string[]) {
   return path;
 }
 
+/** The folder each client has made in its own folder of Downloads by the time it's linked. */
+const CLIENT_FOLDERS: Record<ClientId, string | undefined> = {
+  qbittorrent: undefined,
+  deluge: "/downloads/deluge/complete",
+  sabnzbd: "/downloads/sabnzbd/complete",
+  nzbget: "/downloads/nzbget/completed/sportarr",
+};
+
 function fakes(clientId: ClientId, options: Options = {}) {
   const takes = { username: SIGN_IN.username, ...(options.takes ?? SIGN_IN) };
+  const downloads = dir("Downloads");
+  const clients: ClientId[] = [clientId, ...(options.also ? [options.also] : [])];
+  const ownFolders = clients.map((id) => `/downloads/${id}`);
+  if (options.downloads) {
+    for (const id of clients) {
+      dir("Downloads", id);
+      for (const folder of [CLIENT_FOLDERS[id], id === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
+        if (folder) dir("Downloads", folder.slice("/downloads/".length));
+      }
+    }
+  }
+  let stale = options.downloads === "after restart" || options.downloads === "hidden";
+  const restarts: number[] = [];
+  const listings: string[] = [];
+  let restartingNow = false;
+  // Sportarr's /api/filesystem (RootFolderAndNotificationEndpoints at 4.1.11) refuses a folder it can't find
+  const listing = (path: string) => {
+    listings.push(path);
+    if (options.downloads === "unlistable") return Response.json({ error: "Access denied to this directory" }, { status: 400 });
+    if (options.downloads === "shapeless") return Response.json({ ok: true });
+    const hidden = stale && ownFolders.some((own) => path.startsWith(`${own}/`));
+    const local = join(downloads, path.slice("/downloads".length));
+    if (hidden || !path.startsWith("/downloads") || !existsSync(local)) {
+      return Response.json({ error: options.refusal ?? "Directory does not exist" }, { status: 400 });
+    }
+    const names = stale && ownFolders.includes(path) ? [] : readdirSync(local, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    return Response.json({ parent: path.slice(0, path.lastIndexOf("/")), directories: names.map((name) => ({ type: "folder", name, path: `${path}/${name}` })), files: null });
+  };
   const secrets: Record<ClientId, Record<string, string>> = {
     qbittorrent: { username: takes.username, password: takes.password },
     deluge: { password: takes.password },
@@ -87,12 +137,16 @@ function fakes(clientId: ClientId, options: Options = {}) {
 
   // Sportarr's test reaches the client at the address it's given with the secrets it's given
   const passes = (entry: Entry) =>
-    entry.type === TYPES[clientId] &&
-    entry.host === BOX &&
-    entry.port === PORTS[clientId] &&
-    Object.entries(secrets[clientId]).every(([field, value]) => entry[field as keyof Entry] === value);
+    clients.some(
+      (id) =>
+        entry.type === TYPES[id] &&
+        entry.host === BOX &&
+        entry.port === PORTS[id] &&
+        Object.entries(secrets[id]).every(([field, value]) => entry[field as keyof Entry] === value),
+    );
 
   const sportarr = (url: URL, method: string, body: Entry) => {
+    if (url.pathname === "/api/filesystem" && method === "GET") return listing(url.searchParams.get("path") ?? "");
     if (url.pathname === "/api/downloadclient" && method === "GET") return Response.json(entries.toSorted((a, b) => (a.priority ?? 1) - (b.priority ?? 1)));
     if (url.pathname === "/api/downloadclient/test") {
       return passes(body) ? Response.json({ success: true }) : Response.json({ success: false, message: "Connection failed" }, { status: 400 });
@@ -112,15 +166,15 @@ function fakes(clientId: ClientId, options: Options = {}) {
     throw new Error(`Unexpected Sportarr request: ${method} ${url.pathname}`);
   };
 
-  const client = (url: URL, init: RequestInit | undefined, body: { method?: string; params?: unknown[] } | undefined) => {
-    if (clientId === "qbittorrent") {
+  const client = (id: ClientId, url: URL, init: RequestInit | undefined, body: { method?: string; params?: unknown[] } | undefined) => {
+    if (id === "qbittorrent") {
       if (url.pathname === "/api/v2/app/version") return new Response("Forbidden", { status: 403 });
       if (url.pathname === "/api/v2/auth/login") {
         const form = new URLSearchParams(String(init?.body));
         return new Response(form.get("username") === takes.username && form.get("password") === takes.password ? "Ok." : "Fails.");
       }
     }
-    if (clientId === "deluge") {
+    if (id === "deluge") {
       const result: Record<string, unknown> = {
         "auth.login": body?.params?.[0] === takes.password,
         "web.connected": true,
@@ -128,18 +182,25 @@ function fakes(clientId: ClientId, options: Options = {}) {
       };
       if (body?.method && body.method in result) return Response.json({ result: result[body.method], error: null, id: 1 });
     }
-    if (clientId === "sabnzbd") {
+    if (id === "sabnzbd") {
       if (url.searchParams.get("apikey") !== SAB_KEY) return Response.json({ error: "API Key Incorrect" }, { status: 403 });
       const mode = url.searchParams.get("mode");
       if (mode === "get_config") return Response.json({ config: { misc: { download_dir: "/downloads/sabnzbd/incomplete", complete_dir: "/downloads/sabnzbd/complete" } } });
       if (mode === "get_cats") return Response.json({ categories: ["*", "sportarr"] });
     }
-    if (clientId === "nzbget") {
+    if (id === "nzbget") {
       const auth = Buffer.from(`${takes.username}:${takes.password}`).toString("base64");
       if (new Headers(init?.headers).get("Authorization") !== `Basic ${auth}`) return new Response(null, { status: 401 });
-      return Response.json({ result: [{ Name: "MainDir", Value: "/downloads/nzbget" }, { Name: "Category1.Name", Value: "sportarr" }], error: null });
+      return Response.json({
+        result: [
+          { Name: "MainDir", Value: "/downloads/nzbget" },
+          { Name: "DestDir", Value: "${MainDir}/completed" },
+          { Name: "Category1.Name", Value: "sportarr" },
+        ],
+        error: null,
+      });
     }
-    throw new Error(`Unexpected ${clientId} request: ${url.pathname}`);
+    throw new Error(`Unexpected ${id} request: ${url.pathname}`);
   };
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -147,20 +208,26 @@ function fakes(clientId: ClientId, options: Options = {}) {
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : undefined;
     if (url.hostname === BOX && Number(url.port) === SPORTARR.port) {
-      if (options.sportarrDown) throw new TypeError("fetch failed");
+      if (options.sportarrDown || restartingNow) throw new TypeError("fetch failed");
       if (url.pathname === "/ping") return Response.json({ status: "OK" });
       if (new Headers(init?.headers).get("X-Api-Key") !== SPORTARR.key) return new Response(null, { status: 401 });
       return sportarr(url, method, body);
     }
-    if (url.hostname === BOX && Number(url.port) === PORTS[clientId]) return client(url, init, body);
+    const target = clients.find((id) => Number(url.port) === PORTS[id]);
+    if (url.hostname === BOX && target === options.also && options.holdAlso) {
+      while (restarts.length === 0) await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    if (url.hostname === BOX && target) return client(target, url, init, body);
     if (live.has(url.host)) return new Response("a web page");
     throw new TypeError("fetch failed");
   }) as typeof fetch;
 
-  const clientConfig = dir(clientId, "config");
-  writeFileSync(join(clientConfig, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
-  writeFileSync(join(clientConfig, "nzbget.conf"), `ControlUsername=${takes.username}\nControlPassword=${takes.password}\n`);
-  writeFileSync(join(clientConfig, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  for (const id of clients) {
+    const config = dir(id, "config");
+    writeFileSync(join(config, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
+    writeFileSync(join(config, "nzbget.conf"), `ControlUsername=${takes.username}\nControlPassword=${takes.password}\n`);
+    writeFileSync(join(config, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  }
   if (options.takes && !options.unsaved && (clientId === "qbittorrent" || clientId === "deluge")) {
     // HexOS keeps the sign-in it gave the client when the owner chose none
     writeFileSync(join(dir(clientId, "config", "hexos"), "webui.json"), JSON.stringify(takes));
@@ -171,10 +238,32 @@ function fakes(clientId: ClientId, options: Options = {}) {
   const ctx = {
     resourceId: "sportarr",
     baseUrl: `http://${BOX}:${SPORTARR.port}`,
-    mounts: [{ containerPath: "/config", hostPath: "/mnt/pool/apps/sportarr/config", localPath: sportarrConfig }],
+    mounts: [
+      { containerPath: "/config", hostPath: "/mnt/pool/apps/sportarr/config", localPath: sportarrConfig },
+      ...(options.downloads ? [{ containerPath: "/downloads", hostPath: "/mnt/pool/Downloads", localPath: downloads }] : []),
+    ],
     signIn: options.takes ? undefined : SIGN_IN,
-    getInstalledAppUrl: async (app: string) => (app === clientId ? `http://${BOX}:${PORTS[clientId]}` : null),
-    getInstalledAppMounts: async () => [{ containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig }],
+    getInstalledAppUrl: async (app: string) => (clients.includes(app as ClientId) ? `http://${BOX}:${PORTS[app as ClientId]}` : null),
+    getInstalledAppMounts: async (app: string) => [
+      { containerPath: "/config", hostPath: `/mnt/pool/apps/${app}/config`, localPath: join(root, app, "config") },
+      ...(options.downloads && app !== "qbittorrent"
+        ? [{ containerPath: `/downloads/${app}`, hostPath: `/mnt/pool/Downloads/${app}`, localPath: join(downloads, app) }]
+        : []),
+    ],
+    ...(options.noRestart
+      ? {}
+      : {
+          restartApp: async () => {
+            restarts.push(listings.length);
+            // A redeploy takes a while, long enough for another link to find the same folder missing,
+            // and Sportarr answers nothing until it's back
+            restartingNow = true;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            restartingNow = false;
+            if (options.downloads === "after restart") stale = false;
+          },
+        }),
+    updateCheckpointMessage: async () => {},
     registerCheckpoints: async () => {},
     emitCheckpoint: async (id: string, message?: string) => {
       checkpoints.push({ id, message });
@@ -202,7 +291,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
       throw new Skipped(message);
     },
   } as unknown as HookContext;
-  return { ctx, entries: () => entries, questions, checkpoints };
+  return { ctx, entries: () => entries, questions, checkpoints, restarts, listings };
 }
 
 const links = { qbittorrent, deluge, sabnzbd, nzbget };
@@ -322,6 +411,80 @@ test("of two entries where nothing answers, the one holding this client's sign-i
 test("a Sportarr that isn't answering yet fails with a plain message before anything is changed", async () => {
   const { ctx } = fakes("qbittorrent", { sportarrDown: true });
   await expect(qbittorrent(ctx)).rejects.toThrow("Sportarr isn't answering yet. Try again once it has started.");
+});
+
+// A client installed after Sportarr started is a dataset TrueNAS mounts after Sportarr's bind mount
+// of Downloads was made, so Sportarr sees an empty folder there until it restarts. The link asks
+// Sportarr for the client's folder and restarts Sportarr once when it can't find it.
+for (const clientId of ["deluge", "sabnzbd", "nzbget"] as const) {
+  const folder = CLIENT_FOLDERS[clientId]!;
+
+  test(`${NAMES[clientId]}: a folder Sportarr can't see gets one restart and a second look, then the client is added`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "after restart" });
+    await links[clientId](ctx);
+    expect(restarts).toEqual([1]);
+    expect(listings).toEqual([folder, folder]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder Sportarr sees gets no restart`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "visible" });
+    await links[clientId](ctx);
+    expect(restarts).toEqual([]);
+    expect(listings).toEqual([folder]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder still missing after the restart fails the link with what to do, and the client isn't added`, async () => {
+    const { ctx, entries, restarts } = fakes(clientId, { downloads: "hidden" });
+    await expect(links[clientId](ctx)).rejects.toThrow(
+      `Sportarr still can't see ${NAMES[clientId]}'s downloads folder after HexOS restarted it. Stop Sportarr and start it again, then run Connect to ${NAMES[clientId]} again.`,
+    );
+    expect(restarts).toEqual([1]);
+    expect(entries()).toEqual([]);
+  });
+}
+
+test("Sportarr: a box that can't restart it fails the link with what to do", async () => {
+  const { ctx, entries } = fakes("nzbget", { downloads: "after restart", noRestart: true });
+  await expect(nzbget(ctx)).rejects.toThrow(
+    "Sportarr can't see NZBGet's downloads folder yet. Stop Sportarr and start it again, then run Connect to NZBGet again.",
+  );
+  expect(entries()).toEqual([]);
+});
+
+test("Sportarr: a refused listing that doesn't say the folder is missing isn't a reason to restart", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "unlistable" });
+  await nzbget(ctx);
+  expect(listings).toHaveLength(1);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+for (const [label, options] of [
+  ["a refusal that only sounds like a missing folder", { downloads: "hidden", refusal: "Drive does not exist" }],
+  ["an answer with no folder list", { downloads: "shapeless" }],
+] as const) {
+  test(`Sportarr: ${label} says nothing, so Sportarr isn't restarted and the client is added`, async () => {
+    const { ctx, entries, restarts } = fakes("nzbget", options);
+    await nzbget(ctx);
+    expect(restarts).toEqual([]);
+    expect(entries()).toHaveLength(1);
+  });
+}
+
+test("Sportarr: two links that find their folders missing at once share one restart", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget" });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
+});
+
+test("Sportarr: a link that reaches its look while another link restarts Sportarr waits for that restart, and doesn't restart it again", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget", holdAlso: true });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
 });
 
 // A client the owner already had keeps its sign-in (Aaron, 2026-11-08): the run's chosen sign-in is
