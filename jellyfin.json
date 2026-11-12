@@ -142,7 +142,7 @@
     {
       "id": "hardware-transcoding",
       "title": "Set up transcoding and remote streaming",
-      "summary": "Sets Jellyfin's video settings to match its graphics card, after a short test of the card. Also limits streams from outside your network to 20 Mbps, unless you set a limit.",
+      "summary": "Sets Jellyfin's video settings for its graphics card, or for none. Also limits streams from outside your network to 20 Mbps, unless you set a limit.",
       "events": [
         "onAfterInstall",
         "userAction"

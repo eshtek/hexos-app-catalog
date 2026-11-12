@@ -154,7 +154,7 @@ TrueNAS hands a container one NVIDIA card, or every Intel and AMD card at once. 
 
 Both keys are read from the catalog's current script, so changing them needs no new `script.version`. `bun run validate` refuses `gpu` without `$GPU_CONFIG()` in `app_values`, and a `gpu_hook` that names no such hook.
 
-On a server with a card the app can use, the hook has no row of its own. The Graphics card row says where the app's video settings stand and offers Check again, which runs the hook. The hook's `summary` is the tooltip on Check again, and the line under its own row on a server with no such card, so it has to read true with a card and without one. It also has to name anything else the hook does: Jellyfin's says it limits streams from outside the owner's network to 20 Mbps. See [A hook's row on the app's card](#a-hooks-row-on-the-apps-card).
+On a server with a card the app can use, the hook has no row of its own. The Graphics card row says whether HexOS has checked the app's video settings and offers Check again, which runs the hook. The hook's `summary` is the tooltip on Check again, and the line under its own row on a server with no such card, so it has to read true with a card and without one: Jellyfin's says "for its graphics card, or for none". It also has to name anything else the hook does: Jellyfin's says it limits streams from outside the owner's network to 20 Mbps. See [A hook's row on the app's card](#a-hooks-row-on-the-apps-card).
 
 ```json
 "requirements": {
