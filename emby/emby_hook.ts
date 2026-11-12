@@ -10,7 +10,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * as an administrator of its own beside the ones it has (or, when a user by that name exists, that
  * user gets the password and is made one), through an administrator's token from Emby's own
  * database, read-only, or the sign-in of an administrator the owner gives. Its server name and
- * libraries stay as they are. Run from the card with no sign-in chosen, it asks for one.
+ * libraries stay as they are. Run from the card with no sign-in chosen, it asks for one. A collection
+ * that brings in an Emby the owner already had hands it no sign-in to add but the administrator
+ * account the owner gave (`ctx.existingSignIns`), which it signs in with and changes in no way.
  */
 
 const DEVICE_ID = "hexos-emby-setup";
@@ -61,12 +63,19 @@ export async function afterInstall(ctx: HookContext) {
   await waitForWizard(ctx);
   await ctx.emitCheckpoint("embyReady");
 
+  const kept = ctx.keptApps?.includes(ctx.resourceId) === true;
   let token: string;
   if (await isWizardComplete(ctx)) {
-    token = await administrator(ctx);
-    await ctx.emitCheckpoint("wizardComplete", ctx.signIn ? "Your sign-in is an administrator" : "Already configured", 30);
+    token = kept ? await asOwnAdministrator(ctx) : await administrator(ctx);
+    await ctx.emitCheckpoint(
+      "wizardComplete",
+      kept ? "Signed in with your administrator" : ctx.signIn ? "Your sign-in is an administrator" : "Already configured",
+      30,
+    );
   } else {
-    const account = ctx.signIn ?? (await chooseSignIn(ctx));
+    // One the owner had but never finished setting up gets the account they gave, as its first
+    const given = kept && !ctx.refusedSignIns?.includes(ctx.resourceId) ? ctx.existingSignIns?.[ctx.resourceId] : undefined;
+    const account = ctx.signIn ?? (given?.username ? given : undefined) ?? (await chooseSignIn(ctx));
     await runWizard(ctx, account.username, account.password);
     token = await authenticate(ctx, account.username, account.password);
     await setServerName(ctx, token, SERVER_NAME);
@@ -96,6 +105,48 @@ function answered(answers: Record<string, unknown> | undefined): SignIn | undefi
   const username = typeof answers?.username === "string" ? answers.username.trim() : "";
   const password = typeof answers?.password === "string" ? answers.password : "";
   return username && password ? { username, password } : undefined;
+}
+
+/**
+ * A token of the owner's own administrator on an Emby they already had, tried once in the run (see
+ * `ctx.tryExistingSignIn`), or the step stops and says so, having changed nothing. With no account
+ * given, it asks for one as from the card.
+ */
+async function asOwnAdministrator(ctx: HookContext): Promise<string> {
+  const token = await ctx.tryExistingSignIn?.(ctx.resourceId, (account) => administratorToken(ctx, account), {
+    title: "Sign in to Emby",
+    description: "Emby refused the admin account you gave. Enter an administrator's username and password so HexOS can use it.",
+    username: true,
+    app: "Emby",
+  });
+  if (token === "refused") {
+    stop(ctx, "Emby refused the admin account you gave, or it isn't an administrator, so HexOS left Emby as it is. Run Pre-configure Emby from its Connections tab with an administrator's sign-in.");
+  }
+  return token ?? (await administrator(ctx));
+}
+
+/** An administrator's session for this account: undefined when Emby refuses it, or it isn't an administrator. */
+async function administratorToken(ctx: HookContext, account: SignIn): Promise<string | undefined> {
+  const resp = await fetch(api(ctx, "/Users/AuthenticateByName"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": CLIENT_HEADER },
+    body: JSON.stringify({ Username: account.username, Pw: account.password }),
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => undefined);
+  if (!resp) ctx.fail("Emby didn't answer. Try again once it's running.");
+  if (resp.status === 401 || resp.status === 403) {
+    await resp.body?.cancel();
+    return undefined;
+  }
+  if (!resp.ok) ctx.fail(`Emby didn't answer its sign-in (${resp.status}). Try again once it's running.`);
+  const data = await resp.json() as { AccessToken?: string; User?: { Policy?: { IsAdministrator?: boolean } } };
+  return data.AccessToken && data.User?.Policy?.IsAdministrator === true ? data.AccessToken : undefined;
+}
+
+/** Ends a step whose app refused the account the owner gave: trying again can't help. */
+function stop(ctx: HookContext, message: string): never {
+  if (ctx.skip) ctx.skip(message);
+  ctx.fail(message);
 }
 
 /** A fresh Emby's administrator, from the owner, when no sign-in came with the install. */
@@ -213,11 +264,11 @@ async function administrator(ctx: HookContext): Promise<string> {
     const given = answered(
       await ask(ctx, signInQuestions, {
         title: "Sign in to Emby",
-        description: `Enter the sign-in of an Emby administrator, so HexOS can add ${wanted.username} as one.`,
+        description: "Enter the sign-in of an Emby administrator, so HexOS can add the account you chose as one.",
       }),
     );
     const signedIn = given && (await signInAs(ctx, given));
-    if (!signedIn?.admin) ctx.fail(`HexOS needs an Emby administrator's sign-in to add ${wanted.username}. Run this again with one.`);
+    if (!signedIn?.admin) ctx.fail("HexOS needs an Emby administrator's sign-in to add the account you chose. Run this again with one.");
     acting = signedIn.token;
   }
 
@@ -230,8 +281,8 @@ async function administrator(ctx: HookContext): Promise<string> {
     await emby(ctx, acting, `/Users/${user.Id}/Policy`, { body: { ...user.Policy, IsAdministrator: true, IsDisabled: false } });
   }
   const now = await signInAs(ctx, wanted);
-  if (!now?.admin) ctx.fail(`Emby didn't make ${wanted.username} an administrator. Run this again.`);
-  ctx.log(`${wanted.username} is an Emby administrator`);
+  if (!now?.admin) ctx.fail("Emby didn't make the account you chose an administrator. Run this again.");
+  ctx.log("The account you chose is an Emby administrator");
   return now.token;
 }
 

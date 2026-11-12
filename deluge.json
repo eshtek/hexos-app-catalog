@@ -5,7 +5,8 @@
     "changeLog": "Uses the password you choose, and keeps downloads in progress apart from finished ones"
   },
   "sign_in": {
-    "username": false
+    "username": false,
+    "existing": true
   },
   "requirements": {
     "locations": [

@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.1",
-    "changeLog": "Context size offers 128K and 256K, which HexOS picks for a model on a card with room to spare"
+    "version": "1.0.2",
+    "changeLog": "Runs models on the graphics built into a Ryzen AI Max, which HexOS turns on through Integrated graphics"
   },
   "requirements": {
     "locations": [
@@ -83,6 +83,15 @@
       "source": "local-ai-models",
       "required": false,
       "default": ""
+    },
+    {
+      "question": "Integrated graphics",
+      "description": "HexOS sets this for graphics built into the processor. Leave it blank.",
+      "type": "text",
+      "key": "integrated_gpu",
+      "required": false,
+      "installonly": true,
+      "default": ""
     }
   ],
   "ensure_directories_exists": [
@@ -111,6 +120,10 @@
         {
           "name": "HEXOS_MODEL",
           "value": "$QUESTION(model)"
+        },
+        {
+          "name": "OLLAMA_IGPU_ENABLE",
+          "value": "$QUESTION(integrated_gpu)"
         }
       ]
     },

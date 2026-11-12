@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookContext } from "./hook_context";
@@ -67,6 +67,21 @@ interface Options {
   radarrDown?: boolean;
   /** Entries Radarr has but leaves out of its list, as one added while the link runs would be. */
   unlisted?: Stored[];
+  /**
+   * Radarr mounts the Downloads location at /downloads and the client its own folder of it, which
+   * holds what the client made there. What Radarr sees of that folder: all of it; only an empty
+   * folder until it restarts, as when the folder was mounted after Radarr started; only an empty
+   * folder whatever happens; or nothing it can say, its listing refused.
+   */
+  downloads?: "visible" | "after restart" | "hidden" | "unlistable" | "shapeless";
+  /** A second client installed beside the first, whose link runs at the same time. */
+  also?: ClientId;
+  /** The second client holds its first answer until the manager starts restarting. */
+  holdAlso?: boolean;
+  /** Radarr has no Downloads mount, as Prowlarr has none. */
+  noDownloadsMount?: boolean;
+  /** A box from before ctx.restartApp. */
+  noRestart?: boolean;
 }
 
 class Skipped extends Error {}
@@ -82,8 +97,33 @@ function dir(...parts: string[]) {
   return path;
 }
 
+/** The folder each client has made in its own folder of Downloads by the time it's linked. */
+const CLIENT_FOLDERS: Record<ClientId, string | undefined> = {
+  qbittorrent: undefined,
+  deluge: "/downloads/deluge/complete",
+  sabnzbd: "/downloads/sabnzbd/complete",
+  nzbget: "/downloads/nzbget/completed/Movies",
+};
+
 function fakes(clientId: ClientId, options: Options = {}) {
   const nzbgetSignIn = options.nzbgetSignIn ?? SIGN_IN;
+  const downloads = dir("Downloads");
+  const clients: ClientId[] = [clientId, ...(options.also ? [options.also] : [])];
+  const ownFolders = clients.map((id) => `/downloads/${id}`);
+  const ownFolder = ownFolders[0];
+  // The clients' folders on the box, as each client made them
+  if (options.downloads) {
+    for (const id of clients) {
+      dir("Downloads", id);
+      for (const folder of [CLIENT_FOLDERS[id], id === "deluge" ? "/downloads/deluge/incomplete" : undefined]) {
+        if (folder) dir("Downloads", folder.slice("/downloads/".length));
+      }
+    }
+  }
+  let stale = options.downloads === "after restart" || options.downloads === "hidden";
+  const restarts: number[] = [];
+  const listings: string[] = [];
+  let restartingNow = false;
   // What each of this box's clients takes, at its address
   const secrets: Record<ClientId, Record<string, string>> = {
     qbittorrent: SIGN_IN,
@@ -125,9 +165,32 @@ function fakes(clientId: ClientId, options: Options = {}) {
   const refuse = (errorMessage: string, propertyName = "") => Response.json([{ propertyName, errorMessage }], { status: 400 });
   const clash = (name: string, id?: number) => [...stored.values()].some((entry) => entry.name.toLowerCase() === name.toLowerCase() && entry.id !== id);
 
+  // FileSystemLookupService: a folder that isn't there lists as empty, as an empty one does
+  const listing = (query: string) => {
+    listings.push(query);
+    if (options.downloads === "unlistable") return new Response("Internal Server Error", { status: 500 });
+    // An answer that says nothing about folders, as a proxy's page or another app's would
+    if (options.downloads === "shapeless") return Response.json({ parent: "/downloads/" });
+    const path = query.replace(/\/+$/, "");
+    const hidden = stale && ownFolders.some((own) => path === own || path.startsWith(`${own}/`));
+    const local = join(downloads, path.slice("/downloads".length));
+    const names =
+      hidden || !path.startsWith("/downloads") || !existsSync(local)
+        ? []
+        : readdirSync(local, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name);
+    return Response.json({
+      parent: `${path.slice(0, path.lastIndexOf("/"))}/`,
+      directories: names.map((name) => ({ type: "folder", name, path: `${path}/${name}/` })),
+      files: [],
+    });
+  };
+
   const radarr = (url: URL, method: string, body: unknown) => {
     const path = url.pathname.replace("/api/v3", "");
     const force = url.searchParams.get("forceSave") === "true";
+    if (path === "/filesystem" && method === "GET") return listing(url.searchParams.get("path") ?? "");
     if (path === "/downloadclient" && method === "GET") return Response.json([...stored.values()].filter((e) => !unlisted.has(e.id)).map(masked));
     if (path === "/downloadclient/schema") {
       return Response.json(Object.keys(FIELDS).map((implementation) => ({ name: "", implementation, enable: true, priority: 1, fields: FIELDS[implementation].map((name) => ({ name, value: "" })) })));
@@ -173,12 +236,16 @@ function fakes(clientId: ClientId, options: Options = {}) {
     const method = init?.method ?? "GET";
     const body = typeof init?.body === "string" && init.body.startsWith("{") ? JSON.parse(init.body) : init?.body;
     if (url.hostname === BOX && Number(url.port) === RADARR.port) {
-      if (options.radarrDown) throw new TypeError("fetch failed");
+      if (options.radarrDown || restartingNow) throw new TypeError("fetch failed");
       if (url.pathname === "/ping") return Response.json({ status: "OK" });
       if (new Headers(init?.headers).get("X-Api-Key") !== RADARR.key) return new Response(null, { status: 401 });
       return radarr(url, method, body);
     }
-    if (url.hostname === BOX && Number(url.port) === PORTS[clientId]) return client(clientId, url, init, body);
+    const target = clients.find((id) => Number(url.port) === PORTS[id]);
+    if (url.hostname === BOX && target === options.also && options.holdAlso) {
+      while (restarts.length === 0) await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    if (url.hostname === BOX && target) return client(target, url, init, body);
     probes.push(url.host);
     if (live.has(url.host)) return new Response("a web page");
     throw new TypeError("fetch failed");
@@ -214,6 +281,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
       if (new Headers(init?.headers).get("Authorization") !== `Basic ${auth}`) return new Response(null, { status: 401 });
       const options = [
         { Name: "MainDir", Value: "/downloads/nzbget" },
+        { Name: "DestDir", Value: "${MainDir}/completed" },
         { Name: "Category1.Name", Value: "Movies" },
       ];
       return Response.json({ result: options, error: null });
@@ -222,10 +290,12 @@ function fakes(clientId: ClientId, options: Options = {}) {
   };
 
   // Each client's settings, where the link reads its key or sign-in
-  const clientConfig = dir(clientId, "config");
-  writeFileSync(join(clientConfig, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
-  writeFileSync(join(clientConfig, "nzbget.conf"), `ControlUsername=${nzbgetSignIn.username}\nControlPassword=${nzbgetSignIn.password}\n`);
-  writeFileSync(join(clientConfig, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  for (const id of clients) {
+    const config = dir(id, "config");
+    writeFileSync(join(config, "sabnzbd.ini"), `api_key = ${SAB_KEY}\n`);
+    writeFileSync(join(config, "nzbget.conf"), `ControlUsername=${nzbgetSignIn.username}\nControlPassword=${nzbgetSignIn.password}\n`);
+    writeFileSync(join(config, "core.conf"), `{"file": 1, "format": 1}{"enabled_plugins": ["Label"]}`);
+  }
   const radarrConfig = dir("radarr", "config");
   writeFileSync(join(radarrConfig, "config.xml"), `<Config><ApiKey>${RADARR.key}</ApiKey></Config>`);
 
@@ -233,10 +303,32 @@ function fakes(clientId: ClientId, options: Options = {}) {
     resourceId: "radarr",
     catalogAppId: "radarr",
     baseUrl: `http://${BOX}:${RADARR.port}`,
-    mounts: [{ containerPath: "/config", hostPath: "/mnt/pool/apps/radarr/config", localPath: radarrConfig }],
+    mounts: [
+      { containerPath: "/config", hostPath: "/mnt/pool/apps/radarr/config", localPath: radarrConfig },
+      ...(options.downloads && !options.noDownloadsMount ? [{ containerPath: "/downloads", hostPath: "/mnt/pool/Downloads", localPath: downloads }] : []),
+    ],
     signIn: SIGN_IN,
-    getInstalledAppUrl: async (app: string) => (app === clientId ? `http://${BOX}:${PORTS[clientId]}` : null),
-    getInstalledAppMounts: async () => [{ containerPath: "/config", hostPath: `/mnt/pool/apps/${clientId}/config`, localPath: clientConfig }],
+    getInstalledAppUrl: async (app: string) => (clients.includes(app as ClientId) ? `http://${BOX}:${PORTS[app as ClientId]}` : null),
+    getInstalledAppMounts: async (app: string) => [
+      { containerPath: "/config", hostPath: `/mnt/pool/apps/${app}/config`, localPath: join(root, app, "config") },
+      ...(options.downloads && app !== "qbittorrent"
+        ? [{ containerPath: `/downloads/${app}`, hostPath: `/mnt/pool/Downloads/${app}`, localPath: join(downloads, app) }]
+        : []),
+    ],
+    ...(options.noRestart
+      ? {}
+      : {
+          restartApp: async () => {
+            restarts.push(listings.length);
+            // A redeploy takes a while, long enough for another link to find the same folder missing,
+            // and Radarr answers nothing until it's back
+            restartingNow = true;
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            restartingNow = false;
+            if (options.downloads === "after restart") stale = false;
+          },
+        }),
+    updateCheckpointMessage: async () => {},
     registerCheckpoints: async () => {},
     emitCheckpoint: async (id: string, message?: string) => {
       checkpoints.push({ id, message });
@@ -265,7 +357,7 @@ function fakes(clientId: ClientId, options: Options = {}) {
     },
   } as unknown as HookContext;
   const entries = () => [...stored.values()];
-  return { ctx, entries, tests, questions, probes, checkpoints };
+  return { ctx, entries, tests, questions, probes, checkpoints, restarts, listings };
 }
 
 const links = { qbittorrent, deluge, sabnzbd, nzbget };
@@ -436,4 +528,191 @@ test("a second entry under the name that Radarr doesn't list yet is reported as 
 test("a Radarr that isn't answering yet fails with a plain message before anything is changed", async () => {
   const { ctx } = fakes("qbittorrent", { radarrDown: true });
   await expect(qbittorrent(ctx)).rejects.toThrow("Radarr isn't answering yet. Try again once it has started.");
+});
+
+// A client installed after Radarr started gets its folder of Downloads as a dataset of its own,
+// which TrueNAS mounts after Radarr's bind mount of Downloads was made. That mount passes nothing
+// on (rprivate), so Radarr sees only an empty folder there until it restarts, and reports the
+// client's downloads folder missing. The link asks Radarr what it sees, and restarts Radarr once.
+for (const clientId of ["deluge", "sabnzbd", "nzbget"] as const) {
+  const folder = CLIENT_FOLDERS[clientId]!;
+  const parent = folder.slice(0, folder.lastIndexOf("/") + 1);
+
+  test(`${NAMES[clientId]}: a folder Radarr can't see gets one restart and a second look, then the client is added`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "after restart" });
+    await links[clientId](ctx);
+    // Once, after the first look found nothing
+    expect(restarts).toEqual([1]);
+    expect(listings).toEqual([parent, parent]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder Radarr sees gets no restart`, async () => {
+    const { ctx, entries, restarts, listings } = fakes(clientId, { downloads: "visible" });
+    await links[clientId](ctx);
+    expect(restarts).toEqual([]);
+    expect(listings).toEqual([parent]);
+    expect(entries()).toHaveLength(1);
+  });
+
+  test(`${NAMES[clientId]}: a folder still missing after the restart fails the link with what to do, and the client isn't added`, async () => {
+    const { ctx, entries, restarts } = fakes(clientId, { downloads: "hidden" });
+    const run = links[clientId](ctx);
+    await expect(run).rejects.toThrow(
+      `Radarr still can't see ${NAMES[clientId]}'s downloads folder after HexOS restarted it. Stop Radarr and start it again, then run Connect to ${NAMES[clientId]} again.`,
+    );
+    await expect(run).rejects.not.toThrow(Skipped);
+    expect(restarts).toEqual([1]);
+    expect(entries()).toEqual([]);
+  });
+}
+
+test("a box that can't restart Radarr fails the link with what to do, and the client isn't added", async () => {
+  const { ctx, entries } = fakes("nzbget", { downloads: "after restart", noRestart: true });
+  await expect(nzbget(ctx)).rejects.toThrow(
+    "Radarr can't see NZBGet's downloads folder yet. Stop Radarr and start it again, then run Connect to NZBGet again.",
+  );
+  expect(entries()).toEqual([]);
+});
+
+test("a Radarr that can't list its folders isn't restarted, and the client is added", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "unlistable" });
+  await nzbget(ctx);
+  expect(listings).toHaveLength(1);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+test("a manager without the Downloads location, as Prowlarr is, is never asked or restarted", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "hidden", noDownloadsMount: true });
+  await nzbget(ctx);
+  expect(listings).toEqual([]);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+test("qBittorrent, whose folder Radarr mounts itself, is never asked about or restarted for", async () => {
+  const { ctx, entries, restarts, listings } = fakes("qbittorrent", { downloads: "hidden" });
+  await qbittorrent(ctx);
+  expect(listings).toEqual([]);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+test("an answer with no folder list says nothing, so Radarr isn't restarted and the client is added", async () => {
+  const { ctx, entries, restarts, listings } = fakes("nzbget", { downloads: "shapeless" });
+  await nzbget(ctx);
+  expect(listings).toHaveLength(1);
+  expect(restarts).toEqual([]);
+  expect(entries()).toHaveLength(1);
+});
+
+test("two links on one Radarr that find their folders missing at once share one restart", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget" });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
+});
+
+test("a link that reaches its look while another link restarts Radarr waits for that restart, and doesn't restart it again", async () => {
+  const { ctx, entries, restarts } = fakes("deluge", { downloads: "after restart", also: "nzbget", holdAlso: true });
+  await Promise.all([deluge(ctx), nzbget(ctx)]);
+  expect(restarts).toHaveLength(1);
+  expect(entries().map((entry) => entry.name).sort()).toEqual(["Deluge", "NZBGet"]);
+});
+
+// A client the owner already had keeps its sign-in (Aaron, 2026-11-08). The link never tries the
+// run's chosen sign-in against it, which it never took and which would count toward its lockout: the
+// manager gets the account the owner gave in the collection's walk, tried once in the whole run.
+const RUNS_OWN = { username: "admin", password: "the-runs-new-password" };
+
+/** Makes `ctx` a link into a kept client, `app` by the name it runs under, with the box's try-once. */
+function keptClient(
+  ctx: HookContext,
+  app: string,
+  run: { given?: { username: string; password: string }; refusedBefore?: boolean; linkedAs?: { catalogId: string } },
+) {
+  const seen = { refused: [] as string[], asked: 0 };
+  Object.assign(ctx, {
+    signIn: RUNS_OWN,
+    keptApps: [app],
+    ...(run.given ? { existingSignIns: { [app]: run.given } } : {}),
+    ...(run.linkedAs ? { linkedApp: (id: string) => (id === run.linkedAs?.catalogId ? { name: app, displayName: "Copy" } : null) } : {}),
+    tryExistingSignIn: async <T,>(name: string, signsIn: (account: { username: string; password: string }) => Promise<T | undefined>) => {
+      if (name !== app) throw new Error(`tried ${name}`);
+      if (run.refusedBefore) return "refused";
+      if (!run.given) return undefined;
+      const taken = await signsIn(run.given);
+      if (taken !== undefined) return taken;
+      seen.asked++;
+      seen.refused.push(name);
+      return "refused";
+    },
+  });
+  return seen;
+}
+
+/** The passwords qBittorrent was asked to sign in with, from any address. */
+function qbittorrentLogins() {
+  const logins: string[] = [];
+  const served = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/api/v2/auth/login") logins.push(new URLSearchParams(String(init?.body)).get("password") ?? "");
+    return served(input, init);
+  }) as typeof fetch;
+  return logins;
+}
+
+test("Deluge: a kept Deluge's own password is the one the manager gets, and the run's sign-in is never tried", async () => {
+  const { ctx, entries, questions } = fakes("deluge");
+  keptClient(ctx, "deluge", { given: { username: "", password: SIGN_IN.password } });
+  await deluge(ctx);
+  expect(entries()[0]).toMatchObject({ name: "Deluge", values: { password: SIGN_IN.password } });
+  expect(questions).toHaveLength(0);
+});
+
+test("Deluge: a link to a later copy the owner kept takes that copy's own password, by the name it runs under", async () => {
+  const { ctx, entries } = fakes("deluge");
+  keptClient(ctx, "deluge-2", { given: { username: "", password: SIGN_IN.password }, linkedAs: { catalogId: "deluge" } });
+  await deluge(ctx);
+  expect(entries()[0]).toMatchObject({ values: { password: SIGN_IN.password } });
+});
+
+test("Deluge: a kept Deluge's refused password stops the link, with nothing else tried", async () => {
+  const { ctx, entries, questions } = fakes("deluge");
+  const seen = keptClient(ctx, "deluge", { given: { username: "", password: "a typo" } });
+  await expect(deluge(ctx)).rejects.toThrow(Skipped);
+  expect(seen.refused).toEqual(["deluge"]);
+  expect(entries()).toEqual([]);
+  expect(questions).toHaveLength(0);
+});
+
+test("qBittorrent: a kept qBittorrent's own account is the one the manager gets, and the run's sign-in is never tried", async () => {
+  const { ctx, entries, questions } = fakes("qbittorrent");
+  keptClient(ctx, "qbittorrent", { given: SIGN_IN });
+  const logins = qbittorrentLogins();
+  await qbittorrent(ctx);
+  expect(logins).not.toContain(RUNS_OWN.password);
+  expect(logins.filter((password) => password !== SIGN_IN.password)).toEqual([]);
+  expect(entries()[0]).toMatchObject({ values: SIGN_IN });
+  expect(questions).toHaveLength(0);
+});
+
+test("qBittorrent: a kept qBittorrent's refused account is tried once, then the link stops without guessing", async () => {
+  const { ctx, entries } = fakes("qbittorrent");
+  const seen = keptClient(ctx, "qbittorrent", { given: { username: SIGN_IN.username, password: "a typo" } });
+  const logins = qbittorrentLogins();
+  await expect(qbittorrent(ctx)).rejects.toThrow(Skipped);
+  expect(logins).toEqual(["a typo"]);
+  expect(seen.refused).toEqual(["qbittorrent"]);
+  expect(entries()).toEqual([]);
+});
+
+test("qBittorrent: an account an earlier hook of the run found refused isn't tried at all", async () => {
+  const { ctx } = fakes("qbittorrent");
+  keptClient(ctx, "qbittorrent", { refusedBefore: true });
+  const logins = qbittorrentLogins();
+  await expect(qbittorrent(ctx)).rejects.toThrow(Skipped);
+  expect(logins).toEqual([]);
 });

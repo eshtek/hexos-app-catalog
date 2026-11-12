@@ -1,5 +1,5 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
-import { chownSync, mkdirSync, readFileSync } from "node:fs";
+import { chownSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
@@ -14,11 +14,15 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  *
  * Sportarr sees the whole Downloads location at /downloads and qBittorrent's folder at
  * /config/Downloads, the paths each client keeps its downloads at in its own container. So a
- * finished download is where Sportarr looks, with no remote path mapping.
+ * finished download is where Sportarr looks, with no remote path mapping. A client installed after
+ * Sportarr started is a dataset TrueNAS mounts after Sportarr's bind mount of Downloads was made,
+ * which passes no later mount on (rprivate), so Sportarr sees an empty folder there until it
+ * restarts. The link asks Sportarr for a folder the client has made, and restarts Sportarr once
+ * when it can't find it.
  *
- * The client's sign-in comes in the same order as for the arr apps: the one the owner chose for the
- * install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
- * default, and the owner is asked last. Run again, a link puts back how Sportarr reaches the client
+ * The client's sign-in comes in the same order as for the arr apps: a kept Deluge's own password
+ * (`ctx.existingSignIns`), the one the owner chose for the install or collection (`ctx.signIn`), else
+ * the one in the client's own settings, else HexOS's default, and the owner is asked last. Run again, a link puts back how Sportarr reaches the client
  * and its sign-in, and fills the category only when the owner left it empty.
  *
  * Sportarr gives a download to the first client it has that's on, so an entry of the same kind it
@@ -70,6 +74,8 @@ interface ClientPlan {
   lockout?: string;
   /** Sign-ins many of these clients have, which say nothing about whose an entry is: the client's own default and HexOS's. */
   shared?: Fields[];
+  /** A folder the client has made in its own folder of Downloads, at the path Sportarr sees it at. */
+  folder?: string;
 }
 
 interface Client {
@@ -158,6 +164,7 @@ async function link(ctx: HookContext, appId: ClientId, name: string, prepare: (c
   await ctx.emitCheckpoint("locate");
 
   const plan = await prepare(client);
+  if (plan.folder) await seeClientFolder(ctx, apiKey, client, name, plan.folder);
   await ctx.emitCheckpoint("prepare");
 
   // A sign-in HexOS just signed in to the client with, which also says whose an entry is
@@ -258,6 +265,86 @@ async function link(ctx: HookContext, appId: ClientId, name: string, prepare: (c
 }
 
 /**
+ * Whether Sportarr sees a folder: its /api/filesystem lists one it finds and refuses one it doesn't
+ * with "Directory does not exist" (RootFolderAndNotificationEndpoints at 4.1.11). Undefined when it
+ * refuses with anything else.
+ */
+async function sportarrSees(ctx: HookContext, apiKey: string, folder: string): Promise<boolean | undefined> {
+  return sportarrApi(ctx, apiKey, `/filesystem?${new URLSearchParams({ path: folder })}`).then(
+    () => true,
+    (error: unknown) => (error instanceof Error && error.message === "Directory does not exist" ? false : undefined),
+  );
+}
+
+/**
+ * A restart of Sportarr in flight. Sportarr's links all run in this one
+ * module, and two of them may run at once from its card, so a link that finds a folder missing while
+ * another restarts Sportarr waits for that restart rather than queue a second one (app.redeploy
+ * takes a lock per app), which would stop Sportarr under the other link.
+ */
+const restarting = new Map<string, Promise<{ refused?: unknown; answered: boolean }>>();
+
+/** Restarts Sportarr once for every link that needs it now, and waits until it answers again. */
+function restartSportarr(ctx: HookContext) {
+  const key = ctx.resourceId;
+  const running = restarting.get(key);
+  if (running) return running;
+  const restart = (async () => {
+    const refused = await ctx.restartApp?.().then(
+      () => undefined,
+      (error: unknown) => error ?? new Error("The restart failed"),
+    );
+    if (refused !== undefined) return { refused, answered: false };
+    return { answered: await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 60) };
+  })().finally(() => {
+    restarting.delete(key);
+  });
+  restarting.set(key, restart);
+  return restart;
+}
+
+/**
+ * Makes sure Sportarr sees the client's folder, restarting Sportarr once when it doesn't: a restart
+ * mounts Downloads again, with the client's folder in it. Only Sportarr restarts, never the client.
+ * A Sportarr without Downloads, a folder the box doesn't have, and a Sportarr that can't say what it
+ * sees are left as they are.
+ */
+async function seeClientFolder(ctx: HookContext, apiKey: string, client: Client, name: string, path: string) {
+  const folder = path.replace(/\/+/g, "/").replace(/(.)\/$/, "$1");
+  if (!ctx.mounts.some((m) => m.containerPath === "/downloads")) return;
+  const own = client.mounts
+    .filter((m) => m.containerPath && (folder === m.containerPath || folder.startsWith(`${m.containerPath}/`)))
+    .sort((a, b) => (b.containerPath?.length ?? 0) - (a.containerPath?.length ?? 0))[0];
+  if (!own?.containerPath || !existsSync(`${own.localPath}${folder.slice(own.containerPath.length)}`)) return;
+
+  // A restart another link started may be all this one needs, so look once it's done
+  await restarting.get(ctx.resourceId);
+  const sees = await sportarrSees(ctx, apiKey, folder);
+  if (sees === undefined) ctx.log(`${MANAGER} couldn't look at ${folder}, so HexOS didn't check it sees ${name}'s folder`);
+  if (sees !== false) return;
+
+  const context = [{ label: "Folder", value: folder }];
+  const stuck = `${MANAGER} can't see ${name}'s downloads folder yet. Stop ${MANAGER} and start it again, then run Connect to ${name} again.`;
+  if (typeof ctx.restartApp !== "function") ctx.fail(stuck, context);
+  await ctx.updateCheckpointMessage("prepare", `Restarting ${MANAGER} so it sees ${name}'s downloads folder`);
+  const { refused, answered } = await restartSportarr(ctx);
+  if (refused !== undefined) ctx.fail(stuck, [...context, { label: "Reason", value: refused instanceof Error ? refused.message : String(refused) }]);
+  if (!answered) ctx.fail(`${MANAGER} didn't answer after HexOS restarted it. Try again once it has started.`);
+  // Its API answers a little after its port does
+  let after: boolean | undefined;
+  for (let attempt = 0; attempt < 30 && after === undefined; attempt++) {
+    after = await sportarrSees(ctx, apiKey, folder);
+    if (after === undefined) await ctx.sleep(1_000);
+  }
+  if (!after) {
+    ctx.fail(
+      `${MANAGER} still can't see ${name}'s downloads folder after HexOS restarted it. Stop ${MANAGER} and start it again, then run Connect to ${name} again.`,
+      context,
+    );
+  }
+}
+
+/**
  * Whether the owner wants Sportarr's entry moved to this client, once nothing answers at its address.
  * False when they say no, skip the question, or this HexOS can't ask.
  */
@@ -332,6 +419,21 @@ async function qbittorrentOpen(url: string): Promise<boolean> {
   return response?.status === 200;
 }
 
+/** Whether qBittorrent's WebUI answers at all: a failed sign-in is a refusal only when it does. */
+async function qbittorrentAnswers(url: string): Promise<boolean> {
+  const response = await fetch(`${url}/api/v2/app/version`, { headers: qbittorrentHeaders(url), signal: AbortSignal.timeout(10_000) }).catch(
+    () => undefined,
+  );
+  await response?.body?.cancel();
+  return response !== undefined;
+}
+
+/** Ends a link whose client refused the account the owner gave for it: trying again can't help. */
+function stopRefused(ctx: HookContext, message: string): never {
+  if (ctx.skip) ctx.skip(message);
+  ctx.fail(message);
+}
+
 export const qbittorrent = (ctx: HookContext) =>
   link(ctx, "qbittorrent", "qBittorrent", async ({ url, mounts }) => {
     // A download in progress kept apart from the finished ones, when qBittorrent lets HexOS in to say so
@@ -363,6 +465,27 @@ export const qbittorrent = (ctx: HookContext) =>
       lockout: `qBittorrent is locking ${MANAGER} out for now after sign-ins with an old password failed. ${MANAGER} has the new sign-in and connects on its own within the hour.`,
       signIn: {
         known: async () => {
+          // A qBittorrent the owner already had: the account they gave, tried once in the run. The
+          // run's sign-in never is, since it never took it and each refusal counts toward its lockout
+          const name = ctx.linkedApp?.("qbittorrent")?.name ?? "qbittorrent";
+          if (ctx.keptApps?.includes(name)) {
+            const own = await ctx.tryExistingSignIn?.(
+              name,
+              async (account) => {
+                if (await qbittorrentSignsIn(url, account)) return account;
+                if (!(await qbittorrentAnswers(url))) ctx.fail("HexOS couldn't reach qBittorrent. Try again once it's running.");
+                return undefined;
+              },
+              {
+                title: "Sign in to qBittorrent",
+                description: "qBittorrent refused the account you gave. Enter it again so HexOS can use it.",
+                username: true,
+                app: "qBittorrent",
+              },
+            );
+            if (own === "refused") stopRefused(ctx, `qBittorrent refused the account you gave, so ${MANAGER} wasn't connected to it.`);
+            return own ? { username: own.username, password: own.password } : undefined;
+          }
           for (const candidate of [ctx.signIn, saved]) {
             if (candidate && (await qbittorrentSignsIn(url, candidate))) {
               return { username: candidate.username, password: candidate.password };
@@ -434,10 +557,23 @@ export const deluge = (ctx: HookContext) =>
         ]),
       );
     let password: string | undefined;
-    for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
-      if (candidate && (await signsIn(candidate))) {
-        password = candidate;
-        break;
+    const name = ctx.linkedApp?.("deluge")?.name ?? "deluge";
+    if (ctx.keptApps?.includes(name)) {
+      // A Deluge the owner already had: the password they gave, tried once in the run, and no guesses
+      const own = await ctx.tryExistingSignIn?.(name, async (account) => ((await signsIn(account.password)) ? account.password : undefined), {
+        title: "Sign in to Deluge",
+        description: "Deluge refused the password you gave. Enter it again so HexOS can use it.",
+        username: false,
+        app: "Deluge",
+      });
+      if (own === "refused") stopRefused(ctx, `Deluge refused the password you gave, so ${MANAGER} wasn't connected to it.`);
+      password = own;
+    } else {
+      for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
+        if (candidate && (await signsIn(candidate))) {
+          password = candidate;
+          break;
+        }
       }
     }
     if (!password) {
@@ -482,10 +618,20 @@ export const deluge = (ctx: HookContext) =>
       }
     }
 
+    // Deluge makes its folders at its first download (deluge/configure.ts sets them), so they're made
+    // now, as the links from the other managers make them, for Sportarr to be checked for one
+    const downloads = mounts.find((m) => m.containerPath === "/downloads/deluge");
+    if (downloads) {
+      for (const folder of ["incomplete", "complete"]) {
+        const local = `${downloads.localPath}/${folder}`;
+        if (mkdirSync(local, { recursive: true })) chownSync(local, APPS_UID, APPS_UID);
+      }
+    }
+
     const signIn = { password };
     // Deluge's own and HexOS's (deluge/seed_webui.ts)
     const shared = [{ password: DELUGE_STOCK_PASSWORD }, { password: "admin" }];
-    return { name: "Deluge", signIn: { known: async () => signIn, ask: async () => signIn }, shared };
+    return { name: "Deluge", signIn: { known: async () => signIn, ask: async () => signIn }, shared, folder: "/downloads/deluge/complete" };
   });
 
 // --- SABnzbd -----------------------------------------------------------------
@@ -514,14 +660,18 @@ export const sabnzbd = (ctx: HookContext) =>
     if (!apiKey) ctx.fail("HexOS couldn't read SABnzbd's API key yet. Try again once it has started.");
     // Listing the categories is what makes SABnzbd's own (movies, tv, audio, software) the first time
     const categories = async () => (await sabnzbdApi<{ categories: string[] }>(url, apiKey, { mode: "get_cats" })).categories;
+    // Where a category with no folder of its own finishes, which SABnzbd makes as it starts (cfg.py)
+    let completeDir: string | undefined;
     try {
       const { misc } = (await sabnzbdApi<{ config: { misc: Record<string, unknown> } }>(url, apiKey, { mode: "get_config", section: "misc" })).config;
       // A SABnzbd HexOS didn't set up finishes downloads where Sportarr can see them
       for (const [keyword, stock] of Object.entries(SABNZBD_STOCK_FOLDERS) as Array<[keyof typeof SABNZBD_FOLDERS, string]>) {
         if (misc[keyword] === stock) {
           await sabnzbdApi(url, apiKey, { mode: "set_config", section: "misc", keyword, value: SABNZBD_FOLDERS[keyword] });
+          misc[keyword] = SABNZBD_FOLDERS[keyword];
         }
       }
+      if (typeof misc.complete_dir === "string") completeDir = misc.complete_dir.replace(/\/+$/, "");
       if (!(await categories()).includes(CATEGORY)) {
         await sabnzbdApi(url, apiKey, { mode: "set_config", section: "categories", keyword: CATEGORY });
       }
@@ -532,7 +682,7 @@ export const sabnzbd = (ctx: HookContext) =>
     }
     if (!(await categories()).includes(CATEGORY)) ctx.fail(`SABnzbd didn't make its ${CATEGORY} category`);
     const signIn = { apiKey };
-    return { name: "SABnzbd", signIn: { known: async () => signIn, ask: async () => signIn } };
+    return { name: "SABnzbd", signIn: { known: async () => signIn, ask: async () => signIn }, folder: completeDir };
   });
 
 // --- NZBGet ------------------------------------------------------------------
@@ -568,9 +718,10 @@ async function nzbgetApi<T>(url: string, signIn: { username: string; password: s
 
 /**
  * NZBGet makes a category's folder at its first download, and until then a manager's health check
- * says the folder is missing. It's made now, worked out as NZBGet works it out.
+ * says the folder is missing. It's made now, worked out as NZBGet works it out, and returned when
+ * it's in NZBGet's own folder of Downloads.
  */
-async function makeCategoryFolder(url: string, signIn: { username: string; password: string }, mounts: ContextMount[]) {
+async function makeCategoryFolder(url: string, signIn: { username: string; password: string }, mounts: ContextMount[]): Promise<string | undefined> {
   const active = await nzbgetApi<NzbgetOption[]>(url, signIn, "config");
   const valueOf = (name: string) => active.find((option) => option.Name === name)?.Value ?? "";
   const index = active.find((option) => /^Category\d+\.Name$/.test(option.Name) && option.Value === CATEGORY)?.Name.match(/\d+/)?.[0];
@@ -580,13 +731,15 @@ async function makeCategoryFolder(url: string, signIn: { username: string; passw
     if (valueOf("AppendCategoryDir") !== "no") folder = `${folder}/${CATEGORY}`;
   }
   const downloads = mounts.find((m) => m.containerPath === NZBGET_MAIN_DIR);
-  if (!downloads || !folder.startsWith(`${NZBGET_MAIN_DIR}/`)) return;
+  if (!downloads || !folder.startsWith(`${NZBGET_MAIN_DIR}/`)) return undefined;
   const local = `${downloads.localPath}${folder.slice(NZBGET_MAIN_DIR.length)}`;
   const first = mkdirSync(local, { recursive: true });
-  if (!first) return;
-  for (let dir = local; dir.length >= first.length; dir = dir.slice(0, dir.lastIndexOf("/"))) {
-    chownSync(dir, APPS_UID, APPS_UID);
+  if (first) {
+    for (let dir = local; dir.length >= first.length; dir = dir.slice(0, dir.lastIndexOf("/"))) {
+      chownSync(dir, APPS_UID, APPS_UID);
+    }
   }
+  return folder;
 }
 
 export const nzbget = (ctx: HookContext) =>
@@ -597,6 +750,7 @@ export const nzbget = (ctx: HookContext) =>
       username: conf.match(/^ControlUsername=(.*)$/m)?.[1] ?? NZBGET_STOCK.username,
       password: conf.match(/^ControlPassword=(.*)$/m)?.[1] ?? NZBGET_STOCK.password,
     };
+    let folder: string | undefined;
     try {
       const options = await nzbgetApi<NzbgetOption[]>(url, signIn, "loadconfig");
       const changes: NzbgetOption[] = [];
@@ -627,7 +781,7 @@ export const nzbget = (ctx: HookContext) =>
         );
         if (!taken) throw new Error("NZBGet didn't take its new settings");
       }
-      await makeCategoryFolder(url, signIn, mounts);
+      folder = await makeCategoryFolder(url, signIn, mounts);
     } catch (error) {
       ctx.fail(`HexOS couldn't get NZBGet ready for ${MANAGER}. Try again once it's running.`, [
         { label: "Reason", value: error instanceof Error ? error.message : String(error) },
@@ -640,5 +794,5 @@ export const nzbget = (ctx: HookContext) =>
       { username: NZBGET_STOCK.username, password: NZBGET_STOCK.password },
       { username: "admin", password: "admin" },
     ];
-    return { name: "NZBGet", signIn: { known: async () => current, ask: async () => current }, shared };
+    return { name: "NZBGet", signIn: { known: async () => current, ask: async () => current }, shared, folder };
   });
