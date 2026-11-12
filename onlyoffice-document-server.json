@@ -2,8 +2,8 @@
   "version": 6,
   "internal": true,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: edits documents inside OpenCloud over https, with nothing to copy"
+    "version": "1.0.1",
+    "changeLog": "ONLYOFFICE may fetch documents from this server's own address, which version 10 refuses until it is named"
   },
   "requirements": {
     "locations": [
@@ -50,6 +50,10 @@
         {
           "name": "USE_UNAUTHORIZED_STORAGE",
           "value": "true"
+        },
+        {
+          "name": "IP_FILTER_RULES",
+          "value": "allow $SERVER_LAN_IP"
         }
       ]
     },

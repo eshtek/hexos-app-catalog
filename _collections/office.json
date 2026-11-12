@@ -6,18 +6,71 @@
   "image": "_collections/office.jpg",
   "groups": [
     {
-      "id": "suite",
-      "type": "fixed",
-      "title": "Your office",
-      "description": "Your files, with documents you can edit together in the browser.",
+      "id": "files",
+      "type": "single",
+      "title": "Your files",
+      "description": "Where your files live. Both sync to your devices and share with the people you choose.",
       "options": [
         {
           "app": "nextcloud",
-          "core": true
+          "core": true,
+          "default": true,
+          "summary": "The most add-ons, with a database behind it"
         },
         {
+          "app": "opencloud",
+          "core": true,
+          "summary": "Lighter, with files kept as plain folders in Documents",
+          "answers": {
+            "search": false,
+            "calendars": true,
+            "address": "https://$SERVER_LAN_IP:$PORT(30134)",
+            "app_drawio": true,
+            "app_excalidraw": false,
+            "app_unzip": false,
+            "app_importer": false,
+            "app_external_sites": false,
+            "app_json_viewer": false,
+            "app_maps": false,
+            "app_cast": false,
+            "app_pastebin": false,
+            "app_progress_bars": false,
+            "app_calculator": false,
+            "app_arcade": false,
+            "app_apollon": false,
+            "app_bpmn": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "editor",
+      "type": "single",
+      "title": "Document editor",
+      "description": "Edits documents together in the browser, inside your files app.",
+      "options": [
+        {
           "app": "collabora",
-          "core": true
+          "core": true,
+          "summary": "Made for Nextcloud",
+          "requires": [
+            "nextcloud"
+          ]
+        },
+        {
+          "app": "onlyoffice-document-server",
+          "core": true,
+          "summary": "Closest to Microsoft Office",
+          "requires": [
+            "opencloud"
+          ]
+        },
+        {
+          "app": "eurooffice-document-server",
+          "summary": "A European fork of ONLYOFFICE",
+          "requires": [
+            "opencloud"
+          ]
         }
       ]
     },
@@ -52,15 +105,24 @@
       "options": [
         {
           "app": "paperless-ngx",
-          "summary": "Scanned documents"
+          "summary": "Scanned documents",
+          "requires": [
+            "nextcloud"
+          ]
         },
         {
           "app": "languagetool",
-          "summary": "Spelling and grammar"
+          "summary": "Spelling and grammar",
+          "requires": [
+            "collabora"
+          ]
         },
         {
           "app": "drawio",
-          "summary": "Diagrams"
+          "summary": "Diagrams",
+          "requires": [
+            "nextcloud"
+          ]
         }
       ]
     }
