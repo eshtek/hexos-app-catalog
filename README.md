@@ -62,6 +62,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Pelican Panel](pelican-panel.json) | Game server panel; its game servers run in Pelican Wings |
 | [Pelican Wings](pelican-wings.json) | Runs Pelican's game servers, on ports 27200 to 27219 |
 | [Plex](plex.json) | Media server with Plex Pass support |
+| [Portainer](portainer.json) | Docker container management |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |
 | [Project Zomboid](project-zomboid.json) | Zombie survival game server |
