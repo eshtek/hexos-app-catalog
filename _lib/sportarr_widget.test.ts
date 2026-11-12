@@ -406,6 +406,39 @@ describe("run", () => {
     expect(first?.subtitle?.startsWith("Next: UFC 334 Gane vs Hokit")).toBe(true);
     expect(first?.image).toBeTruthy();
   });
+  test("with nothing on this week and nothing downloading, the card sends no fields and stays plain", async () => {
+    const idle = { week: [], queue: () => answer([]), stats: () => answer({ queued: 0, downloaded: 0, wanted: 0 }) };
+    spy = spyOn(globalThis, "fetch").mockImplementation(fake(idle) as typeof fetch);
+    expect(await run(context(configDir()), MONDAY_EVENING)).toEqual({ fields: {} });
+    // A library with files in it and an event past the week don't open the card either
+    spy.mockRestore();
+    fetched.length = 0;
+    spy = spyOn(globalThis, "fetch").mockImplementation(
+      fake({ ...idle, later: tagged([NEXT_AFTER_WEEK], "idle"), stats: () => answer({ queued: 0, downloaded: 40, wanted: 3 }) }) as typeof fetch,
+    );
+    expect(await run(context(configDir()), MONDAY_EVENING)).toEqual({ fields: {} });
+    expect(fetched.filter((url) => url.includes("/api/calendar")).length).toBe(1);
+  });
+  test("a download with nothing on this week still opens the card", async () => {
+    spy = spyOn(globalThis, "fetch").mockImplementation(
+      fake({ week: [], later: [], stats: () => answer({ queued: 0 }) }) as typeof fetch,
+    );
+    const result = await run(context(configDir()), MONDAY_EVENING);
+    expect(entriesOf(result)[0]?.title).toBe("Nothing monitored in the next 7 days");
+    expect(entriesOf(result, "queue").length).toBeGreaterThan(0);
+    // The stats alone say something is queued when the queue call fails
+    spy.mockRestore();
+    spy = spyOn(globalThis, "fetch").mockImplementation(
+      fake({ week: [], later: [], queue: () => new Response("", { status: 500 }), stats: () => answer({ queued: 2 }) }) as typeof fetch,
+    );
+    expect((await run(context(configDir()), MONDAY_EVENING)).fields?.queued).toEqual({ type: "stat", label: "In queue", value: "2" });
+  });
+  test("an event this week opens the card with nothing downloading", async () => {
+    spy = spyOn(globalThis, "fetch").mockImplementation(
+      fake({ week: tagged(WEEK, "busy"), queue: () => answer([]), stats: () => answer({ queued: 0 }) }) as typeof fetch,
+    );
+    expect(entriesOf(await run(context(configDir()), MONDAY_EVENING)).length).toBeGreaterThan(0);
+  });
   test("every running event shows first, soonest start first, and the list stays at six", async () => {
     const at = new Date("2026-11-08T17:30:00Z");
     const ufc = WEEK[2].leagueLogoUrl;
