@@ -151,6 +151,13 @@
           ]
         },
         {
+          "app": "nevu",
+          "summary": "A new look for Plex in your browser",
+          "requires": [
+            "plex"
+          ]
+        },
+        {
           "app": "jellystat",
           "summary": "Watch statistics",
           "requires": [

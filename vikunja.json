@@ -1,6 +1,5 @@
 {
   "version": 5,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial"

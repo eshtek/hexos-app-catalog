@@ -1,9 +1,8 @@
 {
-  "version": 5,
-  "internal": true,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial script"
+    "version": "1.1.0",
+    "changeLog": "Connect to Plex points Nevu at the Plex server on this box, wherever its port is"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -36,5 +35,35 @@
         "memory": "$MEMORY(15%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "connect-plex",
+      "title": "Connect to Plex",
+      "description": "Lets Nevu show what's on this Plex server.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "plex"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nevu"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nevu/connect_plex.ts",
+      "entrypoint": "run",
+      "timeout": 120,
+      "retries": 0
+    }
+  ]
 }
