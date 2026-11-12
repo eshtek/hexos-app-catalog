@@ -134,7 +134,7 @@ export async function run(ctx: HookContext) {
   const url = await ctx.getInstalledAppUrl("ollama");
   if (!url) ctx.fail("Ollama isn't installed, or HexOS can't find its port");
   const { model, contextLength } = await ollamaSettings(ctx, url);
-  if (!model) ctx.fail("Ollama has no model yet. Choose one on its Connections tab, then run this again.");
+  if (!model) ctx.fail("Ollama has no model yet. Open Ollama in HexOS and run Choose a model, then run this again.");
   const data = ctx.mounts.find((mount) => mount.containerPath === "/data");
   if (!data) ctx.fail("HexOS couldn't find OpenCode's settings folder");
   await ctx.emitCheckpoint("locate");

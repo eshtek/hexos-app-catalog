@@ -258,7 +258,7 @@ async function askSignIn(ctx: HookContext, description: string): Promise<{ sessi
   const session: Session = { base: ctx.baseUrl };
   const signedIn = await act(session, "/auth/login", given);
   if (signedIn.type !== "redirect" || !session.cookie) {
-    ctx.fail("Profilarr didn't accept that username and password. Run this again from Profilarr's Connections tab.");
+    ctx.fail("Profilarr didn't accept that username and password. Run this again to enter them once more.");
   }
   return { session, with: given };
 }
@@ -317,7 +317,7 @@ async function signIn(ctx: HookContext): Promise<SignIn | undefined> {
       },
     );
     if (own === "refused") {
-      const message = "Profilarr refused the account you gave, so HexOS left Profilarr as it is. Run this again from Profilarr's Connections tab once the run ends.";
+      const message = "Profilarr refused the account you gave, so HexOS left Profilarr as it is. Run this again once the run ends.";
       if (ctx.skip) ctx.skip(message);
       ctx.fail(message);
     }
