@@ -279,7 +279,7 @@ function validate(file: string, script: Record<string, unknown>) {
       if (signIn.username !== undefined && typeof signIn.username !== "boolean") {
         err(file, "sign_in.username must be true or false");
       }
-      // An app with several users gets a new administrator in place of a replaced sign-in
+      // An app with users of its own (Jellyfin, Emby); a platform from before installed apps kept their account reads it
       if (signIn.adds_user !== undefined && typeof signIn.adds_user !== "boolean") {
         err(file, "sign_in.adds_user must be true or false");
       }
@@ -287,7 +287,11 @@ function validate(file: string, script: Record<string, unknown>) {
       if (signIn.email !== undefined && typeof signIn.email !== "boolean") {
         err(file, "sign_in.email must be true or false");
       }
-      const extra = Object.keys(signIn).filter((key) => !["username", "adds_user", "email"].includes(key));
+      // An installed copy's setup signs in with the admin account it has, which a collection's walk asks for
+      if (signIn.existing !== undefined && typeof signIn.existing !== "boolean") {
+        err(file, "sign_in.existing must be true or false");
+      }
+      const extra = Object.keys(signIn).filter((key) => !["username", "adds_user", "email", "existing"].includes(key));
       if (extra.length > 0) err(file, `sign_in: unknown keys ${extra.join(", ")}`);
     }
     // The sign-in is set by a hook; a script with none would promise the owner one it never gets

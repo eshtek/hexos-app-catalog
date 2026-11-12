@@ -1,5 +1,5 @@
 // Sibling files are type imports only: each script is compiled standalone, so runtime imports of them wouldn't resolve.
-import { existsSync, readFileSync, statfsSync, writeFileSync } from "node:fs";
+import { chownSync, existsSync, readFileSync, statSync, statfsSync, writeFileSync } from "node:fs";
 import { totalmem } from "node:os";
 
 import type { ContextMount, HookContext } from "../_lib/hook_context";
@@ -11,7 +11,9 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
 // with its defaults (SQLite, file cache and sessions), from the panel's console in its container:
 // runs the migrations, makes the owner's administrator, adds a starter set of games from Pelican's
 // egg index, and marks the panel installed. The entrypoint reads that mark only at start, so the
-// panel restarts last.
+// panel restarts last. First it gives the panel its data folder: HexOS makes it a new dataset,
+// 770 root:root, and the image runs as www-data with the apps group added, so until the folder is
+// the apps group's the panel can't save its key, settings or database there.
 // joinPanel: before Wings first starts, adds this server to the panel as a node with a block of
 // game ports, and writes Wings' config.yml from the panel's own copy, pointed at the folders Wings
 // has here. Wings never starts without it. Its game network gets a subnet Docker picks.
@@ -23,6 +25,8 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
 const PANEL = "pelican-panel";
+/** The apps user and group TrueNAS adds to every app's container. */
+const APPS_ID = 568;
 /** The panel's files belong to www-data, so its console runs as www-data and leaves them that way. */
 const PANEL_USER = "www-data";
 const PANEL_DIR = "/var/www/html";
@@ -172,6 +176,37 @@ async function signInFor(ctx: HookContext): Promise<{ username: string; password
 const dataMountOf = (ctx: HookContext, pattern: RegExp): ContextMount | undefined =>
   ctx.mounts.find((m) => pattern.test(m.hostPath));
 
+/**
+ * Gives the panel's data folder to the apps user and group, the folder itself and nothing in it.
+ * True when it changed hands. Only a panel that isn't set up gets here, so the folder is new.
+ */
+function giveToApps(path: string): boolean {
+  const { uid, gid } = statSync(path);
+  if (uid === APPS_ID && gid === APPS_ID) return false;
+  chownSync(path, APPS_ID, APPS_ID);
+  return true;
+}
+
+async function restartPanel(ctx: HookContext): Promise<void> {
+  if (ctx.restartApp) return ctx.restartApp();
+  const container = await containerOf(ctx.resourceId, true);
+  if (container) await docker(`/containers/${container}/restart`, {});
+}
+
+/**
+ * Whether the panel's settings hold its key, read once its entrypoint has finished: the entrypoint
+ * writes the key first and ends by becoming supervisord, so PID 1 being supervisord means it's done.
+ */
+async function keyWritten(ctx: HookContext, panel: string, envFile: string): Promise<boolean> {
+  const started = ["sh", "-c", "grep -q supervisord /proc/1/cmdline && echo started || echo starting"];
+  let state = (await exec(panel, started)).output.trim();
+  while (state === "starting") {
+    await ctx.sleep(2000);
+    state = (await exec(panel, started)).output.trim();
+  }
+  return state === "started" && existsSync(envFile) && /^APP_KEY=base64:/m.test(readFileSync(envFile, "utf8"));
+}
+
 /** Whether the panel's .env already says the installer has run. */
 export const installedIn = (env: string): boolean => /^APP_INSTALLED=true\s*$/m.test(env);
 
@@ -189,7 +224,12 @@ export async function setUpPanel(ctx: HookContext) {
     return;
   }
 
+  // The first start ran without its folder, so the panel starts again to write its key and settings
+  if (data && giveToApps(data.localPath)) await restartPanel(ctx);
   const panel = await readyPanel(ctx, ctx.resourceId, "ready");
+  if (envFile && !(await keyWritten(ctx, panel, envFile))) {
+    ctx.fail("Pelican Panel couldn't save its settings in its folder. Uninstall it, then install it again.");
+  }
   await ctx.emitCheckpoint("ready", "Pelican Panel is up", 10);
 
   const migrated = await exec(panel, ["php", "artisan", "migrate", "--force", "--seed", "--no-interaction"]);

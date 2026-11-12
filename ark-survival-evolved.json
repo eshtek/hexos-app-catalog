@@ -6,15 +6,15 @@
     "name": "ARK: Survival Evolved",
     "description": "Tame dinosaurs, build a base and survive together on your own ARK: Survival Evolved server. The first start downloads the game, about 23 GB, so players can join only once that finishes. Players find it in the game's server list, or add the address HexOS copies to Steam's favorite servers.",
     "icon": "ark-survival-evolved/icon.png",
-    "version": "latest-1793607995",
+    "version": "latest-1794213856",
     "categories": ["games"],
     "keywords": ["ark", "survival evolved", "ase", "dinosaurs", "game server", "dedicated server", "multiplayer", "steam"],
     "homepage": "https://playark.com/",
     "sources": ["https://github.com/Hermsi1337/docker-ark-server"]
   },
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: an ARK: Survival Evolved server on one of the free maps, one folder and set of ports per copy"
+    "version": "1.0.1",
+    "changeLog": "Runs ghcr.io/hermsi1337/ark-server latest-1794213856."
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -84,7 +84,7 @@
   "app_values": {
     "image": {
       "repository": "ghcr.io/hermsi1337/ark-server",
-      "tag": "latest-1793607995@sha256:2c730966e2acd2a5ec80ca5c92cd1cb169a53bcf121bd160c8d8e32a2806340d",
+      "tag": "latest-1794213856@sha256:ce291990613e76f7019be31b96fe247188ce4957724c913c0e30097042c44bf5",
       "pull_policy": "missing"
     },
     "restart_policy": "unless-stopped",
