@@ -20,7 +20,8 @@
           "value": "true"
         }
       ],
-      "default": "false"
+      "default": "false",
+      "installonly": true
     }
   ],
   "requirements": {

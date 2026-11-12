@@ -45,7 +45,6 @@
     {
       "id": "managers",
       "type": "multiple",
-      "min": 1,
       "title": "Media managers",
       "description": "These apps monitor and organize your media library, and instruct your download clients to fetch better content when available.",
       "options": [

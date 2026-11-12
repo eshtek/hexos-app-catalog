@@ -1,8 +1,8 @@
 {
-    "version": 5,
+    "version": 6,
     "script": {
-        "version": "1.0.1",
-        "changeLog": "Updated requirements"
+        "version": "1.0.2",
+        "changeLog": "The app card shows who's online, from the server's REST API, out of how many it takes"
     },
     "installation_questions": [
         {
@@ -107,7 +107,7 @@
             "required": true,
             "options": [
                 {
-                    "text": "8 GB (minimum recommendation)",
+                    "text": "8 GB",
                     "value": "8192"
                 },
                 {
@@ -139,7 +139,7 @@
                     "value": "15360"
                 },
                 {
-                    "text": "16 GB",
+                    "text": "16 GB (recommended)",
                     "value": "16384"
                 },
                 {
@@ -199,7 +199,7 @@
                     "value": "49152"
                 }
             ],
-            "default": "8192"
+            "default": "16384"
         },
         {
             "question": "Select a Server name",
@@ -1805,5 +1805,29 @@
             "server": "$HOST_PATH($LOCATION(Media)/$INSTANCE(palworld))",
             "steamcmd": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(palworld)/steamcmd)"
         }
-    }
+    },
+    "widgets": [
+        {
+            "id": "players",
+            "title": "Online now",
+            "description": "Who's playing on this server, out of how many it takes.",
+            "refresh": 10,
+            "conditions": [
+                {
+                    "role": "availability",
+                    "type": "appRunning",
+                    "app": "palworld"
+                }
+            ],
+            "background": { "field": "online" },
+            "slots": [
+                { "type": "stat", "field": "count" },
+                { "type": "list", "field": "online", "rows": 1 }
+            ],
+            "script": "palworld/widget_players.ts",
+            "entrypoint": "run",
+            "timeout": 5
+        }
+    ],
+    "widgetsSchema": 3
 }
