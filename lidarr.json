@@ -108,6 +108,7 @@
       "id": "configure-lidarr",
       "title": "Pre-configure Lidarr",
       "description": "Setting up Lidarr",
+      "summary": "Sets up Lidarr's sign-in and Music folder. Run it again if Lidarr has no Music folder; it keeps your other settings.",
       "events": [
         "onAfterInstall",
         "userAction"

@@ -103,6 +103,7 @@
       "id": "configure-chaptarr",
       "title": "Pre-configure Chaptarr",
       "description": "Setting up Chaptarr",
+      "summary": "Sets up Chaptarr's sign-in and its Books and Audiobooks folders. Run it again if one of those folders is missing; it keeps your other settings.",
       "events": [
         "onAfterInstall",
         "userAction"

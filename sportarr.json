@@ -72,6 +72,7 @@
       "id": "configure-sportarr",
       "title": "Pre-configure Sportarr",
       "description": "Setting up Sportarr",
+      "summary": "Sets up Sportarr's sign-in and sports folder. Run it again if Sportarr has no library folder; it keeps your other settings.",
       "events": [
         "onAfterInstall",
         "userAction"

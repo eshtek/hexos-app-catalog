@@ -108,6 +108,7 @@
       "id": "configure-radarr",
       "title": "Pre-configure Radarr",
       "description": "Setting up Radarr",
+      "summary": "Sets up Radarr's sign-in, Movies folder and file renaming. Run it again if Radarr has no Movies folder; it keeps your other settings.",
       "events": [
         "onAfterInstall",
         "userAction"

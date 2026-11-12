@@ -50,6 +50,7 @@
       "id": "configure-profilarr",
       "title": "Pre-configure Profilarr",
       "description": "Setting up Profilarr",
+      "summary": "Sets up Profilarr's sign-in and its quality profiles, which skip releases that aren't in English. Running it again from here changes nothing once Profilarr has your sign-in.",
       "events": [
         "onAfterInstall",
         "userAction"
