@@ -1,0 +1,114 @@
+{
+  "version": 6,
+  "internal": false,
+  "script": {
+    "version": "1.0.1",
+    "changeLog": "Its card shows who's online, and folds back while nobody is on."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "2GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      34197
+    ],
+    "game_port": 34197,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "Play with Space Age",
+      "description": "Everyone who joins needs the Space Age expansion too. This can't be changed later.",
+      "type": "boolean",
+      "key": "space_age",
+      "required": true,
+      "installonly": true,
+      "default": false
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(factorio)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "factorio": {
+      "generate_new_save": false,
+      "load_latest_save": true,
+      "save_name": "_autosave1",
+      "username": "",
+      "token": "",
+      "update_mods_on_start": false,
+      "dlc_space_age": "$QUESTION(space_age)"
+    },
+    "network": {
+      "game_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(34197)"
+      },
+      "rcon_port": {
+        "bind_mode": "exposed",
+        "port_number": 27015
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(factorio)/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      }
+    }
+  },
+  "widgets": [
+    {
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's playing on this server's factory.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "factorio"
+        }
+      ],
+      "background": {
+        "field": "online"
+      },
+      "slots": [
+        {
+          "type": "stat",
+          "field": "count"
+        },
+        {
+          "type": "list",
+          "field": "online",
+          "rows": 1
+        }
+      ],
+      "script": "factorio/widget_players.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}
