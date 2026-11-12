@@ -31,14 +31,15 @@ const canonical = (value: unknown): string =>
  * catalog's current script too (the box's link list), so it reaches installed apps at the next sync,
  * and so is `requirements.reserved_ports`, the ports HexOS holds for an installed app. So are
  * `requirements.gpu` and `requirements.gpu_hook`: one card is only given to a new install, and an
- * installed app's card changes only when its owner picks another.
+ * installed app's card changes only when its owner picks another. A hook's `summary` is the line
+ * its row shows while nothing runs, read from the catalog's current script as well.
  */
 export function runPart(script: Record<string, unknown>): string {
   const { metadata: _metadata, script: _block, internal: _internal, ...runs } = script;
   if (Array.isArray(runs.hooks)) {
     runs.hooks = runs.hooks.map((hook) => {
       if (!isObject(hook)) return hook;
-      const { rerunsOn: _rerunsOn, ...rest } = hook;
+      const { rerunsOn: _rerunsOn, summary: _summary, ...rest } = hook;
       return rest;
     });
   }
