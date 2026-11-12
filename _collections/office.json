@@ -52,10 +52,8 @@
         {
           "app": "collabora",
           "core": true,
-          "summary": "Made for Nextcloud",
-          "requires": [
-            "nextcloud"
-          ]
+          "default": true,
+          "summary": "Open source, best with OpenDocument files"
         },
         {
           "app": "onlyoffice-document-server",

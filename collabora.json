@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Collabora edits documents inside Nextcloud on your home network."
+    "version": "1.1.0",
+    "changeLog": "Collabora can edit documents inside OpenCloud too: with OpenCloud on the server it serves https. Beside Nextcloud alone nothing changes"
   },
   "requirements": {
     "locations": [],
@@ -70,6 +70,26 @@
       ],
       "rerun": "converge",
       "script": "collabora/connect_languagetool.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "use-https",
+      "title": "Serve over https",
+      "description": "Switching Collabora to https for OpenCloud",
+      "summary": "Serves https on port 9980 so OpenCloud can use Collabora. Runs by itself when OpenCloud is on this server.",
+      "events": [
+        "onAfterInstall",
+        "onAfterUpgrade",
+        "userAction"
+      ],
+      "optional": true,
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "script": "collabora/use_https.ts",
       "entrypoint": "run",
       "timeout": 300,
       "retries": 0

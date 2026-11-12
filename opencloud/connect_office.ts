@@ -12,6 +12,10 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * values, so this reads it from the office's container over the Docker socket HexOS already has
  * (as jellyfin/hardware_transcoding.ts does). The secret is never written to a file of its own.
  *
+ * Collabora has no secret: it allows the addresses in its aliasgroup1 instead, which its own
+ * use-https hook sets when it sees OpenCloud (collabora/use_https.ts). Its certificate is served by
+ * the chart's nginx container rather than Collabora's own.
+ *
  * Both apps serve https, since a browser won't show an http editor inside an https page. OpenCloud
  * makes a certificate of its own and the office serves the box's, and the editor opens in a frame,
  * where a browser offers no warning to accept. So the link gives OpenCloud the office's certificate:
@@ -19,7 +23,7 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * Safari remember it for the address, Firefox for each port). OpenCloud reads its certificate from
  * proxy/server.crt and server.key in its data folder at its start, and its own stay beside them as
  * .hexos-bak. An OpenCloud at an outside address has a certificate of its owner's, which is left.
- * Read at OpenCloud 9.0, Euro-Office 9.3 and ONLYOFFICE 10.0.
+ * Read at OpenCloud 9.0, Euro-Office 9.3, ONLYOFFICE 10.0 and Collabora 26.04 (TrueNAS chart 1.5.44).
  */
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
@@ -32,6 +36,19 @@ type Env = { name: string; value: string };
 type OpenCloudValues = { collaboration?: Record<string, unknown>; additional_envs?: Env[] };
 
 const APPS_UID = 568;
+
+/** An office OpenCloud can use. `service` is the chart's container that serves its certificate. */
+interface Office {
+  appId: string;
+  service: string;
+  type: string;
+  name: string;
+  /** Whether OpenCloud and the office share the office's JWT_SECRET. */
+  secret: boolean;
+  /** Where that container keeps the certificate, when its settings don't say. */
+  cert: string;
+  key: string;
+}
 
 /** The office's running container and its settings. The service name is the chart's. */
 async function officeContainer(appId: string, service: string): Promise<{ id: string; env: Map<string, string> } | undefined> {
@@ -61,10 +78,10 @@ async function readFromContainer(id: string, path: string): Promise<string> {
 }
 
 /** The certificate and key the office serves, or undefined when they can't be read as PEM. */
-async function officeCertificate(office: { id: string; env: Map<string, string> }): Promise<{ cert: string; key: string } | undefined> {
+async function officeCertificate(office: { id: string; env: Map<string, string> }, paths: Office): Promise<{ cert: string; key: string } | undefined> {
   const [cert, key] = await Promise.all([
-    readFromContainer(office.id, office.env.get("SSL_CERTIFICATE_PATH") || "/certs/tls.crt"),
-    readFromContainer(office.id, office.env.get("SSL_KEY_PATH") || "/certs/tls.key"),
+    readFromContainer(office.id, office.env.get("SSL_CERTIFICATE_PATH") || paths.cert),
+    readFromContainer(office.id, office.env.get("SSL_KEY_PATH") || paths.key),
   ]).catch(() => ["", ""]);
   return cert.includes("BEGIN CERTIFICATE") && /BEGIN [A-Z ]*PRIVATE KEY/.test(key) ? { cert, key } : undefined;
 }
@@ -115,7 +132,8 @@ export function isOutsideAddress(address: unknown): boolean {
   return !/^[\d.]+$/.test(new URL(address).hostname);
 }
 
-async function connect(ctx: HookContext, appId: string, service: string, type: string, name: string): Promise<void> {
+async function connect(ctx: HookContext, link: Office): Promise<void> {
+  const { appId, service, type, name } = link;
   await ctx.registerCheckpoints([
     { id: "locate", message: `Finding ${name}` },
     { id: "certificate", message: `Giving OpenCloud ${name}'s certificate` },
@@ -130,10 +148,14 @@ async function connect(ctx: HookContext, appId: string, service: string, type: s
   const address = await ctx.getInstalledAppUrl(appId);
   if (!address) stop(`${name} isn't installed, or HexOS can't find its port`);
   const url = address!.replace(/^http:/, "https:").replace(/\/+$/, "");
-  if (!(await answers(`${url}/hosting/discovery`))) ctx.fail(`${name} isn't answering at ${url} yet. Try again when it has finished starting.`);
+  if (!(await answers(`${url}/hosting/discovery`))) {
+    // Collabora serves https only once it has seen OpenCloud, which a Collabora from before OpenCloud hasn't
+    if (!link.secret) stop(`${name} isn't answering on https. Run Serve over https from ${name}'s card, then connect again.`);
+    ctx.fail(`${name} isn't answering at ${url} yet. Try again when it has finished starting.`);
+  }
   const office = await officeContainer(appId, service).catch(() => undefined);
-  const secret = office?.env.get("JWT_SECRET");
-  if (!office || !secret) stop(`HexOS couldn't read ${name}'s secret from its container`);
+  const secret = link.secret ? office?.env.get("JWT_SECRET") : undefined;
+  if (link.secret && (!office || !secret)) stop(`HexOS couldn't read ${name}'s secret from its container`);
   await ctx.emitCheckpoint("locate");
 
   if (typeof ctx.updateAppValues !== "function") ctx.fail("This server's HexOS needs an update before it can connect OpenCloud. Try again after it updates.");
@@ -143,7 +165,7 @@ async function connect(ctx: HookContext, appId: string, service: string, type: s
   if (isOutsideAddress(current.app_url) || isOutsideAddress(current.collaboration?.url)) {
     await ctx.skipCheckpoint("certificate", "OpenCloud has an outside address, so it keeps its own certificate");
   } else {
-    const certificate = await officeCertificate(office!);
+    const certificate = office ? await officeCertificate(office, link) : undefined;
     if (!certificate || !data) {
       // The link still works. The owner opens the office's address once to accept its certificate
       await ctx.skipCheckpoint("certificate", `HexOS couldn't read ${name}'s certificate. Open ${url} once and accept its warning.`);
@@ -161,8 +183,11 @@ async function connect(ctx: HookContext, appId: string, service: string, type: s
   }
   const changed = await ctx.updateAppValues((values) => {
     const opencloud = values.opencloud as OpenCloudValues;
-    const outside = isOutsideAddress(opencloud.collaboration?.url);
-    opencloud.collaboration = { ...opencloud.collaboration, enabled: true, proof_disable: true, type, jwt_secret: secret, ...(outside ? {} : { url, insecure: true }) };
+    const stored = opencloud.collaboration?.url;
+    const outside = isOutsideAddress(stored);
+    // The chart stores the address with a trailing slash. The same address isn't a change, or every run would restart OpenCloud
+    const address = typeof stored === "string" && stored.replace(/\/+$/, "") === url ? stored : url;
+    opencloud.collaboration = { ...opencloud.collaboration, enabled: true, proof_disable: true, type, ...(secret ? { jwt_secret: secret } : {}), ...(outside ? {} : { url: address, insecure: true }) };
     // With an office linked, documents belong there: this hides the Text Editor's Note (see seed_settings.ts)
     opencloud.additional_envs = [...(opencloud.additional_envs ?? []).filter((env) => env.name !== NOTE_ENV), { name: NOTE_ENV, value: "md" }];
   });
@@ -191,5 +216,10 @@ async function connect(ctx: HookContext, appId: string, service: string, type: s
   ctx.fail("OpenCloud didn't come back after connecting. Look at its logs on the app's card.");
 }
 
-export const eurooffice = (ctx: HookContext) => connect(ctx, "eurooffice-document-server", "eurooffice", "eurooffice", "Euro-Office");
-export const onlyoffice = (ctx: HookContext) => connect(ctx, "onlyoffice-document-server", "onlyoffice", "onlyoffice", "ONLYOFFICE");
+const OFFICE_CERT = { cert: "/certs/tls.crt", key: "/certs/tls.key" };
+export const collabora = (ctx: HookContext) =>
+  connect(ctx, { appId: "collabora", service: "nginx", type: "collabora", name: "Collabora", secret: false, cert: "/etc/certs/server.crt", key: "/etc/certs/server.key" });
+export const eurooffice = (ctx: HookContext) =>
+  connect(ctx, { appId: "eurooffice-document-server", service: "eurooffice", type: "eurooffice", name: "Euro-Office", secret: true, ...OFFICE_CERT });
+export const onlyoffice = (ctx: HookContext) =>
+  connect(ctx, { appId: "onlyoffice-document-server", service: "onlyoffice", type: "onlyoffice", name: "ONLYOFFICE", secret: true, ...OFFICE_CERT });
