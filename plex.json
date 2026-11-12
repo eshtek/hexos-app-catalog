@@ -383,6 +383,38 @@
       "entrypoint": "sonarr",
       "timeout": 300,
       "retries": 0
+    },
+    {
+      "id": "connect-lidarr",
+      "title": "Connect to Lidarr",
+      "description": "Shows what Lidarr adds, renames or removes in Plex right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "lidarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "lidarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "requiresHooks": [
+        "configure-plex"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "lidarr",
+      "timeout": 300,
+      "retries": 0
     }
   ],
   "widgetsSchema": 3,
