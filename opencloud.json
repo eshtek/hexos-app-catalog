@@ -2,8 +2,8 @@
   "version": 6,
   "internal": true,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: your sign-in becomes the only administrator, and each person's files go in Documents under their own name"
+    "version": "1.0.2",
+    "changeLog": "Connecting an office gives OpenCloud the office's certificate, so the editor opens without a second browser warning. The install's two screens are titled Settings and Web apps"
   },
   "sign_in": {
     "username": true,
@@ -97,7 +97,7 @@
           "value": "both"
         }
       ],
-      "group": "Settings"
+      "group": "OpenCloud / Settings"
     },
     {
       "question": "Search inside documents",
@@ -106,7 +106,7 @@
       "key": "search",
       "required": false,
       "default": false,
-      "group": "Settings"
+      "group": "OpenCloud / Settings"
     },
     {
       "question": "Calendars and contacts",
@@ -115,7 +115,7 @@
       "key": "calendars",
       "required": false,
       "default": true,
-      "group": "Settings"
+      "group": "OpenCloud / Settings"
     },
     {
       "question": "Web address",
@@ -124,7 +124,7 @@
       "key": "address",
       "required": true,
       "default": "https://$SERVER_LAN_IP:$PORT(30134)",
-      "group": "Settings"
+      "group": "OpenCloud / Settings"
     },
     {
       "question": "Draw.io",
@@ -133,7 +133,7 @@
       "key": "app_drawio",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Excalidraw",
@@ -142,7 +142,7 @@
       "key": "app_excalidraw",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Unzip",
@@ -151,7 +151,7 @@
       "key": "app_unzip",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Importer",
@@ -160,7 +160,7 @@
       "key": "app_importer",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "External sites",
@@ -169,7 +169,7 @@
       "key": "app_external_sites",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "JSON viewer",
@@ -178,7 +178,7 @@
       "key": "app_json_viewer",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Maps",
@@ -187,7 +187,7 @@
       "key": "app_maps",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Cast",
@@ -196,7 +196,7 @@
       "key": "app_cast",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Pastebin",
@@ -205,7 +205,7 @@
       "key": "app_pastebin",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Progress bars",
@@ -214,7 +214,7 @@
       "key": "app_progress_bars",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Calculator",
@@ -223,7 +223,7 @@
       "key": "app_calculator",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Arcade",
@@ -232,7 +232,7 @@
       "key": "app_arcade",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "Apollon",
@@ -241,7 +241,7 @@
       "key": "app_apollon",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     },
     {
       "question": "BPMN",
@@ -250,7 +250,7 @@
       "key": "app_bpmn",
       "required": false,
       "default": false,
-      "group": "Web apps"
+      "group": "OpenCloud / Web apps"
     }
   ],
   "app_values": {
