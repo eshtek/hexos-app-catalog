@@ -120,7 +120,7 @@ async function asOwnAdministrator(ctx: HookContext): Promise<string> {
     app: "Emby",
   });
   if (token === "refused") {
-    stop(ctx, "Emby refused the admin account you gave, or it isn't an administrator, so HexOS left Emby as it is. Run Pre-configure Emby from its Connections tab with an administrator's sign-in.");
+    stop(ctx, "Emby refused the admin account you gave, or it isn't an administrator, so HexOS left Emby as it is. Open Emby in HexOS and run Pre-configure Emby with an administrator's sign-in.");
   }
   return token ?? (await administrator(ctx));
 }
@@ -157,7 +157,7 @@ async function chooseSignIn(ctx: HookContext): Promise<SignIn> {
       description: "Emby makes this its administrator. You'll sign in to Emby with it.",
     }),
   );
-  if (!chosen) ctx.fail("Emby needs a sign-in to finish its setup. Run Pre-configure Emby from its Connections tab to choose one.");
+  if (!chosen) ctx.fail("Emby needs a sign-in to finish its setup. Open Emby in HexOS and run Pre-configure Emby to choose one.");
   return chosen;
 }
 

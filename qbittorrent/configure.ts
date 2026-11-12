@@ -196,7 +196,7 @@ async function enter(ctx: HookContext, credentialsPath: string): Promise<{ sessi
       },
     );
     if (own === "refused") {
-      const message = "qBittorrent refused the account you gave, so HexOS left qBittorrent as it is. Run Pre-configure qBittorrent from its Connections tab to set it up.";
+      const message = "qBittorrent refused the account you gave, so HexOS left qBittorrent as it is. Open qBittorrent in HexOS and run Pre-configure qBittorrent to set it up.";
       if (ctx.skip) ctx.skip(message);
       ctx.fail(message);
     }
@@ -222,7 +222,7 @@ async function enter(ctx: HookContext, credentialsPath: string): Promise<{ sessi
   const given = { username: String(answers?.username ?? "").trim(), password: String(answers?.password ?? "") };
   if (!given.username || !given.password) return undefined;
   const session = await signsIn(ctx.baseUrl, given);
-  if (!session) ctx.fail("qBittorrent didn't accept that username and password. Run Pre-configure qBittorrent from its Connections tab to try again.");
+  if (!session) ctx.fail("qBittorrent didn't accept that username and password. Open qBittorrent in HexOS and run Pre-configure qBittorrent to try again.");
   return { session, with: given };
 }
 

@@ -82,6 +82,7 @@
       "id": "configure-qbittorrent",
       "title": "Pre-configure qBittorrent",
       "description": "Gives qBittorrent the sign-in you chose and a folder for downloads in progress",
+      "summary": "Sets up qBittorrent's sign-in and a separate folder for downloads in progress. Run it again to turn that folder back on. It keeps your sign-in.",
       "events": [
         "onAfterInstall",
         "userAction"

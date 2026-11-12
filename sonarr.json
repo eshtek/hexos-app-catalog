@@ -108,6 +108,7 @@
       "id": "configure-sonarr",
       "title": "Pre-configure Sonarr",
       "description": "Setting up Sonarr",
+      "summary": "Sets up Sonarr's sign-in, Shows folder and file renaming. Run it again if Sonarr has no Shows folder. It keeps your other settings.",
       "events": [
         "onAfterInstall",
         "userAction"

@@ -66,6 +66,7 @@
       "entrypoint": "setup",
       "timeout": 420,
       "description": "Setting up Trilium",
+      "summary": "Creates Trilium's notes database and sets its password. A second run checks the password you give and changes nothing.",
       "optional": true,
       "retries": 0,
       "inputs": [

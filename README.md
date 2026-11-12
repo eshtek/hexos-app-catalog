@@ -154,6 +154,8 @@ TrueNAS hands a container one NVIDIA card, or every Intel and AMD card at once. 
 
 Both keys are read from the catalog's current script, so changing them needs no new `script.version`. `bun run validate` refuses `gpu` without `$GPU_CONFIG()` in `app_values`, and a `gpu_hook` that names no such hook.
 
+On a server with a card the app can use, the hook has no row of its own. The Graphics card row says whether HexOS has checked the app's video settings and offers Check again, which runs the hook. The hook's `summary` is the tooltip on Check again, and the line under its own row on a server with no such card, so it has to read true with a card and without one: Jellyfin's says "for its graphics card, or for none". It also has to name anything else the hook does: Jellyfin's says it limits streams from outside the owner's network to 20 Mbps. See [A hook's row on the app's card](#a-hooks-row-on-the-apps-card).
+
 ```json
 "requirements": {
   "gpu": "one",
@@ -202,6 +204,32 @@ Write every published port this way. A bare number is a port the protocol ties t
 | A port that isn't `$PORT(n)` is one a protocol ties to its number. An internal script is exempt | Error |
 | Two scripts in the catalog fix one port: the box refuses the second | Warning |
 | A `$PORT` number another script also wants: the box moves it, and if the other script fixes that port, the box refuses that one when the `$PORT` app got there first | Warning |
+
+## A hook's row on the app's card
+
+An installed app's details pane has a row for each hook its owner can run. A hook that links another app has its row on the Connections tab. HexOS takes a hook for a link when it says `"kind": "connect"`, or when it names the other app in `conditions` and keeps the install picker among its surfaces, which is the default for such a hook. A link narrowed to `"surfaces": ["card"]` therefore has to say `"kind": "connect"`, and `bun run validate` refuses one that doesn't. Every other hook is one of the app's own setup actions (Pre-configure Radarr, Ollama's Choose a model), and its row is on the Customize tab. A deck from before that move draws both kinds on Connections, so nothing a hook says about one of the app's own actions should name a tab: not its summary, and not a message its script fails with ("Open Jellyfin in HexOS and run Pre-configure Jellyfin."). A message about a link can name the Connections tab, where both decks draw it.
+
+A row reads three fields of its hook:
+
+- `title` is the row's name. It is also the label of the hook's step while the app installs, when the hook has no `description`.
+- `description` is the line under the title for a hook only its owner runs ("Downloads the model you chose. If it stopped, it picks up where it left off."). For a hook that also runs at install it is the label of that step while it runs ("Setting up Radarr"), and the text under its checkbox in the install dialog when it has no `userOptional.description`.
+- `summary` is the line under the title while nothing runs, for a hook whose `description` is a step's label. A row with no summary shows the description.
+
+```json
+{
+  "id": "configure-radarr",
+  "title": "Pre-configure Radarr",
+  "description": "Setting up Radarr",
+  "summary": "Sets up Radarr's sign-in, Movies folder and file renaming. Run it again if Radarr has no Movies folder. It keeps your other settings.",
+  "events": ["onAfterInstall", "userAction"],
+  "rerun": "converge",
+  "surfaces": ["card"]
+}
+```
+
+Write a summary as one to three short sentences, in plain words, for an owner who isn't technical. Keep it under 150 characters: the line sits in a narrow column beside the row's button. Give each thought a sentence of its own, with no semicolon. The first says what the action sets up. The next says when to run it again and what a second run keeps, or that a second run changes nothing. Read the script before writing it, since Pre-configure does different things in each app. A run from the row gets no sign-in (`ctx.signIn` is undefined there), so a setup that only acts on the sign-in the owner chose at install changes nothing from its row, and its summary says so (Audiobookshelf, Kavita, Open WebUI, SABnzbd). A summary also names a second thing the hook does when its owner would want to know, in a sentence of its own: Pre-configure Emby, Pre-configure Plex and Jellyfin's `hardware-transcoding` limit streams from outside the owner's network to 20 Mbps.
+
+Leave `description` as it is when you add a summary. The install still shows it as the step's label, and a box from before `summary` shows it on the row. The summary is read from the catalog's current script, so it reaches installed apps at the next sync and needs no new `script.version`. `bun run validate` refuses a hook that runs at an install or an upgrade and from its app's card with no summary, and a summary that isn't text. `bun test _lib/hook_summary.test.ts` holds each summary to three sentences and 150 characters that name no tab, and holds every script's messages to naming the Connections tab only for a link.
 
 ## Values on the Settings tab
 

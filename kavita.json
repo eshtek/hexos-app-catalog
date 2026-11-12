@@ -89,6 +89,7 @@
       "id": "configure-kavita",
       "title": "Pre-configure Kavita",
       "description": "Setting up Kavita",
+      "summary": "Makes your account and adds your Books, Comics and Manga libraries at install. Running it again from here changes nothing.",
       "events": [
         "onAfterInstall",
         "userAction"

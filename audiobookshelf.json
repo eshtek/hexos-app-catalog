@@ -85,6 +85,7 @@
       "id": "configure-audiobookshelf",
       "title": "Pre-configure Audiobookshelf",
       "description": "Setting up Audiobookshelf",
+      "summary": "Makes your account and adds your Audiobooks and Podcasts libraries at install. Running it again from here changes nothing.",
       "events": [
         "onAfterInstall",
         "userAction"

@@ -127,6 +127,7 @@
       "entrypoint": "afterInstall",
       "timeout": 900,
       "description": "Setting up Jellyfin",
+      "summary": "Finishes Jellyfin's first setup and adds a library for each of your media folders. Run it again to add a missing library.",
       "optional": true,
       "retries": 0,
       "userOptional": {
@@ -140,7 +141,8 @@
     },
     {
       "id": "hardware-transcoding",
-      "title": "Set up transcoding and remote streaming",
+      "title": "Setup transcoding",
+      "summary": "Improves streaming on low-bandwidth connections. Uses your selected GPU, if available. Also limits streams from outside your network to 20 Mbps.",
       "events": [
         "onAfterInstall",
         "userAction"

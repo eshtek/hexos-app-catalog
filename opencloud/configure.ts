@@ -198,7 +198,7 @@ export async function configure(ctx: HookContext): Promise<void> {
     { id: "admin", message: "Making your administrator account" },
   ]);
   const up = await waitForOpenCloud(ctx, `https://${ctx.host}:${ctx.port}`, 8);
-  if ("last" in up) ctx.fail("OpenCloud didn't start in time. Run Pre-configure OpenCloud from its Connections tab to try again.", [{ label: "Last answer", value: up.last }]);
+  if ("last" in up) ctx.fail("OpenCloud didn't start in time. Open OpenCloud in HexOS and run Pre-configure OpenCloud to try again.", [{ label: "Last answer", value: up.last }]);
   await ctx.emitCheckpoint("up");
   const url = up.issuer;
   const done = `Sign in at ${url} with the sign-in you chose.`;
@@ -208,7 +208,7 @@ export async function configure(ctx: HookContext): Promise<void> {
     const signIn =
       ctx.signIn ??
       (await ask(ctx, { title: "Choose your OpenCloud sign-in", description: "OpenCloud makes this its administrator. You'll sign in to OpenCloud with it." }));
-    if (!signIn) stop(ctx, "OpenCloud has no sign-in chosen yet, so it still has its default one. Run Pre-configure OpenCloud from its Connections tab to choose one.");
+    if (!signIn) stop(ctx, "OpenCloud has no sign-in chosen yet, so it still has its default one. Open OpenCloud in HexOS and run Pre-configure OpenCloud to choose one.");
     await whenReady(ctx, () => replaceBuiltinAdmin(url, builtin, signIn));
     await ctx.emitCheckpoint("admin", done, 100);
     return;

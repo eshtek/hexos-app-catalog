@@ -76,6 +76,7 @@
       "id": "configure-sabnzbd",
       "title": "Pre-configure SABnzbd",
       "description": "Gives SABnzbd the sign-in you chose, asked for only from outside your home network",
+      "summary": "Gives SABnzbd your sign-in at install and asks for it only from outside your home network. Running it again from here changes nothing.",
       "events": [
         "onAfterInstall",
         "userAction"

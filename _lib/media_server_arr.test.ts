@@ -548,11 +548,11 @@ describe.each(["jellyfin", "emby", "plex"] as const)("%s", (serverId) => {
     const error = (await world.run().catch((caught: unknown) => caught)) as Error;
     if (serverId === "plex") {
       expect(error).toBeInstanceOf(Skipped);
-      expect(error.message).toBe("Plex has no sign-in yet. Run Pre-configure Plex from Plex's Connections tab, then run this again.");
+      expect(error.message).toBe("Plex has no sign-in yet. Open Plex in HexOS and run Pre-configure Plex, then run this again.");
     } else {
       expect(error).not.toBeInstanceOf(Skipped);
       expect(error.message).toBe(
-        `HexOS couldn't find ${serverId === "emby" ? "an Emby" : "a Jellyfin"} administrator's key. Run Pre-configure ${server.name} from ${server.name}'s Connections tab, then try again.`,
+        `HexOS couldn't find ${serverId === "emby" ? "an Emby" : "a Jellyfin"} administrator's key. Open ${server.name} in HexOS and run Pre-configure ${server.name}, then try again.`,
       );
     }
     expect(world.connections()).toEqual([]);

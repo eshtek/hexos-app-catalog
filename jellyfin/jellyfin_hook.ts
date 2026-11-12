@@ -115,7 +115,7 @@ async function asOwnAdministrator(ctx: HookContext): Promise<string> {
     app: "Jellyfin",
   });
   if (token === "refused") {
-    stop(ctx, "Jellyfin refused the admin account you gave, or it isn't an administrator, so HexOS left Jellyfin as it is. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.");
+    stop(ctx, "Jellyfin refused the admin account you gave, or it isn't an administrator, so HexOS left Jellyfin as it is. Open Jellyfin in HexOS and run Pre-configure Jellyfin with an administrator's sign-in.");
   }
   return token ?? (await administrator(ctx));
 }
@@ -152,7 +152,7 @@ async function chooseSignIn(ctx: HookContext): Promise<SignIn> {
       description: "Jellyfin makes this its administrator. You'll sign in to Jellyfin with it.",
     }),
   );
-  if (!chosen) ctx.fail("Jellyfin needs a sign-in to finish its setup. Run Pre-configure Jellyfin from its Connections tab to choose one.");
+  if (!chosen) ctx.fail("Jellyfin needs a sign-in to finish its setup. Open Jellyfin in HexOS and run Pre-configure Jellyfin to choose one.");
   return chosen;
 }
 

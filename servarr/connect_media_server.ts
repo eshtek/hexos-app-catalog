@@ -267,7 +267,7 @@ const SERVERS: Record<string, Server> = {
     step: (managerName) => `Making ${managerName} a key in Jellyfin`,
     credential: async (ctx: HookContext, keyName: string) => {
       const token = jellyfinAdministratorToken(ctx);
-      if (!token) ctx.fail("HexOS couldn't find a Jellyfin administrator's key. Run Pre-configure Jellyfin from Jellyfin's Connections tab, then try again.");
+      if (!token) ctx.fail("HexOS couldn't find a Jellyfin administrator's key. Open Jellyfin in HexOS and run Pre-configure Jellyfin, then try again.");
       // Jellyfin 12 has EnableLegacyAuthorization off, which turns away a token in X-Emby-Token (401)
       return namedKey(ctx, "Jellyfin", { url: `${ctx.baseUrl}/Auth/Keys`, headers: { Authorization: `MediaBrowser Token="${token}"` }, app: "app" }, keyName);
     },
@@ -282,7 +282,7 @@ const SERVERS: Record<string, Server> = {
     step: (managerName) => `Making ${managerName} a key in Emby`,
     credential: async (ctx: HookContext, keyName: string) => {
       const token = await embyAdministratorToken(ctx);
-      if (!token) ctx.fail("HexOS couldn't find an Emby administrator's key. Run Pre-configure Emby from Emby's Connections tab, then try again.");
+      if (!token) ctx.fail("HexOS couldn't find an Emby administrator's key. Open Emby in HexOS and run Pre-configure Emby, then try again.");
       return namedKey(ctx, "Emby", { url: `${ctx.baseUrl}/emby/Auth/Keys`, headers: { "X-Emby-Token": token }, app: "App" }, keyName);
     },
   },
@@ -301,7 +301,7 @@ const SERVERS: Record<string, Server> = {
       const config = ctx.mounts.find((m) => m.containerPath === "/config") ?? ctx.mounts.find((m) => m.hostPath.endsWith("/plex/config"));
       const token = readText(`${config?.localPath}/Library/Application Support/Plex Media Server/Preferences.xml`)?.match(/PlexOnlineToken="([^"]+)"/)?.[1];
       // Nobody signed in to Plex, so trying again can't help
-      if (!token) stop(ctx, "Plex has no sign-in yet. Run Pre-configure Plex from Plex's Connections tab, then run this again.");
+      if (!token) stop(ctx, "Plex has no sign-in yet. Open Plex in HexOS and run Pre-configure Plex, then run this again.");
       return token;
     },
   },
