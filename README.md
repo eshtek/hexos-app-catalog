@@ -23,7 +23,6 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
 | [Dockge](dockge.json) | Docker Compose stack manager |
-| [Donetick](dozzle.json) | Smart task manager |
 | [Donetick](donetick.json) | Smart task manager |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
@@ -62,11 +61,11 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [ONLYOFFICE](onlyoffice-document-server.json) | Office documents in the browser |
 | [OpenCloud](opencloud.json) | File sync and sharing, a folder per person |
-| [PairDrop](pairdrop.json) | Transfer files cross-clatform |
 | [PairDrop](pairdrop.json) | Transfer files cross-platform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
+| [Planka](planka.json) | A Kanban tool for those who want their work visible and organized |
 | [Pelican Panel](pelican-panel.json) | Game server panel; its game servers run in Pelican Wings |
 | [Pelican Wings](pelican-wings.json) | Runs Pelican's game servers, on ports 27200 to 27219 |
 | [Plex](plex.json) | Media server with Plex Pass support |
@@ -97,6 +96,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Vikunja](vikunja.json) | Task manager with lists |
 | [Tailscale](tailscale.json) | Private access to the server from anywhere |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
 | [UniFi Protect Backup](unifi-protect-backup.json) | Backs up UniFi Protect camera events |
