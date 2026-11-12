@@ -6,7 +6,8 @@
     "changeLog": "Audiobookshelf opens ready, with your sign-in and your Audiobooks and Podcasts libraries."
   },
   "sign_in": {
-    "username": true
+    "username": true,
+    "existing": true
   },
   "requirements": {
     "locations": [
