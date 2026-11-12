@@ -1,5 +1,6 @@
 {
   "version": 5,
+  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial"
@@ -37,7 +38,7 @@
   ],
   "requirements": {
     "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
-    "specifications": ["2CORE", "1gbram"],
+    "specifications": ["2CORE", "1GBRAM"],
     "permissions": ["READ_WRITE_LOCATIONS"],
     "ports": [30024]
   },
@@ -54,7 +55,7 @@
   ],
   "app_values": {
     "planka": {
-      "base_url": "http://$SERVER_LAN_IP:30024",
+      "base_url": "http://$SERVER_LAN_IP:$PORT(30024)",
       "default_admin_email": "$QUESTION(default_admin_email)",
       "default_admin_name": "$QUESTION(default_admin_name)",
       "default_admin_username": "$QUESTION(default_admin_username)",
@@ -66,7 +67,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30024
+        "port_number": "$PORT(30024)"
       }
     },
     "storage": {

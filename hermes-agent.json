@@ -1,0 +1,119 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Hermes runs as an assistant on your own model, kept off your home network."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "1GB",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30433,
+      30432
+    ],
+    "contained": {
+      "partner": "ollama"
+    },
+    "local_only": true
+  },
+  "installation_questions": [
+    {
+      "question": "Dashboard password",
+      "description": "You sign in to Hermes's dashboard with the username admin and this password.",
+      "type": "password",
+      "key": "dashboard_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/hermes-agent/data",
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "hermes_agent": {
+      "enable_basic_auth": true,
+      "basic_auth_username": "admin",
+      "basic_auth_password": "$QUESTION(dashboard_password)",
+      "basic_auth_secret": "$RANDOM_STRING(32)",
+      "gateway_key": "$RANDOM_STRING(32)"
+    },
+    "network": {
+      "dashboard_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30433)"
+      },
+      "gateway_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30432)"
+      },
+      "networks": [
+        {
+          "name": "hexos-agents",
+          "containers": [
+            {
+              "name": "hermes-agent",
+              "config": {}
+            }
+          ]
+        }
+      ]
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/hermes-agent/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "connect-ollama",
+      "title": "Connect to Ollama",
+      "description": "Lets Hermes use the models on your graphics card.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "hermes-agent"
+        }
+      ],
+      "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
+      "script": "hermes-agent/connect_ollama.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

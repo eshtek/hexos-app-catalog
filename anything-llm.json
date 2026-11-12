@@ -1,0 +1,98 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.1.0",
+    "changeLog": "AnythingLLM keeps its settings when it restarts or updates."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GB",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30239
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/anything-llm/data",
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/anything-llm/config"
+    }
+  ],
+  "ensure_files_exist": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/anything-llm/config/.env",
+      "mount_path": "/app/server/.env",
+      "uid": 1000,
+      "gid": 1000
+    }
+  ],
+  "app_values": {
+    "anything_llm": {
+      "sig_key": "$RANDOM_STRING(32)",
+      "sig_salt": "$RANDOM_STRING(32)",
+      "jwt_secret": "$RANDOM_STRING(32)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30239)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/anything-llm/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(15%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "connect-ollama",
+      "title": "Connect to Ollama",
+      "description": "Lets AnythingLLM use the models on your graphics card.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "anything-llm"
+        }
+      ],
+      "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
+      "script": "anything-llm/connect_ollama.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 {
   "version": 5,
+  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial"
@@ -15,7 +16,7 @@
   ],
   "requirements": {
     "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
-    "specifications": ["2CORE", "1gbram"],
+    "specifications": ["2CORE", "1GBRAM"],
     "permissions": ["READ_WRITE_LOCATIONS"],
     "ports": [30107]
   },
@@ -31,7 +32,7 @@
   ],
   "app_values": {
     "vikunja": {
-      "url": "http://$SERVER_LAN_IP:30107",
+      "url": "http://$SERVER_LAN_IP:$PORT(30107)",
       "max_file_size": "$QUESTION(max_file_size)",
       "db_password": "$RANDOM_STRING(16)",
       "redis_password": "$RANDOM_STRING(16)",
@@ -40,7 +41,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30107
+        "port_number": "$PORT(30107)"
       }
     },
     "storage": {

@@ -1,0 +1,108 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.2.0",
+    "changeLog": "SearXNG can give AnythingLLM private web search, as it does Open WebUI."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "1CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30053
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/searxng/config",
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30053)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/searxng/config)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(5%, 1024)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "connect-open-webui",
+      "title": "Connect to Open WebUI",
+      "description": "Gives Open WebUI private web search.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "open-webui"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "open-webui"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "searxng"
+        }
+      ],
+      "rerun": "converge",
+      "script": "searxng/connect.ts",
+      "entrypoint": "openWebui",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-anything-llm",
+      "title": "Connect to AnythingLLM",
+      "description": "Gives AnythingLLM private web search.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "anything-llm"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "anything-llm"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "searxng"
+        }
+      ],
+      "rerun": "converge",
+      "script": "searxng/connect.ts",
+      "entrypoint": "anythingLlm",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

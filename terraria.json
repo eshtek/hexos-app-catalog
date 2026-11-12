@@ -1,0 +1,140 @@
+{
+  "version": 6,
+  "internal": false,
+  "script": {
+    "version": "1.0.1",
+    "changeLog": "Its card shows who's online, and folds back while nobody is on."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      7777
+    ],
+    "game_port": 7777,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "World size",
+      "type": "select",
+      "key": "world_size",
+      "required": true,
+      "installonly": true,
+      "default": "2",
+      "options": [
+        { "text": "Small", "value": "1" },
+        { "text": "Medium", "value": "2" },
+        { "text": "Large", "value": "3" }
+      ]
+    },
+    {
+      "question": "Difficulty",
+      "type": "select",
+      "key": "world_difficulty",
+      "required": true,
+      "installonly": true,
+      "default": "0",
+      "options": [
+        { "text": "Classic", "value": "0" },
+        { "text": "Expert", "value": "1" },
+        { "text": "Master", "value": "2" },
+        { "text": "Journey", "value": "3" }
+      ]
+    },
+    {
+      "question": "Password",
+      "description": "Players type it when they join.",
+      "type": "password",
+      "key": "password",
+      "required": false,
+      "default": "",
+      "placeholder": "Leave blank for no password"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(terraria)/config",
+      "owner": {
+        "user": "apps"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(terraria)/worlds",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "worlds"
+      }
+    }
+  ],
+  "app_values": {
+    "terraria": {
+      "world_size": "$QUESTION(world_size)",
+      "world_difficulty": "$QUESTION(world_difficulty)",
+      "password": "$QUESTION(password)"
+    },
+    "network": {
+      "server_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(7777)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(terraria)/config)",
+      "world": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(terraria)/worlds)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 2048)"
+      }
+    }
+  },
+  "widgets": [
+    {
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's playing on this server's world.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "terraria"
+        }
+      ],
+      "background": {
+        "field": "online"
+      },
+      "slots": [
+        {
+          "type": "stat",
+          "field": "count"
+        },
+        {
+          "type": "list",
+          "field": "online",
+          "rows": 1
+        }
+      ],
+      "script": "terraria/widget_players.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}

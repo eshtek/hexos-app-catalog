@@ -38,6 +38,15 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   // Failing disks lead the list — the whole point of the glance.
   const ordered = [...failing, ...devices.filter((entry) => !failing.includes(entry))];
 
+  // A bar per disk that reports a temperature, by device name. A card holds seven, so with more
+  // disks the hottest seven are the ones worth seeing; a single disk is no comparison, so no chart.
+  const temps = devices
+    .filter((entry) => (entry.smart?.temp ?? 0) > 0)
+    .sort((a, b) => (b.smart?.temp ?? 0) - (a.smart?.temp ?? 0))
+    .slice(0, 7)
+    .map((entry) => ({ label: (entry.device?.device_name || "disk").slice(0, 12), value: entry.smart?.temp ?? 0 }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+
   return {
     fields: {
       passing: {
@@ -63,6 +72,7 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
             .join(" · ") || undefined,
         })),
       },
+      ...(temps.length >= 2 ? { temps: { type: "chart" as const, points: temps, unit: "°C", tone: { good: 30, bad: 100 } } } : {}),
       status: {
         type: "text",
         text:

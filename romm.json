@@ -1,8 +1,8 @@
 {
   "version": 5,
   "script": {
-    "version": "1.0.1",
-    "changeLog": "Changed default for a question"
+    "version": "1.0.2",
+    "changeLog": "RomM downloads LaunchBox's data every night when LaunchBox metadata is on."
   },
   "installation_questions": [
     {
@@ -10,6 +10,7 @@
       "description": "Generate an ID and secret for IGDB (https://api-docs.igdb.com/#account-creation). IGDB provides titles, descriptions, cover art and related games.",
       "type": "text",
       "key": "igdb_client_id",
+      "group": "RomM / IGDB",
       "required": false
     },
     {
@@ -17,13 +18,15 @@
       "description": "The client secret from your IGDB application.",
       "type": "password",
       "key": "igdb_client_secret",
+      "group": "RomM / IGDB",
       "required": false
     },
     {
       "question": "Input your MobyGames API Key",
       "description": "Instructions for how to generate an API key for MobyGames can be found here: https://www.mobygames.com/info/api",
-      "type": "text",
+      "type": "password",
       "key": "mobygames_api_key",
+      "group": "RomM / More metadata accounts",
       "required": false
     },
     {
@@ -31,6 +34,7 @@
       "description": "Username for ScreenScraper.fr (https://www.screenscraper.fr). A free provider of titles, descriptions, cover art, screenshots and manuals.",
       "type": "text",
       "key": "screenscraper_user",
+      "group": "RomM / ScreenScraper",
       "required": false
     },
     {
@@ -38,20 +42,23 @@
       "description": "Password for your ScreenScraper.fr account.",
       "type": "password",
       "key": "screenscraper_password",
+      "group": "RomM / ScreenScraper",
       "required": false
     },
     {
       "question": "Input your RetroAchievements API key",
       "description": "Generate an API key from your RetroAchievements account settings (https://retroachievements.org/settings). Adds achievement progress tracking.",
-      "type": "text",
+      "type": "password",
       "key": "retroachievements_api_key",
+      "group": "RomM / More metadata accounts",
       "required": false
     },
     {
       "question": "Input your SteamGridDB API key",
       "description": "Generate an API key from your SteamGridDB profile preferences (https://www.steamgriddb.com/profile/preferences/api). Provides additional high-quality cover art.",
-      "type": "text",
+      "type": "password",
       "key": "steamgriddb_api_key",
+      "group": "RomM / More metadata accounts",
       "required": false
     },
     {
@@ -59,6 +66,7 @@
       "description": "Metadata for 180,000+ flash and browser-based games.",
       "type": "select",
       "key": "flashpoint_api_enabled",
+      "group": "RomM / Free metadata",
       "required": false,
       "default": "false",
       "options": [
@@ -68,9 +76,10 @@
     },
     {
       "question": "Enable LaunchBox metadata",
-      "description": "Community-driven metadata database. Requires running a LaunchBox metadata update (manual or scheduled) inside RomM before it can match games.",
+      "description": "Community-driven metadata database. RomM downloads its data overnight, so matches start the next day. To match games sooner, run the LaunchBox metadata update inside RomM.",
       "type": "select",
       "key": "launchbox_api_enabled",
+      "group": "RomM / Free metadata",
       "required": false,
       "default": "false",
       "options": [
@@ -83,6 +92,7 @@
       "description": "Only required for Tinfoil/WebRcade integration. Lowers security, leave off unless you need it.",
       "type": "select",
       "key": "disable_download_endpoint_auth",
+      "group": "RomM / Downloads",
       "required": false,
       "default": "false",
       "options": [
@@ -131,7 +141,9 @@
       "screenscraper_password": "$IF($QUESTION(screenscraper_password), $QUESTION(screenscraper_password), \"\")",
       "retroachievements_api_key": "$IF($QUESTION(retroachievements_api_key), $QUESTION(retroachievements_api_key), \"\")",
       "steamgriddb_api_key": "$IF($QUESTION(steamgriddb_api_key), $QUESTION(steamgriddb_api_key), \"\")",
-      "additional_envs": []
+      "additional_envs": [
+        { "name": "ENABLE_SCHEDULED_UPDATE_LAUNCHBOX_METADATA", "value": "$QUESTION(launchbox_api_enabled)" }
+      ]
     },
     "storage": {
       "library": "$HOST_PATH($LOCATION(ApplicationsCapacity)/romm/library)",
@@ -143,7 +155,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30446
+        "port_number": "$PORT(30446)"
       }
     },
     "resources": {

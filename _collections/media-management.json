@@ -1,0 +1,191 @@
+{
+  "type": "collection",
+  "version": 1,
+  "name": "Media library",
+  "description": "Get started with all the apps you need for managing your own media collection.",
+  "image": "_collections/media-management.jpg",
+  "requirements": {
+    "specifications": [
+      "GPU"
+    ]
+  },
+  "groups": [
+    {
+      "id": "download",
+      "type": "multiple",
+      "min": 1,
+      "title": "Download clients",
+      "description": "These apps handle downloading media from different sources, such as torrents or Usenet groups.",
+      "options": [
+        {
+          "app": "qbittorrent",
+          "core": true,
+          "summary": "Torrents",
+          "default": true,
+          "vpnRecommended": true
+        },
+        {
+          "app": "deluge",
+          "summary": "Torrents, lightweight",
+          "vpnRecommended": true
+        },
+        {
+          "app": "sabnzbd",
+          "core": true,
+          "summary": "Usenet",
+          "vpnRecommended": true
+        },
+        {
+          "app": "nzbget",
+          "summary": "Usenet, lightweight",
+          "vpnRecommended": true
+        }
+      ]
+    },
+    {
+      "id": "managers",
+      "type": "multiple",
+      "title": "Media managers",
+      "description": "These apps monitor and organize your media library, and instruct your download clients to fetch better content when available.",
+      "options": [
+        {
+          "app": "radarr",
+          "core": true,
+          "summary": "Movies",
+          "default": true
+        },
+        {
+          "app": "sonarr",
+          "core": true,
+          "summary": "TV shows",
+          "default": true
+        },
+        {
+          "app": "lidarr",
+          "summary": "Music"
+        },
+        {
+          "app": "sportarr",
+          "summary": "Sports"
+        },
+        {
+          "app": "chaptarr",
+          "summary": "Books and audiobooks"
+        }
+      ]
+    },
+    {
+      "id": "indexer",
+      "type": "fixed",
+      "title": "Indexer manager",
+      "description": "Finds releases for every media manager you pick.",
+      "options": [
+        {
+          "app": "prowlarr",
+          "core": true
+        }
+      ]
+    },
+    {
+      "id": "player",
+      "type": "single",
+      "title": "Media server",
+      "description": "Your media server allows you to stream your media library to your connected devices. Each app can connect via your web browser, or through client apps installed on your phone, desktop, or smart TV.",
+      "options": [
+        {
+          "app": "jellyfin",
+          "core": true,
+          "recommended": true,
+          "summary": "Free, open source and fully featured",
+          "default": true
+        },
+        {
+          "app": "plex",
+          "core": true,
+          "summary": "Apps for almost every device"
+        },
+        {
+          "app": "emby",
+          "summary": "Flexible user and parental controls"
+        }
+      ]
+    },
+    {
+      "id": "companions",
+      "type": "multiple",
+      "title": "Companion apps",
+      "description": "Apps designed to enhance the capabilities of the ones you've already selected.",
+      "options": [
+        {
+          "app": "profilarr",
+          "summary": "Quality profiles",
+          "default": true,
+          "requiresAny": [
+            "radarr",
+            "sonarr"
+          ]
+        },
+        {
+          "app": "seerr",
+          "summary": "Media requests",
+          "default": true,
+          "requiresAny": [
+            "radarr",
+            "sonarr"
+          ]
+        },
+        {
+          "app": "bazarr",
+          "summary": "Subtitles",
+          "default": true,
+          "requiresAny": [
+            "radarr",
+            "sonarr"
+          ]
+        },
+        {
+          "app": "tautulli",
+          "summary": "Watch statistics",
+          "requires": [
+            "plex"
+          ]
+        },
+        {
+          "app": "jellystat",
+          "summary": "Watch statistics",
+          "requires": [
+            "jellyfin"
+          ],
+          "answers": {
+            "is_emby_api": "false"
+          }
+        },
+        {
+          "app": "audiobookshelf",
+          "summary": "Audiobook player",
+          "requires": [
+            "chaptarr"
+          ]
+        },
+        {
+          "app": "kavita",
+          "summary": "Ebook reader",
+          "requires": [
+            "chaptarr"
+          ]
+        },
+        {
+          "app": "flaresolverr",
+          "summary": "Reaches indexers behind Cloudflare",
+          "requiresAny": [
+            "radarr",
+            "sonarr",
+            "lidarr",
+            "sportarr",
+            "chaptarr"
+          ]
+        }
+      ]
+    }
+  ]
+}

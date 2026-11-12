@@ -9,5 +9,8 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "jsonc-parser": "3.3.1"
   }
 }

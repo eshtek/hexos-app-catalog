@@ -1,0 +1,90 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial Script"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "512MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [30047]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    { "path": "$LOCATION(ApplicationsPerformance)/tautulli/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } }
+  ],
+  "app_values": {
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/tautulli/config)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30047)"
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "overview",
+      "title": "Recently added",
+      "description": "What's new on your Plex server, who watches most, and the busiest days, from Tautulli.",
+      "refresh": 300,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tautulli"
+        }
+      ],
+      "slots": [
+        {
+          "type": "list",
+          "field": "added",
+          "rows": 3
+        }
+      ],
+      "slides": [
+        {
+          "title": "Most active users",
+          "slots": [
+            {
+              "type": "list",
+              "field": "users",
+              "rows": 3
+            }
+          ]
+        },
+        {
+          "title": "Play count by day of week",
+          "slots": [
+            {
+              "type": "chart",
+              "field": "days"
+            }
+          ]
+        }
+      ],
+      "script": "tautulli/widget_overview.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
+  ]
+}

@@ -24,8 +24,8 @@ export const LOCATIONS = [
   "VirtualDisks",
 ] as const;
 
-/** APP_SPEC_REGEX. */
-export const SPEC_REGEX = /^(\d+)(MBRAM|GBRAM|MB|GB|CORE)$|^GPU$/;
+/** APP_SPEC_REGEX. DISPLAY: the app draws on a TV or monitor plugged into the server. */
+export const SPEC_REGEX = /^(\d+)(MBRAM|GBRAM|GBVRAM|MB|GB|CORE)$|^GPU$|^DISPLAY$/;
 
 /** AppPermission. */
 export const PERMISSIONS = ["READ_WRITE_LOCATIONS"] as const;
@@ -50,12 +50,29 @@ export const CALL_MACROS = [
   "IF",
   "QUESTION",
   "MEMORY",
+  "CPUS",
   "RANDOM_STRING",
   "HOST_PATH",
   "MOUNTED_HOST_PATH",
   "LOCATION",
   "APP_INSTALLED",
   "GPU_CONFIG",
+  // A partner app's per-install credential, issued by the platform at install time. The argument
+  // is the partner id; empty means the app being installed.
+  "PARTNER_TOKEN",
+  // A display app's devices (its card's DRM and HDMI audio nodes, plus input), its card's slot, its
+  // TrueNAS GPU selection (an NVIDIA card by UUID), and the port it shows on ("HDMI-A:1").
+  "DISPLAY_DEVICES",
+  "DISPLAY_GPU_PCI",
+  "DISPLAY_GPU_CONFIG",
+  "DISPLAY_PORT",
+  // A private folder that follows the copy of the app: "$INSTANCE(sonarr)" is "sonarr" for the first
+  // copy and "sonarr-2" for the second, so a first copy's folders never move.
+  "INSTANCE",
+  // A host port and the first one HexOS tries: "$PORT(30146)" starts at 30146, and a taken port moves.
+  // As a whole value it resolves to a number, inside a longer string to digits, and every $PORT(n)
+  // with the same n in a script resolves to the same port.
+  "PORT",
 ] as const;
 
 /** Macros substituted as bare tokens, with no argument list. */
@@ -79,7 +96,7 @@ export const HOOK_EVENT_SPECS = [
 export const HOOK_RERUNS = ["idempotent", "converge", "refuse"] as const;
 
 /** HookSurface — where a hook can appear. */
-export const HOOK_SURFACES = ["installPicker", "card", "fileBrowser", "widget"] as const;
+export const HOOK_SURFACES = ["installPicker", "card", "fileBrowser", "widget", "settings"] as const;
 
 /** Known hook condition types. Unknown types are accepted (fail closed at runtime). */
 export const HOOK_CONDITION_TYPES = [
@@ -98,8 +115,27 @@ export const HOOK_TARGET_TYPES = ["files"] as const;
 
 // --- v6 widget contract ---
 
-/** Supported widgetsSchema version. */
-export const SUPPORTED_WIDGETS_SCHEMA = 2;
+/**
+ * Supported widgetsSchema version. In 3 a widget is the app's dashboard card,
+ * so its `slots` and `background` sit on the declaration itself; the `sizes`
+ * of 2 are gone.
+ */
+export const SUPPORTED_WIDGETS_SCHEMA = 3;
 
-/** Widget slot types. */
-export const WIDGET_SLOT_TYPES = ["text", "stat", "list", "image"] as const;
+/** Widget slot types. An image is never a slot: the card's artwork is its background. */
+export const WIDGET_SLOT_TYPES = ["text", "stat", "list", "progress", "chart"] as const;
+
+/**
+ * Most slides a widget adds after its own title and slots. A box from before
+ * slides draws the first view alone, so that view must stand on its own.
+ */
+export const WIDGET_MAX_SLIDES = 3;
+
+/** The shortest widget `refresh` the platform honours, in seconds: one deck poll (MIN_REFRESH_S). */
+export const WIDGET_MIN_REFRESH_S = 5;
+
+/** Most slots a widget declares. */
+export const WIDGET_MAX_SLOTS = 3;
+
+/** Most fields a widget shows on its app's Settings tab (a join code), each read-only with Copy. */
+export const WIDGET_MAX_SETTINGS = 4;

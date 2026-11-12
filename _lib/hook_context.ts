@@ -45,6 +45,8 @@ export interface HookContext {
   readonly resourceType: string;
   /** The app/vm ID this hook is running for (e.g., "plex", "nextcloud") */
   readonly resourceId: string;
+  /** The catalog app this is. `resourceId` is `sonarr-2` on a later copy. Absent on older boxes. */
+  readonly catalogAppId?: string;
   /** The lifecycle event that triggered this hook */
   readonly event: "onBeforeInstall" | "onAfterInstall" | "onBeforeUpgrade" | "onAfterUpgrade" | string;
   /** Previous version (upgrade hooks only) */
@@ -65,6 +67,63 @@ export interface HookContext {
    * - Question inputs: the raw answer value (string | number | boolean)
    */
   readonly inputs: Record<string, unknown>;
+
+  /**
+   * The sign-in the owner chose for this install or collection run, for an app whose script
+   * declares `sign_in` (a username of at least 3 characters and a password of at least 8). Undefined for a card run outside an
+   * install or collection, and from a deck that predates it: a hook then falls back to what it did
+   * before, or asks with `askForInputs`. Undefined too for a hook whose own app and linked apps the
+   * owner all already had in a collection run, since none of them took it. Never write it to a file
+   * of HexOS's own; the app's own settings are where it belongs.
+   */
+  readonly signIn?: {
+    username: string;
+    password: string;
+    /** The owner's email, for an app whose first account takes one (Seerr's, made through Jellyfin or Emby). */
+    email?: string;
+  };
+  /**
+   * Of the hook's own app and the apps it links to, the ones the owner already had in a collection
+   * run, by the name each runs under (`resourceId` for its own, `linkedApp(id)?.name ?? id` for one
+   * it links to). Each keeps its own sign-in: never try `signIn` against one of them, which it never
+   * took. Undefined outside such a run.
+   */
+  readonly keptApps?: readonly string[];
+  /**
+   * The admin account each of those apps keeps, by the same name, as the owner typed it for an app
+   * whose script declares `sign_in.existing`. `username` is empty for an app that takes a password
+   * alone. Sign in with it and never change it or make another account beside it. Undefined outside
+   * such a run, and on a box from before it.
+   */
+  readonly existingSignIns?: Readonly<Record<string, { username: string; password: string }>>;
+  /** Those apps whose account a hook earlier in the run found refused: none is tried again. */
+  readonly refusedSignIns?: readonly string[];
+  /**
+   * Sign in to a kept app (one of `keptApps`) with the account the owner gave for it, tried once in
+   * the whole run, since an app may lock an account after a few refusals. `signsIn` answers undefined
+   * only when the app refuses the account, and throws when it can't be reached. A first refusal asks
+   * the owner once to put it right (`ask`'s title and description, `username` false for a password
+   * alone, `app` naming the fields), and an account put right is kept for the hooks after; otherwise
+   * the run forgets it. Resolves with what `signsIn` gave, "refused" (now or by an earlier hook:
+   * stop and say so, naming no username), or undefined when the run gave no account for the app.
+   * Present whenever `keptApps` is.
+   *
+   * @example
+   * ```ts
+   * const token = await ctx.tryExistingSignIn?.(ctx.resourceId, (account) => logIn(ctx, account), {
+   *   title: "Sign in to Kavita",
+   *   description: "Kavita refused the account you gave. Enter it again so HexOS can use it.",
+   *   username: true,
+   *   app: "Kavita",
+   * });
+   * if (token === "refused") stop(ctx, "Kavita refused the account you gave, so HexOS left it as it is.");
+   * ```
+   */
+  tryExistingSignIn?<T>(
+    appId: string,
+    signsIn: (account: { username: string; password: string }) => Promise<T | undefined>,
+    ask: { title: string; description: string; username: boolean; app: string },
+  ): Promise<T | "refused" | undefined>;
 
   /**
    * File-targeted actions only: the files the user selected. `containerPath`
@@ -102,6 +161,22 @@ export interface HookContext {
    */
   getInput<T = unknown>(inputId: string): T;
 
+  /**
+   * Pause and ask the owner for what the hook can't find itself (another app's password, a Plex
+   * sign-in), in the same form a declared input gets, then carry on with the answers keyed by input
+   * id. Rejects with an Error named "HookInputsUnanswered" when the owner skips or after 10
+   * minutes. A last resort: try everything the hook can read for itself first.
+   *
+   * @example
+   * ```ts
+   * const answers = await ctx.askForInputs(
+   *   [{ type: "question", id: "password", question: { question: "qBittorrent password", type: "password", key: "password", required: true } }],
+   *   { title: "Sign in to qBittorrent", description: "Enter the password you use for qBittorrent, so Radarr can send it downloads." },
+   * );
+   * ```
+   */
+  askForInputs(inputs: HookInputDeclaration[], prompt?: { title?: string; description?: string }): Promise<Record<string, unknown>>;
+
   /** Log a message (visible in backend logs, not shown to user) */
   log(message: string): void;
 
@@ -123,6 +198,67 @@ export interface HookContext {
    * actions; lifecycle hooks may receive null depending on platform version.
    */
   getInstalledAppUrl(appId: string): Promise<string | null>;
+
+  /**
+   * Readies the server's GPU for this app's hardware video. On a chip that needs firmware loaded at
+   * boot, sets that up for the next restart. A hook named in `rerunHook` runs again after it, and
+   * the owner is asked for that restart. Absent on a box whose image predates it.
+   */
+  prepareHardwareVideo?(options?: { rerunHook?: string }): Promise<{ restartNeeded: boolean }>;
+  /**
+   * Another installed app's live mounts, resolved as this hook's own `mounts` are: how a link
+   * between two apps reads the other one's settings file (an *arr's config.xml for its API key).
+   * Empty when the app isn't installed or its mounts can't be read.
+   */
+  getInstalledAppMounts(appId: string): Promise<ContextMount[]>;
+  /**
+   * The copy of `appId` this link run works with, on a hook that says `copies`. Null on a run that
+   * names none, which works with the app's first copy. `getInstalledAppUrl` and
+   * `getInstalledAppMounts` already answer for this copy. Absent on older boxes.
+   */
+  linkedApp?(appId: string): { name: string; displayName: string } | null;
+  /**
+   * The TrueNAS name of every installed copy of `appId`, first copy first, for a hook that has to
+   * reach them all. `getInstalledAppUrl` and `getInstalledAppMounts` take these names as they are.
+   * Absent on older boxes.
+   */
+  installedCopies?(appId: string): Promise<string[]>;
+
+  /**
+   * A request to a partner app's API, authenticated with the credential HexOS
+   * issued to this install (the `$PARTNER_TOKEN()` value in the app's
+   * env). The platform reads that credential from the install, checks it, and
+   * adds whatever the partner's API expects on the request (signed headers, a
+   * token header, or query parameters). The script never sees the credential.
+   * Rejects when the app has no valid credential for that partner, when the
+   * request is not to this app on this server, or when the body is not text.
+   *
+   * @example
+   * ```ts
+   * const res = await ctx.partnerRequest("<partner>", `${ctx.baseUrl}/api/status`);
+   * ```
+   */
+  partnerRequest(partnerId: string, url: string, init?: RequestInit): Promise<Response>;
+
+  /**
+   * partnerRequest for the common case: a JSON body in (any value, serialised for
+   * you), a JSON answer out, typed by the caller. A refused or failed request
+   * becomes an Error carrying the status and the partner's own reason text, so
+   * a script can simply let it propagate. Use partnerRequest itself when a
+   * status needs handling (a 404 that means "not set up yet", a stream, a
+   * non-JSON body).
+   *
+   * @example
+   * ```ts
+   * const flows = await ctx.partnerRequestJson<Array<{ Uid: string; Name: string }>>("<partner>", `${ctx.baseUrl}/api/flow`);
+   * await ctx.partnerRequestJson("<partner>", `${ctx.baseUrl}/api/items`, { method: "POST", body: { name: "x" } });
+   * ```
+   */
+  partnerRequestJson<T>(
+    partnerId: string,
+    url: string,
+    init?: Omit<RequestInit, "body"> & { body?: unknown },
+  ): Promise<T>;
 
   registerCheckpoints(checkpoints: Array<{ id: string; message: string }>): Promise<void>;
 
@@ -185,6 +321,14 @@ export interface HookContext {
   fail(message: string, context?: Array<{ label: string; value: string }>): never;
 
   /**
+   * End the hook without its work because the owner skipped something it needs (Plex's sign-in, so
+   * Seerr was never set up), which trying again won't change. A collection run skips the step with
+   * the message and goes on; anywhere else the hook fails with it, as fail() does. Missing on a box
+   * from before it: call `ctx.skip ? ctx.skip(message) : ctx.fail(message)`.
+   */
+  skip?(message: string, context?: Array<{ label: string; value: string }>): never;
+
+  /**
    * Pause the hook at a failed checkpoint and wait for the user to retry or skip.
    * The error and context are surfaced in the UI exactly like `fail()`, but the hook
    * stays alive — it resumes when the user acts.
@@ -202,6 +346,36 @@ export interface HookContext {
    * The UI renders a skip icon instead of a check mark.
    */
   skipCheckpoint(id: string, message?: string): Promise<void>;
+
+  /**
+   * Restart this app, and only this app, for a setting it reads at start. Resolves once the app has
+   * been stopped and started; the app may still be coming up. Missing on a box from before it.
+   */
+  restartApp?(): Promise<void>;
+
+  /**
+   * Change this app's own TrueNAS settings, for a value only an update can carry: `change` edits a
+   * copy of the app's current values, and the app is updated when anything differs, which restarts
+   * it. Resolves to whether it changed. The app's graphics card stays as it is. A later script
+   * update writes the script's own values back, so a link that uses this runs again after one.
+   * Missing on a box from before it.
+   */
+  updateAppValues?(change: (values: Record<string, unknown>) => void): Promise<boolean>;
+
+  /** This app's current TrueNAS values, to read a setting from. Missing on a box from before it. */
+  getAppValues?(): Promise<Record<string, unknown>>;
+
+  /** What this server's graphics cards can run, for a hook that offers models. Missing on a box from before it. */
+  readLocalAiHardware?(): Promise<{
+    cards: Array<{ pciSlot: string; name: string; memoryGB: number | null }>;
+    ollama?: {
+      pciSlot?: string;
+      models: string[];
+      wanted?: string;
+      /** The context it runs models at, in tokens (its OLLAMA_CONTEXT_LENGTH). Absent on a box from before it. */
+      contextLength?: number;
+    };
+  }>;
 
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
@@ -232,6 +406,32 @@ export interface WaitForAppOptions {
   /** Additional fetch headers */
   headers?: Record<string, string>;
 }
+
+/** An input a hook asks for: the same shape as an entry of a hook's declared `inputs`. */
+export type HookInputDeclaration =
+  | {
+      type: "question";
+      id: string;
+      question: {
+        question: string;
+        type: "text" | "password" | "number" | "boolean" | "select";
+        key: string;
+        required?: boolean;
+        description?: string;
+        placeholder?: string;
+        default?: string | number | boolean;
+        /** A select question's choices. */
+        options?: Array<{ text: string; value: string }>;
+      };
+    }
+  | {
+      type: "oauth";
+      id: string;
+      name: string;
+      description?: string;
+      provider: string;
+      flow: Record<string, unknown>;
+    };
 
 /**
  * Common OAuth result shapes for type-safe input access.

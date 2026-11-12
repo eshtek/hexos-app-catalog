@@ -1,27 +1,81 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "2.0.0",
-    "changeLog": "V5 with post-install hook for automated Jellyfin configuration"
+    "version": "2.4.0",
+    "changeLog": "Uses the sign-in you choose as Jellyfin's administrator, which Seerr and Jellystat sign in with too, and adds a check that Fladder can reach Jellyfin. A Jellyfin you already have gets it as an administrator of its own when you add it to a collection"
+  },
+  "sign_in": {
+    "username": true,
+    "adds_user": true,
+    "email": true,
+    "existing": true
   },
   "requirements": {
-    "locations": ["ApplicationsPerformance", "ApplicationsCapacity", "Media", "Photos", "Music", "Movies", "Shows", "Videos"],
-    "specifications": ["2CORE", "256MB"],
-    "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [30013, 30014]
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Media",
+      "Photos",
+      "Music",
+      "Movies",
+      "Shows",
+      "Videos"
+    ],
+    "specifications": [
+      "2CORE",
+      "256MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30013,
+      30014
+    ]
   },
   "ensure_directories_exists": [
-    { "path": "$LOCATION(ApplicationsPerformance)" },
-    { "path": "$LOCATION(ApplicationsCapacity)" },
-    { "path": "$LOCATION(Media)", "network_share": true },
-    { "path": "$LOCATION(Photos)", "network_share": true },
-    { "path": "$LOCATION(Music)", "network_share": true },
-    { "path": "$LOCATION(Movies)", "network_share": true },
-    { "path": "$LOCATION(Shows)", "network_share": true },
-    { "path": "$LOCATION(Videos)", "network_share": true },
-    { "path": "$LOCATION(ApplicationsPerformance)/jellyfin/config", "snapshot": { "id": "config" } },
-    { "path": "$LOCATION(ApplicationsCapacity)/jellyfin/cache" },
-    { "path": "$LOCATION(ApplicationsPerformance)/jellyfin/transcodes" }
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Photos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Music)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Movies)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Shows)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Videos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/jellyfin/config",
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/jellyfin/cache"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/jellyfin/transcodes"
+    }
   ],
   "app_values": {
     "storage": {
@@ -38,70 +92,243 @@
       ]
     },
     "network": {
-      "web_port": { "bind_mode": "published", "port_number": 30013 },
-      "https_port": { "bind_mode": "published", "port_number": 30014 }
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30013)"
+      },
+      "https_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30014)"
+      }
     },
     "resources": {
-      "limits": { "cpus": 2, "memory": "$MEMORY(10%, 4096)" },
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      },
       "gpus": "$GPU_CONFIG()"
     }
   },
   "hooks": [
     {
       "id": "configure-jellyfin",
-      "event": "onAfterInstall",
+      "title": "Pre-configure Jellyfin",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
       "script": "jellyfin/jellyfin_hook.ts",
       "entrypoint": "afterInstall",
-      "timeout": 300,
+      "timeout": 900,
       "description": "Setting up Jellyfin",
-      "optional": false,
+      "optional": true,
       "retries": 0,
       "userOptional": {
-        "label": "Pre-configure Jellyfin",
         "description": "Automatically set up your server, apply preferences, and create media libraries. By enabling this, you acknowledge Jellyfin's media server policy.",
         "default": true,
         "link": {
           "url": "https://jellyfin.org/docs/general/community-standards/servers/",
           "label": "Jellyfin Server Policy"
         }
-      },
-      "inputs": [
+      }
+    },
+    {
+      "id": "hardware-transcoding",
+      "title": "Set up transcoding and remote streaming",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "optional": true,
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "script": "jellyfin/hardware_transcoding.ts",
+      "entrypoint": "run",
+      "timeout": 300
+    },
+    {
+      "id": "connect-seerr",
+      "title": "Connect to Seerr",
+      "description": "Sets Seerr up with this Jellyfin server, so you sign in to Seerr with your Jellyfin account.",
+      "kind": "connect",
+      "conditions": [
         {
-          "type": "question",
-          "id": "admin_username",
-          "question": {
-            "question": "Jellyfin username",
-            "description": "This will be the admin username for your Jellyfin server once installed.",
-            "type": "text",
-            "key": "admin_username",
-            "required": true
-          }
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "seerr"
         },
         {
-          "type": "question",
-          "id": "admin_password",
-          "question": {
-            "question": "Jellyfin password",
-            "description": "This will be the admin password for your Jellyfin server once installed.",
-            "type": "password",
-            "key": "admin_password",
-            "required": true
-          }
+          "role": "availability",
+          "type": "appRunning",
+          "app": "seerr"
         },
         {
-          "type": "question",
-          "id": "server_name",
-          "question": {
-            "question": "Server name",
-            "type": "text",
-            "key": "server_name",
-            "required": false,
-            "default": "HexOS Jellyfin",
-            "description": "The name your Jellyfin server will appear as to you and your friends.",
-            "placeholder": "HexOS Jellyfin"
-          }
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
         }
-      ]
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "rerun": "converge",
+      "script": "jellyfin/connect_seerr.ts",
+      "entrypoint": "run",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-jellystat",
+      "title": "Connect to Jellystat",
+      "description": "Lets Jellystat track what's watched on this Jellyfin server. You sign in to Jellystat with your Jellyfin account.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "jellystat"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellystat"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "rerun": "converge",
+      "script": "jellyfin/connect_jellystat.ts",
+      "entrypoint": "run",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "check-fladder",
+      "title": "Check Fladder and Jellyfin",
+      "description": "Check that Fladder and this Jellyfin server are reachable and that Jellyfin setup is complete. Fladder receives its server address during installation.",
+      "kind": "maintain",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "fladder"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "fladder"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "rerun": "idempotent",
+      "script": "jellyfin/check_fladder.ts",
+      "entrypoint": "run",
+      "timeout": 120,
+      "retries": 0
+    },
+    {
+      "id": "connect-sportarr",
+      "title": "Connect to Sportarr",
+      "description": "Adds a Sports library to Jellyfin for what Sportarr fetches.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "rerun": "converge",
+      "script": "jellyfin/add_library.ts",
+      "entrypoint": "sportarr",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-chaptarr",
+      "title": "Connect to Chaptarr",
+      "description": "Adds Books and Audiobooks libraries to Jellyfin for what Chaptarr fetches.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "rerun": "converge",
+      "script": "jellyfin/add_library.ts",
+      "entrypoint": "chaptarr",
+      "timeout": 900,
+      "retries": 0
+    }
+  ],
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "now-playing",
+      "title": "Now playing",
+      "description": "Active Jellyfin streams right now.",
+      "refresh": 5,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "background": {
+        "field": "sessions"
+      },
+      "slots": [
+        {
+          "type": "list",
+          "field": "sessions",
+          "rows": 1
+        }
+      ],
+      "script": "jellyfin/widget_now_playing.ts",
+      "entrypoint": "run",
+      "timeout": 10
     }
   ]
 }

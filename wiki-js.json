@@ -28,11 +28,11 @@
     "network": {
       "http_port": {
         "bind_mode": "published",
-        "port_number": 30244
+        "port_number": "$PORT(30244)"
       },
       "https_port": {
         "bind_mode": "published",
-        "port_number": 30245
+        "port_number": "$PORT(30245)"
       }
     },
     "storage": {

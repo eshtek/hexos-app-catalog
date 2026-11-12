@@ -1,0 +1,109 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.1.0",
+    "changeLog": "Shows Crafty's sign-in in the Settings tab, and changes its password from there"
+  },
+  "generated_sign_in": {
+    "file": "config/default-creds.txt",
+    "username": "username",
+    "password": "password",
+    "change_hook": "change-password"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "ApplicationsCapacity"],
+    "specifications": ["2CORE", "4GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30146, 25565, 25566, 25567, 25568, 25569, 25570, 25571, 25572, 25573, 25574, 25575, 19132]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    { "path": "$LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/backups", "owner": { "user": "apps" }, "snapshot": { "id": "backups" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/import", "owner": { "user": "apps" }, "snapshot": { "id": "import" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/logs", "owner": { "user": "apps" }, "snapshot": { "id": "logs" } },
+    { "path": "$LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/servers", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
+  ],
+  "app_values": {
+    "crafty": {
+      "additional_envs": []
+    },
+    "labels": [],
+    "network": {
+      "host_network": false,
+      "web_port": {
+        "bind_mode": "published",
+        "host_ips": [],
+        "port_number": "$PORT(30146)"
+      },
+      "additional_ports": [
+        {
+          "bind_mode": "published",
+          "host_ips": [],
+          "port_number": "$PORT(19132)",
+          "container_port": 19132,
+          "protocol": "udp"
+        }
+      ],
+      "additional_port_ranges": [
+        {
+          "bind_mode": "published",
+          "host_ips": [],
+          "protocol": "tcp",
+          "start": "$PORT(25565)",
+          "end": "$PORT(25575)"
+        }
+      ]
+    },
+    "storage": {
+      "backups": "$HOST_PATH($LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/backups)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/config)",
+      "import": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/import)",
+      "logs": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(crafty-4)/logs)",
+      "servers": "$HOST_PATH($LOCATION(ApplicationsCapacity)/$INSTANCE(crafty-4)/servers)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "change-password",
+      "title": "Change Crafty's password",
+      "description": "Sets a new password for Crafty's admin sign-in",
+      "events": ["userAction"],
+      "surfaces": ["settings"],
+      "rerun": "idempotent",
+      "inputs": [
+        {
+          "type": "question",
+          "id": "password",
+          "question": {
+            "question": "New password (at least 8 characters)",
+            "type": "password",
+            "key": "password",
+            "required": true
+          }
+        }
+      ],
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "crafty-4"
+        }
+      ],
+      "script": "crafty-4/change_password.ts",
+      "entrypoint": "run",
+      "timeout": 900
+    }
+  ]
+}

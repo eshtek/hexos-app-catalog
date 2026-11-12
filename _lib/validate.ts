@@ -5,7 +5,7 @@
 //
 // Run: bun run validate
 
-import { readdirSync, existsSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
   CALL_MACROS,
@@ -23,8 +23,26 @@ import {
   SPEC_REGEX,
   SUPPORTED_VERSIONS,
   SUPPORTED_WIDGETS_SCHEMA,
+  WIDGET_MAX_SETTINGS,
+  WIDGET_MAX_SLIDES,
+  WIDGET_MAX_SLOTS,
+  WIDGET_MIN_REFRESH_S,
   WIDGET_SLOT_TYPES,
 } from "./contract";
+import {
+  catalogFixedPortClashes,
+  catalogPreferredPortClashes,
+  collectionPortClashes,
+  declaredPortsMatchPins,
+  networkInsideAppValues,
+  portMacrosWellFormed,
+  portsCanMove,
+  preferredPort,
+  publishedPorts,
+  reservedPortsWellFormed,
+  type Finding,
+} from "./ports";
+import { instanceRules, linkCopyRules } from "./instances";
 
 type Problem = { file: string; message: string };
 
@@ -33,6 +51,12 @@ const warnings: Problem[] = [];
 
 const err = (file: string, message: string) => errors.push({ file, message });
 const warn = (file: string, message: string) => warnings.push({ file, message });
+const report = (file: string, findings: Finding[]) => {
+  for (const { level, message } of findings) (level === "error" ? err : warn)(file, message);
+};
+
+/** A question key that names a secret: an API key, a token, a password. */
+const SECRET_KEY = /token|secret|passw(or)?d|api_?key/i;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
@@ -109,6 +133,38 @@ function checkCondition(file: string, where: string, cond: unknown) {
   }
 }
 
+/** A widget's slots, or a slide's: 1 to 3, each a known type naming a field, rows on a list only. */
+function checkWidgetSlots(file: string, where: string, slots: unknown) {
+  if (!Array.isArray(slots) || slots.length === 0) {
+    err(file, `${where}: slots must be a non-empty array`);
+    return;
+  }
+  if (slots.length > WIDGET_MAX_SLOTS) {
+    err(file, `${where}: max ${WIDGET_MAX_SLOTS} slots`);
+  }
+  for (const [k, slot] of slots.entries()) {
+    if (!isObject(slot)) {
+      err(file, `${where}.slots[${k}]: must be an object`);
+      continue;
+    }
+    if (slot.type === "image") {
+      err(file, `${where}.slots[${k}]: an image is not a slot; name the image field in background instead`);
+    } else if (typeof slot.type !== "string" || !(WIDGET_SLOT_TYPES as readonly string[]).includes(slot.type)) {
+      err(file, `${where}.slots[${k}]: type "${String(slot.type)}" is not known`);
+    }
+    if (typeof slot.field !== "string" || !slot.field.trim()) {
+      err(file, `${where}.slots[${k}]: field is missing`);
+    }
+    if (slot.rows !== undefined) {
+      if (slot.type !== "list") {
+        err(file, `${where}.slots[${k}]: rows applies to a list slot only`);
+      } else if (typeof slot.rows !== "number" || ![1, 2, 3].includes(slot.rows)) {
+        err(file, `${where}.slots[${k}]: rows must be 1, 2 or 3`);
+      }
+    }
+  }
+}
+
 function checkMacros(file: string, script: unknown, questionKeys: Set<string>) {
   const raw = JSON.stringify(script);
 
@@ -129,6 +185,33 @@ function checkMacros(file: string, script: unknown, questionKeys: Set<string>) {
         err(file, `unknown macro $${name}`);
       }
     }
+  }
+
+  // A partner credential is substituted inside app_values only; anywhere else (a hook
+  // description, a question) the platform refuses the whole install rather than let a
+  // credential land in task data or a label.
+  // The platform substitutes `$PARTNER_TOKEN()` or `$PARTNER_TOKEN(<partner id>)`, one lower-case
+  // id or nothing; any other spelling survives processing as text and the install is refused.
+  const walkStrings = (value: unknown, visit: (s: string) => void): void => {
+    if (typeof value === "string") visit(value);
+    else if (Array.isArray(value)) for (const v of value) walkStrings(v, visit);
+    else if (value && typeof value === "object") for (const v of Object.values(value)) walkStrings(v, visit);
+  };
+  walkStrings(script, (s) => {
+    // Every invocation must be complete within its own string value: "$PARTNER_TOKEN(" with no
+    // closing parenthesis in the same value survives processing as text and is refused at install.
+    const opened = (s.match(/\$PARTNER_TOKEN\(/g) ?? []).length;
+    const complete = [...s.matchAll(/\$PARTNER_TOKEN\(([^)]*)\)/g)];
+    if (opened !== complete.length) err(file, `$PARTNER_TOKEN( is not closed within its own value: ${JSON.stringify(s)}`);
+    for (const match of complete) {
+      if (!/^\s*[a-z0-9-]*\s*$/.test(match[1])) {
+        err(file, `$PARTNER_TOKEN(${match[1]}) is not a partner id (lower-case letters, digits and dashes, or nothing)`);
+      }
+    }
+  });
+  const { app_values: _appValues, ...outsideAppValues } = script as Record<string, unknown>;
+  if (JSON.stringify(outsideAppValues).includes("$PARTNER_TOKEN")) {
+    err(file, "$PARTNER_TOKEN() may only appear inside app_values");
   }
 
   // replaceLocation() throws PROCESS_INSTALL_SCRIPT_UNKNOWN_LOCATION on any
@@ -184,6 +267,39 @@ function validate(file: string, script: Record<string, unknown>) {
     err(file, "script.version is missing");
   }
 
+  // --- sign-in: the app's hooks set the one the owner chooses (ctx.signIn) ---
+  if (script.default_sign_in !== undefined) {
+    err(file, "default_sign_in is gone: declare sign_in, and the hooks set the sign-in the owner chooses");
+  }
+  const signIn = script.sign_in;
+  if (signIn !== undefined) {
+    if (!isObject(signIn)) {
+      err(file, "sign_in must be an object");
+    } else {
+      if (signIn.username !== undefined && typeof signIn.username !== "boolean") {
+        err(file, "sign_in.username must be true or false");
+      }
+      // An app with users of its own (Jellyfin, Emby); a platform from before installed apps kept their account reads it
+      if (signIn.adds_user !== undefined && typeof signIn.adds_user !== "boolean") {
+        err(file, "sign_in.adds_user must be true or false");
+      }
+      // An app whose first account takes the owner's email: only then does HexOS ask for one
+      if (signIn.email !== undefined && typeof signIn.email !== "boolean") {
+        err(file, "sign_in.email must be true or false");
+      }
+      // An installed copy's setup signs in with the admin account it has, which a collection's walk asks for
+      if (signIn.existing !== undefined && typeof signIn.existing !== "boolean") {
+        err(file, "sign_in.existing must be true or false");
+      }
+      const extra = Object.keys(signIn).filter((key) => !["username", "adds_user", "email", "existing"].includes(key));
+      if (extra.length > 0) err(file, `sign_in: unknown keys ${extra.join(", ")}`);
+    }
+    // The sign-in is set by a hook; a script with none would promise the owner one it never gets
+    if (!Array.isArray(script.hooks) || script.hooks.length === 0) {
+      err(file, "sign_in needs a hook that sets the sign-in");
+    }
+  }
+
   // --- requirements (required from v4 on) ---
   const req = script.requirements;
   const declaredLocations = new Set<string>();
@@ -214,6 +330,10 @@ function validate(file: string, script: Record<string, unknown>) {
       if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) {
         err(file, `requirements.ports: "${String(port)}" is not a valid port`);
       }
+    }
+    // The port players join a game on, shown on the app's details pane: one the app publishes
+    if (req.game_port !== undefined && !(Array.isArray(req.ports) && req.ports.includes(req.game_port))) {
+      err(file, `requirements.game_port: "${String(req.game_port)}" is not one of requirements.ports`);
     }
   }
 
@@ -252,6 +372,18 @@ function validate(file: string, script: Record<string, unknown>) {
       if (!Array.isArray(options) || options.length === 0) {
         err(file, `${where}: select question "${key}" has no options`);
       }
+    }
+    // The deck fills a sourced question's answers itself; it knows one source, for a typed answer
+    if (q.source !== undefined && (q.source !== "local-ai-models" || q.type !== "text")) {
+      err(file, `${where}: question "${key}" has source "${String(q.source)}", which only a text question may take as "local-ai-models"`);
+    }
+    // The install asks an attestation as a checkbox Install waits on, so only a required yes will do
+    if (q.attestation === true && (q.type !== "boolean" || q.required !== true)) {
+      err(file, `${where}: attestation question "${key}" must be a required boolean`);
+    }
+    // The app's Settings tab shows a text answer as it is and hides a password until asked
+    if (q.type === "text" && SECRET_KEY.test(key)) {
+      err(file, `${where}: question "${key}" names a secret, so make its type "password"`);
     }
   };
 
@@ -292,10 +424,64 @@ function validate(file: string, script: Record<string, unknown>) {
     if (entry.network_share !== undefined && typeof entry.network_share !== "boolean") {
       err(file, `${where}.network_share must be a boolean`);
     }
+    if (entry.start_mount !== undefined) {
+      if (typeof entry.start_mount !== "string" || !entry.start_mount.startsWith("/")) {
+        err(file, `${where}.start_mount must be an absolute path inside the app`);
+      }
+      if (entry.owner === undefined) err(file, `${where}.start_mount needs an owner to give the folder to`);
+    }
   }
 
   // --- app_values ---
   if (!isObject(script.app_values)) err(file, "app_values is missing");
+
+  // --- a custom app's image ---
+  // A custom app runs on TrueNAS's ix-app chart, so its image is whatever app_values.image names,
+  // and a server that already has the app sees another only through a raised script.version, which
+  // the platform reads with semver (one it can't read never offers its update). A tag that moves
+  // (latest) gives new installs a different image from the servers that have it, and the image
+  // watcher has no version in it to follow. An internal app never reaches a customer's server.
+  if (script.custom === true) {
+    const image = isObject(script.app_values) ? script.app_values.image : undefined;
+    if (!isObject(image) || typeof image.repository !== "string" || !image.repository.trim()) {
+      err(file, "app_values.image.repository is missing: a custom app runs the image it names");
+    } else if (script.internal !== true) {
+      const tag = typeof image.tag === "string" ? image.tag : "";
+      const [version, digest] = tag.split("@");
+      if (!/\d/.test(version)) {
+        err(file, `app_values.image.tag "${tag}" names no version; pin one (1.4.1) so every server runs the same image`);
+      }
+      if (digest !== undefined && !/^sha256:[0-9a-f]{64}$/.test(digest)) {
+        err(file, `app_values.image.tag "${tag}": a pinned digest is the tag, "@", then sha256: and 64 hex digits`);
+      }
+    }
+    if (isObject(scriptMeta) && typeof scriptMeta.version === "string" && !/^\d+\.\d+\.\d+$/.test(scriptMeta.version)) {
+      err(file, `script.version "${scriptMeta.version}" must be x.y.z: servers compare it with semver to offer the update`);
+    }
+  }
+
+  // --- generated_sign_in: a sign-in the app writes to one of its own folders ---
+  const generatedSignIn = script.generated_sign_in;
+  if (generatedSignIn !== undefined) {
+    if (!isObject(generatedSignIn)) {
+      err(file, "generated_sign_in must be an object");
+    } else {
+      for (const key of ["file", "username", "password"]) {
+        if (typeof generatedSignIn[key] !== "string") err(file, `generated_sign_in.${key} must be a string`);
+      }
+      const path = generatedSignIn.file;
+      if (typeof path === "string" && (path.split("/").length < 2 || path.split("/").some((part) => [".", "..", ""].includes(part)))) {
+        err(file, "generated_sign_in.file must start at one of the app's folders, with no . or .. in it");
+      }
+      const changeHook = generatedSignIn.change_hook;
+      const hook = ((script.hooks as unknown[]) ?? []).find((each) => isObject(each) && each.id === changeHook);
+      if (changeHook !== undefined && !isObject(hook)) {
+        err(file, `generated_sign_in.change_hook names no hook: ${String(changeHook)}`);
+      } else if (isObject(hook) && !(Array.isArray(hook.surfaces) && hook.surfaces.includes("settings"))) {
+        err(file, `generated_sign_in.change_hook "${String(changeHook)}" must have the settings surface`);
+      }
+    }
+  }
 
   // --- hooks (v5 and v6) ---
   const hookIds = new Set<string>();
@@ -404,6 +590,14 @@ function validate(file: string, script: Record<string, unknown>) {
             err(file, `${where}: rerun "${String(hook.rerun)}" is not a known rerun mode`);
           }
           if (!userTriggerable) err(file, `${where}: rerun applies to user firings only`);
+        }
+        // The box runs a link again after a change it passes on; one it can't run again has none
+        if (hook.rerunsOn !== undefined) {
+          const triggers = hook.rerunsOn;
+          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model")) {
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model"`);
+          }
+          if (hook.rerun !== "converge" && hook.rerun !== "idempotent") err(file, `${where}: rerunsOn needs a hook that may run again`);
         }
         if (hook.optional !== undefined && lifecycleCount === 0) {
           err(file, `${where}: optional requires a lifecycle trigger`);
@@ -550,8 +744,11 @@ function validate(file: string, script: Record<string, unknown>) {
         if (widget.refresh !== undefined) {
           if (typeof widget.refresh !== "number" || !Number.isInteger(widget.refresh) || widget.refresh <= 0) {
             err(file, `${where}: refresh must be a positive integer`);
-          } else if (widget.refresh < 10) {
-            warn(file, `${where}: refresh ${widget.refresh} is below the 10s floor — the platform clamps it to 10`);
+          } else if (widget.refresh < WIDGET_MIN_REFRESH_S) {
+            warn(
+              file,
+              `${where}: refresh ${widget.refresh} is below the ${WIDGET_MIN_REFRESH_S}s floor; the platform clamps it to ${WIDGET_MIN_REFRESH_S}`,
+            );
           }
         }
         const hasFile = typeof widget.script === "string" && widget.script.trim().length > 0;
@@ -578,42 +775,58 @@ function validate(file: string, script: Record<string, unknown>) {
             }
           }
         }
+        // widgetsSchema 3 made the widget the app's card: no sizes, one layout.
         if (widget.sizes !== undefined) {
-          if (!isObject(widget.sizes)) {
-            err(file, `${where}: sizes must be an object`);
+          err(file, `${where}: sizes is gone in widgetsSchema 3; put slots and background on the widget itself`);
+        }
+        if (widget.media !== undefined) {
+          err(file, `${where}: has no media slot; name an image field in background instead`);
+        }
+        if (
+          widget.background !== undefined &&
+          (!isObject(widget.background) ||
+            typeof widget.background.field !== "string" ||
+            !widget.background.field.trim())
+        ) {
+          err(file, `${where}.background: field is missing`);
+        }
+        checkWidgetSlots(file, where, widget.slots);
+        if (widget.slides !== undefined) {
+          if (!Array.isArray(widget.slides) || widget.slides.length === 0) {
+            err(file, `${where}: slides must be a non-empty array`);
           } else {
-            for (const sizeKey of ["small", "large"] as const) {
-              const size = widget.sizes[sizeKey];
-              if (size === undefined) continue;
-              if (!isObject(size)) {
-                err(file, `${where}.sizes.${sizeKey}: must be an object`);
+            if (widget.slides.length > WIDGET_MAX_SLIDES) {
+              err(file, `${where}: max ${WIDGET_MAX_SLIDES} slides`);
+            }
+            for (const [k, slide] of widget.slides.entries()) {
+              if (!isObject(slide)) {
+                err(file, `${where}.slides[${k}]: must be an object`);
                 continue;
               }
-              if (size.media !== undefined) {
-                const placements = sizeKey === "small" ? ["top", "bottom"] : ["left", "right", "both"];
-                if (!isObject(size.media) || typeof size.media.placement !== "string" || !placements.includes(size.media.placement)) {
-                  err(file, `${where}.sizes.${sizeKey}.media: placement must be one of ${placements.join("/")}`);
-                } else if (typeof size.media.field !== "string" || !size.media.field.trim()) {
-                  err(file, `${where}.sizes.${sizeKey}.media: field is missing`);
-                }
+              if (typeof slide.title !== "string" || !slide.title.trim()) {
+                err(file, `${where}.slides[${k}]: title is missing`);
               }
-              const slots = size.slots;
-              if (!Array.isArray(slots) || slots.length === 0) {
-                err(file, `${where}.sizes.${sizeKey}: slots must be a non-empty array`);
-              } else {
-                const maxSlots = sizeKey === "small" ? 3 : 4;
-                if (slots.length > maxSlots) {
-                  err(file, `${where}.sizes.${sizeKey}: max ${maxSlots} slots`);
-                }
-                for (const [k, slot] of slots.entries()) {
-                  if (!isObject(slot)) continue;
-                  if (typeof slot.type !== "string" || !(WIDGET_SLOT_TYPES as readonly string[]).includes(slot.type)) {
-                    err(file, `${where}.sizes.${sizeKey}.slots[${k}]: type "${String(slot.type)}" is not known`);
-                  }
-                  if (typeof slot.field !== "string" || !slot.field.trim()) {
-                    err(file, `${where}.sizes.${sizeKey}.slots[${k}]: field is missing`);
-                  }
-                }
+              if (slide.background !== undefined) {
+                err(file, `${where}.slides[${k}]: a slide has no background; the artwork is the widget's`);
+              }
+              checkWidgetSlots(file, `${where}.slides[${k}]`, slide.slots);
+            }
+            // The card tells its views apart by title, so a repeated one would never step past.
+            const titles = [widget.title, ...widget.slides.map((slide) => (isObject(slide) ? slide.title : undefined))];
+            if (new Set(titles).size !== titles.length) {
+              err(file, `${where}: each view needs its own title; the widget's and every slide's must differ`);
+            }
+          }
+        }
+        // Stat fields the app's Settings tab shows, read-only, each with Copy
+        if (widget.settings !== undefined) {
+          if (!Array.isArray(widget.settings) || widget.settings.length === 0) {
+            err(file, `${where}: settings must be a non-empty array`);
+          } else {
+            if (widget.settings.length > WIDGET_MAX_SETTINGS) err(file, `${where}: max ${WIDGET_MAX_SETTINGS} settings`);
+            for (const [k, setting] of widget.settings.entries()) {
+              if (!isObject(setting) || typeof setting.field !== "string" || !setting.field.trim()) {
+                err(file, `${where}.settings[${k}]: field is missing`);
               }
             }
           }
@@ -651,6 +864,121 @@ function validate(file: string, script: Record<string, unknown>) {
   }
 }
 
+// --- collections ---
+
+// A collection (`_collections/<id>.json`) names catalog apps and says how each is chosen: always
+// installed (fixed), one of a group (single), or any of a group (multiple). Main reads the same
+// rules (hexos-platform shared/eshtek/appCollections.ts) and leaves out a file that breaks them.
+const COLLECTIONS_DIR = "_collections";
+const COLLECTION_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const GROUP_TYPES = ["fixed", "single", "multiple"];
+
+/** A collection's answers for an app: each one a question the app asks, with a value it accepts. */
+function checkAnswers(file: string, at: string, appId: string, answers: unknown) {
+  if (!isObject(answers)) {
+    err(file, `${at}: answers must map question keys to answers`);
+    return;
+  }
+  let script: unknown;
+  try {
+    script = JSON.parse(readFileSync(`${appId}.json`, "utf-8"));
+  } catch {
+    return; // the app's own file reports its problem
+  }
+  const questions = isObject(script) && Array.isArray(script.installation_questions) ? script.installation_questions : [];
+  for (const [key, value] of Object.entries(answers)) {
+    const question = questions.find((q) => isObject(q) && q.key === key) as Record<string, unknown> | undefined;
+    if (!question) {
+      err(file, `${at}: answers "${key}", which ${appId} doesn't ask`);
+      continue;
+    }
+    if (!["string", "number", "boolean"].includes(typeof value)) {
+      err(file, `${at}: the answer to "${key}" must be a string, number or boolean`);
+      continue;
+    }
+    const options = Array.isArray(question.options) ? question.options.filter(isObject) : [];
+    if (question.type === "select" && !options.some((o) => String(o.value) === String(value))) {
+      err(file, `${at}: "${String(value)}" isn't one of the answers ${appId} offers to "${key}"`);
+    }
+  }
+}
+
+function validateCollection(file: string, collection: Record<string, unknown>, catalogApps: Set<string>) {
+  const id = file.slice(COLLECTIONS_DIR.length + 1).replace(/\.json$/, "");
+  if (!COLLECTION_ID.test(id)) err(file, "the file name must be the collection id: lowercase words joined by hyphens");
+  if (collection.type !== "collection") err(file, 'type must be "collection"');
+  if (collection.version !== 1 && collection.version !== 2) err(file, "version must be 1 or 2");
+  if (collection.version === 1 && collection.localAi !== undefined) err(file, "localAi needs a file of version 2");
+  for (const field of ["name", "description"]) {
+    if (typeof collection[field] !== "string" || !(collection[field] as string).trim()) err(file, `${field} is required`);
+  }
+  if (collection.image !== undefined) {
+    if (typeof collection.image !== "string") err(file, "image must be a path");
+    else checkAssetPath(file, "image", collection.image);
+  }
+  const specs = isObject(collection.requirements) ? collection.requirements.specifications : undefined;
+  if (specs !== undefined) {
+    if (!Array.isArray(specs)) err(file, "requirements.specifications must be an array");
+    else for (const spec of specs) if (typeof spec !== "string" || !SPEC_REGEX.test(spec)) err(file, `requirements.specifications: "${spec}" is not a specification`);
+  }
+  if (!Array.isArray(collection.groups) || collection.groups.length === 0) {
+    err(file, "groups must list at least one group");
+    return;
+  }
+  const groupIds = new Set<string>();
+  const seen = new Set<string>();
+  const requirable = new Set<string>();
+  for (const [index, group] of collection.groups.entries()) {
+    const where = `groups[${index}]`;
+    if (!isObject(group)) {
+      err(file, `${where}: must be an object`);
+      continue;
+    }
+    if (typeof group.id !== "string" || !COLLECTION_ID.test(group.id)) err(file, `${where}: id must be lowercase words joined by hyphens`);
+    else if (groupIds.has(group.id)) err(file, `${where}: group "${group.id}" appears twice`);
+    else groupIds.add(group.id);
+    if (typeof group.type !== "string" || !GROUP_TYPES.includes(group.type)) err(file, `${where}: type must be fixed, single or multiple`);
+    if (typeof group.title !== "string" || !group.title.trim()) err(file, `${where}: title is required`);
+    if (!Array.isArray(group.options) || group.options.length === 0) {
+      err(file, `${where}: options must list at least one app`);
+      continue;
+    }
+    for (const [o, option] of group.options.entries()) {
+      const at = `${where}.options[${o}]`;
+      if (!isObject(option) || typeof option.app !== "string") {
+        err(file, `${at}: must name an app`);
+        continue;
+      }
+      if (!catalogApps.has(option.app)) err(file, `${at}: "${option.app}" has no install script in this catalog`);
+      if (seen.has(option.app)) err(file, `${at}: "${option.app}" appears in more than one place`);
+      seen.add(option.app);
+      if (option.summary !== undefined && (typeof option.summary !== "string" || !option.summary.trim())) {
+        err(file, `${at}: summary must be a few words on what the app is for`);
+      }
+      if (option.answers !== undefined && catalogApps.has(option.app)) checkAnswers(file, at, option.app, option.answers);
+      if (option.vpnRecommended !== undefined && typeof option.vpnRecommended !== "boolean") {
+        err(file, `${at}: vpnRecommended must be true or false`);
+      }
+      for (const field of ["requires", "requiresAny"] as const) {
+        const required = option[field];
+        if (required === undefined) continue;
+        if (group.type === "fixed") err(file, `${at}: a fixed app can't require another app`);
+        else if (!Array.isArray(required)) err(file, `${at}: ${field} must list apps`);
+        else for (const app of required) {
+          if (!requirable.has(app)) err(file, `${at}: ${field} "${app}", which no earlier group offers`);
+        }
+      }
+    }
+    if (group.type === "single" && group.options.filter((option) => isObject(option) && option.default === true).length > 1) {
+      err(file, `${where}: a single group has at most one default`);
+    }
+    if (group.min !== undefined && (group.type !== "multiple" || !Number.isInteger(group.min) || (group.min as number) < 1)) {
+      err(file, `${where}: min is a whole number from 1, and only a multiple group sets one`);
+    }
+    for (const option of group.options) if (isObject(option) && typeof option.app === "string") requirable.add(option.app);
+  }
+}
+
 // --- run ---
 
 const files = readdirSync(".")
@@ -675,6 +1003,82 @@ for (const file of files) {
     continue;
   }
   validate(file, parsed);
+}
+
+// A hook reaches an app at the box's LAN IP and the app's requirements.ports[0] (getInstalledAppUrl,
+// ctx.baseUrl), so an app a hook runs on or names must publish its web UI on that port, pinned in
+// app_values.network (web_port, or http_port for Emby), or a custom app's app_values.ports,
+// as a number or $PORT(n). A container's own port (Radarr's 7878) is not where TrueNAS publishes it.
+const parsedScripts = new Map<string, Record<string, unknown>>();
+for (const file of files) {
+  try {
+    const parsed = JSON.parse(await Bun.file(file).text());
+    if (isObject(parsed)) parsedScripts.set(file.replace(/\.json$/, ""), parsed);
+  } catch { /* already reported as a parse error */ }
+}
+const linkedApps = new Set<string>();
+for (const [appId, script] of parsedScripts) {
+  const hooks = Array.isArray(script.hooks) ? script.hooks.filter(isObject) : [];
+  if (hooks.length > 0) linkedApps.add(appId);
+  for (const hook of hooks) {
+    for (const cond of Array.isArray(hook.conditions) ? hook.conditions.filter(isObject) : []) {
+      if (typeof cond.app === "string") linkedApps.add(cond.app);
+    }
+  }
+}
+for (const appId of [...linkedApps].sort()) {
+  const script = parsedScripts.get(appId);
+  if (!script) continue;
+  const requirements = isObject(script.requirements) ? script.requirements : {};
+  const declared = Array.isArray(requirements.ports) ? requirements.ports[0] : undefined;
+  const appValues = isObject(script.app_values) ? script.app_values : {};
+  const network = isObject(appValues.network) ? appValues.network : {};
+  const namedPins = Object.values(network)
+    .filter(isObject)
+    .map((port) => preferredPort(port.port_number))
+    .filter((port) => port !== undefined);
+  const customPins = script.custom === true
+    ? publishedPorts(script).flatMap((pin) => "port" in pin && pin.path.startsWith("app_values.ports[") ? [pin.port] : [])
+    : [];
+  const pinned = [...namedPins, ...customPins];
+  const pinLocation = script.custom === true ? "app_values.ports" : "app_values.network";
+  if (pinned.length === 0) {
+    warn(`${appId}.json`, `takes part in a hook, so pin its web port in ${pinLocation} (requirements.ports[0] is ${declared ?? "missing"})`);
+  } else if (!pinned.includes(declared)) {
+    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in ${pinLocation} (${pinned.join(", ")})`);
+  }
+}
+
+// What each script publishes, and what scripts would fight over on one box (see ports.ts)
+for (const [appId, script] of parsedScripts) {
+  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script), ...reservedPortsWellFormed(script), ...instanceRules(appId, script)]);
+}
+const runsInCopies = (appId: string) =>
+  (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
+for (const [appId, script] of parsedScripts) report(`${appId}.json`, linkCopyRules(appId, script, runsInCopies));
+report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
+
+const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));
+const collectionFiles = existsSync(COLLECTIONS_DIR)
+  ? readdirSync(COLLECTIONS_DIR)
+      .filter((f) => f.endsWith(".json"))
+      .sort()
+      .map((f) => `${COLLECTIONS_DIR}/${f}`)
+  : [];
+for (const file of collectionFiles) {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await Bun.file(file).text());
+  } catch (cause) {
+    err(file, `is not valid JSON: ${(cause as Error).message}`);
+    continue;
+  }
+  if (!isObject(parsed)) {
+    err(file, "top level must be an object");
+    continue;
+  }
+  validateCollection(file, parsed, catalogApps);
+  report(file, collectionPortClashes(parsed, parsedScripts));
 }
 
 // Assets are cheap to orphan and invisible when they rot, so name the ones
@@ -710,7 +1114,7 @@ for (const [file, messages] of group(errors)) {
 }
 
 console.log(
-  `\n${files.length} install scripts checked — ` +
+  `\n${files.length} install scripts and ${collectionFiles.length} collections checked — ` +
     `${errors.length} error(s), ${warnings.length} warning(s)`,
 );
 

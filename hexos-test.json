@@ -296,7 +296,7 @@
       "retries": 0
     }
   ],
-  "widgetsSchema": 2,
+  "widgetsSchema": 3,
   "widgets": [
     {
       "id": "harness-stats",
@@ -307,16 +307,11 @@
       "scriptContent": "export async function run(ctx) {\n  return {\n    fields: {\n      headline: { type: \"text\", text: \"Harness widget\" },\n      streams: { type: \"stat\", label: \"Streams\", value: \"3\" },\n      items: { type: \"list\", entries: [{ title: \"First\" }, { title: \"Second\" }] },\n    },\n  };\n}\n",
       "timeout": 10,
       "buttons": ["harness-widget-button"],
-      "sizes": {
-        "small": { "slots": [{ "type": "stat", "field": "streams" }] },
-        "large": {
-          "slots": [
-            { "type": "text", "field": "headline" },
-            { "type": "stat", "field": "streams" },
-            { "type": "list", "field": "items" }
-          ]
-        }
-      }
+      "slots": [
+        { "type": "text", "field": "headline" },
+        { "type": "stat", "field": "streams" },
+        { "type": "list", "field": "items" }
+      ]
     },
     {
       "id": "harness-needs-setup",
@@ -326,7 +321,7 @@
       "entrypoint": "run",
       "scriptContent": "export async function run(ctx) {\n  return { needsSetup: true, reason: \"Harness widget needs setup\" };\n}\n",
       "timeout": 10,
-      "sizes": { "small": { "slots": [{ "type": "text", "field": "headline" }] } }
+      "slots": [{ "type": "text", "field": "headline" }]
     }
   ]
 }
