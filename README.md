@@ -55,7 +55,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Minecraft Bedrock](minecraft-bedrock.json) | Minecraft Bedrock Edition server, for phones, consoles and Windows |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
-| [Nevu](nevu.json) | Front-end interface for Plex |
+| [Nevu](nevu.json) | Front-end interface for Plex, in Media library as a Plex companion |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Nginx Proxy Manager](nginx-proxy-manager.json) | Gives your apps their own web addresses, with HTTPS |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
@@ -290,6 +290,8 @@ The few words HexOS shows under an app's name on its catalog card live in the de
 Jellyfin offers optional connections to Jellystat and Seerr, plus a read-only Fladder/Jellyfin reachability check. Jellystat and Seerr depend on Pre-configure Jellyfin (`requiresHooks`), whose administrator they sign in with: the one the owner gave for a Jellyfin they already had (`ctx.tryExistingSignIn`, checked with Jellyfin before Seerr is handed it), else the sign-in the owner chose for the install or collection (`ctx.signIn`), else the answers an older Pre-configure Jellyfin was given, and asked for last. Pre-configure Jellyfin remains optional.
 
 An existing Jellystat account must authenticate; the connector only creates an account when Jellystat reports a fresh setup. Both connectors leave alone a binding to another server that still answers, and in a collection they step aside (`ctx.skip`) rather than wait on a Try again. Run again, they move to this server when their own is gone: the stored address now answers as this server (Jellyfin was reinstalled; a new API key is made), or nothing answers there and the app's own records name this server (the box's address or Jellyfin's port changed). When nothing answers and nothing proves the old server was this one, they ask the owner. Plex's Seerr and Tautulli links follow the same rule, by Plex's `/identity`. So do the download-client and *arr links (Radarr, Sonarr, Lidarr, Chaptarr and Prowlarr to each download client, Prowlarr and Seerr to each *arr, Sportarr to its clients): an entry at an old address is moved when the manager's own test proves its stored key is ours (SABnzbd, Prowlarr), or, once nothing answers there, when it holds our sign-in and that sign-in isn't a shared default; otherwise the owner is asked, and with no yes the link steps aside rather than adding a second entry. Fladder's check does not change its configured server address.
+
+Nevu offers Connect to Plex, in Media library and on its card. Nevu's one setting is the Plex address in its own TrueNAS values, which the install fills with Plex's usual port, so the link sets it to where Plex answers now (`ctx.updateAppValues`) and leaves it alone when it already matches. Nevu has no account of its own: its sign-in page sends the owner to plex.tv and looks for this server among that Plex account's servers. When nobody has signed in to Plex yet, the link still sets the address and then ends with `ctx.skip`, telling the owner to sign in to Plex first.
 
 Run the mocked API and password-hash compatibility tests with `bun test _lib/`, then the catalog validator with `bun _lib/validate.ts`. The hook tests make no network requests.
 
