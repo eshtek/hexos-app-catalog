@@ -17,19 +17,16 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Bindarr](bindarr.json) | Trading card collection manager ([notes](bindarr/README.md)) |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
-| [Cloudflared](cloudflared.json) | Cloudflare Tunnel connector for remote access |
 | [Code Server](code-server.json) | VS Code in the browser |
 | [Collabora](collabora.json) | Documents you edit together in Nextcloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
-| [Dockge](dockge.json) | Docker Compose stack manager |
 | [Donetick](donetick.json) | Smart task manager |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
 | [Euro-Office](eurooffice-document-server.json) | Office documents in the browser, a fork of ONLYOFFICE |
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
-| [FileBrowser Quantum](filebrowser-quantum.json) | Web file manager for your folders |
 | [Factorio Server](factorio.json) | Factory-building game server |
 | [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
@@ -69,7 +66,6 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Pelican Panel](pelican-panel.json) | Game server panel; its game servers run in Pelican Wings |
 | [Pelican Wings](pelican-wings.json) | Runs Pelican's game servers, on ports 27200 to 27219 |
 | [Plex](plex.json) | Media server with Plex Pass support |
-| [Portainer](portainer.json) | Docker container management |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |
 | [Project Zomboid](project-zomboid.json) | Zombie survival game server |
@@ -97,9 +93,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Vikunja](vikunja.json) | Task manager with lists |
-| [Tailscale](tailscale.json) | Private access to the server from anywhere |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
-| [UniFi Controller](unifi-controller.json) | Manages UniFi network devices |
 | [UniFi Protect Backup](unifi-protect-backup.json) | Backs up UniFi Protect camera events |
 | [Trilium Notes](trilium-notes.json) | Notes and personal knowledge base |
 | [Terraria](terraria.json) | 2D sandbox adventure game server |
