@@ -42,6 +42,7 @@ import {
   reservedPortsWellFormed,
   type Finding,
 } from "./ports";
+import { videoCardProblems } from "./video_card";
 import { instanceRules, linkCopyRules } from "./instances";
 
 type Problem = { file: string; message: string };
@@ -335,6 +336,8 @@ function validate(file: string, script: Record<string, unknown>) {
     if (req.game_port !== undefined && !(Array.isArray(req.ports) && req.ports.includes(req.game_port))) {
       err(file, `requirements.game_port: "${String(req.game_port)}" is not one of requirements.ports`);
     }
+    // One graphics card for a new install, and the hook that sets the app's video settings for it
+    for (const problem of videoCardProblems(script)) err(file, problem);
   }
 
   // --- metadata and its assets ---

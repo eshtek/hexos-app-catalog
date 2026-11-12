@@ -44,7 +44,8 @@
     ],
     "ports": [
       32400
-    ]
+    ],
+    "gpu": "one"
   },
   "ensure_directories_exists": [
     {
@@ -317,6 +318,70 @@
       "script": "plex/add_library.ts",
       "entrypoint": "sportarr",
       "timeout": 180,
+      "retries": 0
+    },
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Shows what Radarr adds, renames or removes in Plex right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "requiresHooks": [
+        "configure-plex"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "radarr",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Shows what Sonarr adds, renames or removes in Plex right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "requiresHooks": [
+        "configure-plex"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "sonarr",
+      "timeout": 300,
       "retries": 0
     }
   ],

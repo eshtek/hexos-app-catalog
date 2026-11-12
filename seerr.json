@@ -77,7 +77,7 @@
       "copies": "each",
       "script": "seerr/connect_arr.ts",
       "entrypoint": "radarr",
-      "timeout": 120,
+      "timeout": 300,
       "retries": 0
     },
     {
@@ -106,7 +106,7 @@
       "copies": "each",
       "script": "seerr/connect_arr.ts",
       "entrypoint": "sonarr",
-      "timeout": 120,
+      "timeout": 300,
       "retries": 0
     }
   ]
