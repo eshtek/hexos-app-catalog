@@ -364,6 +364,34 @@
       "entrypoint": "configure",
       "timeout": 900,
       "retries": 0
+    },
+    {
+      "id": "connect-eurooffice-document-server",
+      "title": "Connect to Euro-Office",
+      "description": "Opens and edits documents in OpenCloud with Euro-Office.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "opencloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "opencloud/connect_office.ts",
+      "entrypoint": "eurooffice",
+      "timeout": 600,
+      "retries": 0
     }
   ]
 }

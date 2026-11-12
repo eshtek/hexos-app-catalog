@@ -28,6 +28,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
+| [Euro-Office](eurooffice-document-server.json) | Office documents in the browser, a fork of ONLYOFFICE |
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
 | [FileBrowser Quantum](filebrowser-quantum.json) | Web file manager for your folders |
 | [Factorio Server](factorio.json) | Factory-building game server |

@@ -7,6 +7,18 @@ import { join } from "node:path";
 mock.module("node:fs", () => ({ ...require("node:fs"), chownSync: () => {} }));
 const { appRegistryYaml, seedSettings, webYaml } = await import("../opencloud/seed_settings");
 const { configure } = await import("../opencloud/configure");
+const { isOutsideAddress } = await import("../opencloud/connect_office");
+
+describe("the office link", () => {
+  test("keeps an address with a name", () => {
+    expect(isOutsideAddress("https://office.example.com/")).toBe(true);
+  });
+  test("replaces a local address, or none", () => {
+    expect(isOutsideAddress("https://192.168.0.20:30461")).toBe(false);
+    expect(isOutsideAddress(undefined)).toBe(false);
+    expect(isOutsideAddress("not an address")).toBe(false);
+  });
+});
 
 /** The extensions OpenCloud would offer, reading the file as its config loader does. */
 const creatable = (env: Record<string, string> = {}) =>
