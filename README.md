@@ -82,6 +82,8 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Radarr](radarr.json) | Movie collection manager |
 | [Ratelog](ratelog.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
+| [RustDesk](rust-desk.json) | Remote desktop server, used with RustDesk Relay |
+| [RustDesk Relay](rust-desk-relay.json) | Relay server for RustDesk |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
 | [Satisfactory Server](satisfactory-server.json) | Satisfactory game server |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
@@ -175,7 +177,7 @@ A port is the first one HexOS tries. `"$PORT(30146)"` starts at 30146, and when 
 - A range whose `start` and `end` are both `$PORT(...)` moves as one block, by the same offset.
 - `requirements.ports` stays a plain list of preferred numbers, and each `$PORT(n)` names one of them.
 
-Write every published port this way. A bare number is a port the protocol ties to one number, which means DNS, DHCP, NTP, SSDP, STUN, mDNS and Plex's GDM discovery, where moving it would give a clean install of something that doesn't work. It stays where it is, and the deck tells the owner what holds it. Don't ask the owner for a port in a question. A move happens only when a port is first placed, so an app that's installed keeps the ports its owner may have forwarded.
+Write every published port this way. A bare number is a port the protocol ties to one number, which means DNS, DHCP, NTP, SSDP, STUN, mDNS, Plex's GDM discovery and RustDesk's ID server and relay ports, where moving it would give a clean install of something that doesn't work. It stays where it is, and the deck tells the owner what holds it. Don't ask the owner for a port in a question. A move happens only when a port is first placed, so an app that's installed keeps the ports its owner may have forwarded.
 
 ### What the validator checks
 

@@ -1,0 +1,56 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "1CORE"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      21117
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/rust-desk-relay/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "relay_port": {
+        "bind_mode": "published",
+        "port_number": 21117
+      },
+      "relay_web_clients_port": {
+        "bind_mode": "",
+        "port_number": 21119
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/rust-desk-relay/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 1,
+        "memory": 512
+      }
+    }
+  }
+}
