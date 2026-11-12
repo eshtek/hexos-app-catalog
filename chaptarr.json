@@ -1,0 +1,233 @@
+{
+  "version": 6,
+  "internal": true,
+  "script": {
+    "version": "1.0.1",
+    "changeLog": "Makes a folder in Downloads for each download client as it installs, so Chaptarr sees what a client you add later downloads"
+  },
+  "sign_in": {
+    "username": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "Downloads",
+      "Media"
+    ],
+    "specifications": [
+      "2CORE",
+      "200MB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30465
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Downloads)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Downloads)/qbittorrent"
+    },
+    {
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
+      "path": "$LOCATION(Media)/books"
+    },
+    {
+      "path": "$LOCATION(Media)/audiobooks"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/chaptarr/config",
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30465)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/chaptarr/config)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/books, /books)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/audiobooks, /audiobooks)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "seed-sign-in",
+      "title": "Set Chaptarr's sign-in",
+      "description": "Creating admin account",
+      "events": [
+        "onBeforeInstall"
+      ],
+      "optional": true,
+      "script": "servarr/configure.ts",
+      "entrypoint": "seed",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "configure-chaptarr",
+      "title": "Pre-configure Chaptarr",
+      "description": "Setting up Chaptarr",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "servarr/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-qbittorrent",
+      "title": "Connect to qBittorrent",
+      "description": "Sends what Chaptarr grabs to qBittorrent.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "qbittorrent",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-deluge",
+      "title": "Connect to Deluge",
+      "description": "Sends what Chaptarr grabs to Deluge.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "deluge",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-sabnzbd",
+      "title": "Connect to SABnzbd",
+      "description": "Sends what Chaptarr grabs to SABnzbd.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "sabnzbd",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-nzbget",
+      "title": "Connect to NZBGet",
+      "description": "Sends what Chaptarr grabs to NZBGet.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "nzbget",
+      "timeout": 900,
+      "retries": 0
+    }
+  ]
+}

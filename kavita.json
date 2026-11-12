@@ -1,0 +1,107 @@
+{
+  "version": 6,
+  "internal": true,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Kavita opens ready, with your sign-in and your Books, Comics and Manga libraries."
+  },
+  "sign_in": {
+    "username": true,
+    "email": true,
+    "existing": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "Media"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30069
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Media)/books",
+      "owner": {
+        "user": "apps"
+      }
+    },
+    {
+      "path": "$LOCATION(Media)/comics",
+      "owner": {
+        "user": "apps"
+      }
+    },
+    {
+      "path": "$LOCATION(Media)/manga",
+      "owner": {
+        "user": "apps"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/kavita/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30069)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/kavita/config)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/books, /books)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/comics, /comics)",
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/manga, /manga)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "configure-kavita",
+      "title": "Pre-configure Kavita",
+      "description": "Setting up Kavita",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "kavita/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 600,
+      "retries": 0
+    }
+  ]
+}

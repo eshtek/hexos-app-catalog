@@ -8,7 +8,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * install or collection, and a folder for downloads in progress when it keeps them with the
  * finished ones. A qBittorrent HexOS just installed has both from seed-webui, so this only checks
  * them; one the owner already had, which a collection brings in, gets them here through its own
- * WebUI. With no sign-in chosen (a run from the app's card) its sign-in stays as it is. The Radarr,
+ * WebUI. One a collection keeps (`ctx.keptApps`) keeps its sign-in too: HexOS gets in as the home
+ * network, else with the account the owner gave for it, tried once. With no sign-in chosen (a run
+ * from the app's card) its sign-in stays as it is. The Radarr,
  * Sonarr, Lidarr and Prowlarr installed beside it get the chosen sign-in at once (`shareSignIn`), so
  * none is locked out for using the old one before its link runs. Read at qBittorrent 5.3.0, the version
  * TrueNAS pins.
@@ -54,35 +56,38 @@ interface DownloadClient {
 async function shareSignIn(ctx: HookContext, signIn: SignIn) {
   const self = new URL(ctx.baseUrl);
   for (const [managerId, api] of Object.entries(MANAGERS)) {
-    const url = await ctx.getInstalledAppUrl(managerId);
-    if (!url) continue;
-    try {
-      const mounts = await ctx.getInstalledAppMounts(managerId);
-      const config = mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${managerId}/config`));
-      const apiKey = config && readFileSync(`${config.localPath}/config.xml`, "utf-8").match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
-      if (!apiKey) continue;
-      const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
-      const listed = await fetch(`${url}/api/${api}/downloadclient`, { headers, signal: AbortSignal.timeout(30_000) });
-      if (!listed.ok) throw new Error(`${listed.status} ${listed.statusText}`);
-      for (const client of (await listed.json()) as DownloadClient[]) {
-        const field = (name: string) => client.fields.find((f) => f.name === name)?.value;
-        // Another qBittorrent, or one the owner reaches with its API key instead, is left as it is
-        if (client.implementation !== "QBittorrent" || field("apiKey")) continue;
-        if (field("host") !== self.hostname || Number(field("port")) !== Number(self.port)) continue;
-        const fields = client.fields.map((f) =>
-          f.name === "username" ? { ...f, value: signIn.username } : f.name === "password" ? { ...f, value: signIn.password } : f,
-        );
-        const saved = await fetch(`${url}/api/${api}/downloadclient/${client.id}?forceSave=true`, {
-          method: "PUT",
-          headers,
-          body: JSON.stringify({ ...client, fields }),
-          signal: AbortSignal.timeout(30_000),
-        });
-        await saved.body?.cancel();
-        if (!saved.ok) throw new Error(`${saved.status} ${saved.statusText}`);
+    // Each copy of a manager holds its own entry for this client
+    for (const copy of (await ctx.installedCopies?.(managerId)) ?? [managerId]) {
+      const url = await ctx.getInstalledAppUrl(copy);
+      if (!url) continue;
+      try {
+        const mounts = await ctx.getInstalledAppMounts(copy);
+        const config = mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${managerId}(-\\d+)?/config$`).test(m.hostPath));
+        const apiKey = config && readFileSync(`${config.localPath}/config.xml`, "utf-8").match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
+        if (!apiKey) continue;
+        const headers = { "X-Api-Key": apiKey, "Content-Type": "application/json" };
+        const listed = await fetch(`${url}/api/${api}/downloadclient`, { headers, signal: AbortSignal.timeout(30_000) });
+        if (!listed.ok) throw new Error(`${listed.status} ${listed.statusText}`);
+        for (const client of (await listed.json()) as DownloadClient[]) {
+          const field = (name: string) => client.fields.find((f) => f.name === name)?.value;
+          // Another qBittorrent, or one the owner reaches with its API key instead, is left as it is
+          if (client.implementation !== "QBittorrent" || field("apiKey")) continue;
+          if (field("host") !== self.hostname || Number(field("port")) !== Number(self.port)) continue;
+          const fields = client.fields.map((f) =>
+            f.name === "username" ? { ...f, value: signIn.username } : f.name === "password" ? { ...f, value: signIn.password } : f,
+          );
+          const saved = await fetch(`${url}/api/${api}/downloadclient/${client.id}?forceSave=true`, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify({ ...client, fields }),
+            signal: AbortSignal.timeout(30_000),
+          });
+          await saved.body?.cancel();
+          if (!saved.ok) throw new Error(`${saved.status} ${saved.statusText}`);
+        }
+      } catch (error) {
+        ctx.log(`${copy} keeps the qBittorrent sign-in it had: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      ctx.log(`${managerId} keeps the qBittorrent sign-in it had: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 }
@@ -172,6 +177,31 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
 async function enter(ctx: HookContext, credentialsPath: string): Promise<{ session: Session; with?: SignIn } | undefined> {
   const open: Session = { base: ctx.baseUrl };
   if ((await versionStatus(open)) === 200) return { session: open };
+  // One the owner already had: the account they gave, tried once in the run, and no guesses, since
+  // every refusal counts toward qBittorrent's lockout of HexOS's address
+  if (ctx.keptApps?.includes(ctx.resourceId)) {
+    const own = await ctx.tryExistingSignIn?.(
+      ctx.resourceId,
+      async (account) => {
+        const session = await signsIn(ctx.baseUrl, account);
+        if (session) return { session, with: account };
+        if ((await versionStatus(open)) === undefined) ctx.fail("qBittorrent didn't answer. Try again once it's running.");
+        return undefined;
+      },
+      {
+        title: "Sign in to qBittorrent",
+        description: "qBittorrent refused the account you gave. Enter it again so HexOS can use it.",
+        username: true,
+        app: "qBittorrent",
+      },
+    );
+    if (own === "refused") {
+      const message = "qBittorrent refused the account you gave, so HexOS left qBittorrent as it is. Run Pre-configure qBittorrent from its Connections tab to set it up.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
+    }
+    return own;
+  }
   for (const known of [ctx.signIn, savedSignIn(credentialsPath)]) {
     if (!known) continue;
     const session = await signsIn(ctx.baseUrl, known);

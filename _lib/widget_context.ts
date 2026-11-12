@@ -22,6 +22,8 @@ export interface WidgetContext {
   readonly port?: number;
   /** The app's live mounts. */
   readonly mounts: WidgetMount[];
+  /** The longest data URI this box accepts. A box on an older image doesn't send it, and holds to 60,000. */
+  readonly imageLimit?: number;
   log(message: string): void;
 }
 
@@ -56,7 +58,7 @@ export interface WidgetListEntry {
    */
   progress?: number;
   /**
-   * The entry's artwork as a size-capped (60KB) data URI. When the widget's
+   * The entry's artwork as a data URI within `ctx.imageLimit`. When the widget's
    * background names this list, the card draws the image of the entry it has
    * on screen, so fetch a wide crop near the card's shape (about 660x260).
    * Data URIs ONLY: fetch and inline server-side; never emit app URLs (key
@@ -77,7 +79,7 @@ export interface WidgetChartPoint {
  * names a standalone image field, or a list whose entries carry images (the
  * card then draws the image of the entry on screen). An image is never a slot.
  * Max 16 fields; images are
- * size-capped (60KB) data URIs, text is capped at 500 chars.
+ * data URIs within `ctx.imageLimit`, text is capped at 500 chars.
  */
 export type WidgetFieldValue =
   | { type: "text"; text: string }

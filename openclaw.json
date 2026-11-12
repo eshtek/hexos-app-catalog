@@ -1,0 +1,117 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "OpenClaw runs as an assistant on your own model, kept off your home network."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "1GB",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30262
+    ],
+    "contained": {
+      "partner": "ollama"
+    },
+    "local_only": true
+  },
+  "installation_questions": [
+    {
+      "question": "Access token",
+      "description": "You open OpenClaw with this token.",
+      "type": "password",
+      "key": "gateway_token",
+      "required": true,
+      "default": "$RANDOM_STRING(32)"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/openclaw/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    }
+  ],
+  "app_values": {
+    "openclaw": {
+      "auth_mode": "token",
+      "gateway_token": "$QUESTION(gateway_token)",
+      "allowed_origins": [
+        "http://$SERVER_LAN_IP:$PORT(30262)"
+      ]
+    },
+    "network": {
+      "gateway_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30262)"
+      },
+      "networks": [
+        {
+          "name": "hexos-agents",
+          "containers": [
+            {
+              "name": "openclaw",
+              "config": {}
+            }
+          ]
+        }
+      ]
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/openclaw/config)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "connect-ollama",
+      "title": "Connect to Ollama",
+      "description": "Lets OpenClaw use the models on your graphics card.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "openclaw"
+        }
+      ],
+      "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
+      "script": "openclaw/connect_ollama.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

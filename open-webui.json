@@ -1,0 +1,113 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Open WebUI chats with the models on your own graphics card through Ollama."
+  },
+  "sign_in": {
+    "username": true,
+    "email": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GB",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      31028
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/open-webui/data",
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/open-webui/ollama"
+    }
+  ],
+  "app_values": {
+    "open_webui": {
+      "image_selector": "image",
+      "ollama_base_url": "http://$SERVER_LAN_IP:30068",
+      "redis_password": "$RANDOM_STRING(32)",
+      "webui_secret_key": "$RANDOM_STRING(32)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(31028)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/open-webui/data)",
+      "ollama": "$HOST_PATH($LOCATION(ApplicationsPerformance)/open-webui/ollama)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(15%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "configure-open-webui",
+      "title": "Pre-configure Open WebUI",
+      "description": "Setting up Open WebUI",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "open-webui/connect_ollama.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-ollama",
+      "title": "Connect to Ollama",
+      "description": "Lets Open WebUI use the models on your graphics card.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "open-webui"
+        }
+      ],
+      "rerun": "converge",
+      "script": "open-webui/connect_ollama.ts",
+      "entrypoint": "connect",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

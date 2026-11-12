@@ -1,8 +1,8 @@
 {
-    "version": 5,
+    "version": 6,
     "script": {
-        "version": "1.0.1",
-        "changeLog": "Updated requirements"
+        "version": "1.0.2",
+        "changeLog": "The app card shows who's online, from the server's REST API, out of how many it takes"
     },
     "installation_questions": [
         {
@@ -107,7 +107,7 @@
             "required": true,
             "options": [
                 {
-                    "text": "8 GB (minimum recommendation)",
+                    "text": "8 GB",
                     "value": "8192"
                 },
                 {
@@ -139,7 +139,7 @@
                     "value": "15360"
                 },
                 {
-                    "text": "16 GB",
+                    "text": "16 GB (recommended)",
                     "value": "16384"
                 },
                 {
@@ -199,7 +199,7 @@
                     "value": "49152"
                 }
             ],
-            "default": "8192"
+            "default": "16384"
         },
         {
             "question": "Select a Server name",
@@ -1351,7 +1351,8 @@
         "permissions": ["READ_WRITE_LOCATIONS"],
         "specifications": ["4CORE", "30GB", "16GBRAM"],
         "ports": [30443, 38212, 38211],
-        "game_port": 38211
+        "game_port": 38211,
+        "instances": "many"
     },
     "ensure_directories_exists": [
         {
@@ -1363,11 +1364,11 @@
             "network_share": true
         },
         {
-            "path": "$LOCATION(Media)/palworld",
+            "path": "$LOCATION(Media)/$INSTANCE(palworld)",
             "owner": "apps"
         },
         {
-            "path": "$LOCATION(ApplicationsPerformance)/palworld/steamcmd",
+            "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(palworld)/steamcmd",
             "owner": "apps"
         }
     ],
@@ -1377,19 +1378,19 @@
             "api_port": {
                 "bind_mode": "published",
                 "host_ips": [],
-                "port_number": 30443
+                "port_number": "$PORT(30443)"
             },
             "host_network": false,
             "networks": [],
             "rcon_port": {
                 "bind_mode": "published",
                 "host_ips": [],
-                "port_number": 38212
+                "port_number": "$PORT(38212)"
             },
             "server_port": {
                 "bind_mode": "published",
                 "host_ips": [],
-                "port_number": 38211
+                "port_number": "$PORT(38211)"
             }
         },
         "palworld": {
@@ -1801,8 +1802,32 @@
         },
         "storage": {
             "additional_storage": [],
-            "server": "$HOST_PATH($LOCATION(Media)/palworld)",
-            "steamcmd": "$HOST_PATH($LOCATION(ApplicationsPerformance)/palworld/steamcmd)"
+            "server": "$HOST_PATH($LOCATION(Media)/$INSTANCE(palworld))",
+            "steamcmd": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(palworld)/steamcmd)"
         }
-    }
+    },
+    "widgets": [
+        {
+            "id": "players",
+            "title": "Online now",
+            "description": "Who's playing on this server, out of how many it takes.",
+            "refresh": 10,
+            "conditions": [
+                {
+                    "role": "availability",
+                    "type": "appRunning",
+                    "app": "palworld"
+                }
+            ],
+            "background": { "field": "online" },
+            "slots": [
+                { "type": "stat", "field": "count" },
+                { "type": "list", "field": "online", "rows": 1 }
+            ],
+            "script": "palworld/widget_players.ts",
+            "entrypoint": "run",
+            "timeout": 5
+        }
+    ],
+    "widgetsSchema": 3
 }

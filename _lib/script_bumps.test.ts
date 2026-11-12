@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bumpProblem, droppedFolders, unanswerableQuestions, updateProblems, versionRaised } from "./script_bumps";
+import { bumpProblem, droppedFolders, runPart, unanswerableQuestions, updateProblems, versionRaised } from "./script_bumps";
 
 const kodi = (tag: string, version: string, extra: Record<string, unknown> = {}) => ({
   version: 6,
@@ -36,6 +36,11 @@ describe("bumpProblem", () => {
     expect(bumpProblem(kodi("21.2-1", "1.0.0", ports()), kodi("21.2-1", "1.0.0", ports(2456)))).toBeNull();
     const moved = kodi("21.2-1", "1.0.0", { requirements: { ports: [2456, 2459], game_port: 2456 } });
     expect(bumpProblem(kodi("21.2-1", "1.0.0", ports(2456)), moved)).not.toBeNull();
+  });
+
+  test("the ports HexOS reserves for an app change nothing a server runs", () => {
+    const reserving = kodi("21.2-1", "1.0.0", { requirements: { ports: [1], reserved_ports: [{ start: 27100, end: 27119 }] } });
+    expect(bumpProblem(kodi("21.2-1", "1.0.0", { requirements: { ports: [1] } }), reserving)).toBeNull();
   });
 
   test("a change in layout alone is no change", () => {
@@ -102,5 +107,25 @@ describe("what an update can carry", () => {
     const head = valheim([question("server_name"), question("admin_ids")], [], "1.0.1");
     expect(updateProblems(base, head)).toHaveLength(2);
     expect(updateProblems({ ...base, custom: undefined }, { ...head, custom: undefined })).toEqual([]);
+  });
+});
+
+describe("what doesn't change a server", () => {
+  test("$PORT and $INSTANCE read as what they give an installed app", () => {
+    const base = { custom: true, requirements: { ports: [1] }, app_values: { port: 2456, path: "x/valheim/y" } };
+    const head = {
+      custom: true,
+      requirements: { ports: [1], instances: "many", game_port: 1 },
+      app_values: { port: "$PORT(2456)", path: "x/$INSTANCE(valheim)/y" },
+    };
+    expect(runPart(head)).toBe(runPart(base));
+  });
+
+  test("a link's rerunsOn, which the box reads from the catalog's current script", () => {
+    const hook = { id: "connect-ollama", script: "x/connect_ollama.ts", entrypoint: "run", rerun: "converge" };
+    const base = { custom: true, hooks: [hook] };
+    expect(runPart({ custom: true, hooks: [{ ...hook, rerunsOn: ["local-ai-model"] }] })).toBe(runPart(base));
+    // Anything else on the hook still changes what a server runs
+    expect(runPart({ custom: true, hooks: [{ ...hook, entrypoint: "connect" }] })).not.toBe(runPart(base));
   });
 });

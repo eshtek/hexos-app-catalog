@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "2.3.0",
-    "changeLog": "Connect to Tautulli finds Tautulli wherever it's installed, and waits for it to start"
+    "version": "2.3.1",
+    "changeLog": "Connect to Seerr and Connect to Tautulli move to this Plex server when theirs is gone, after a reinstall or an address change, and leave one on another Plex server alone"
   },
   "installation_questions": [
     {
@@ -108,7 +108,7 @@
       "additional_envs": [
         {
           "name": "ADVERTISE_IP",
-          "value": "http://$SERVER_LAN_IP:32400"
+          "value": "http://$SERVER_LAN_IP:$PORT(32400)"
         }
       ]
     },
@@ -133,7 +133,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 32400
+        "port_number": "$PORT(32400)"
       }
     },
     "resources": {
@@ -285,6 +285,37 @@
       "rerun": "converge",
       "script": "plex/connect_tautulli.ts",
       "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-sportarr",
+      "title": "Connect to Sportarr",
+      "description": "Adds a Sports library to Plex for what Sportarr fetches.",
+      "kind": "connect",
+      "requiresHooks": [
+        "configure-plex"
+      ],
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        }
+      ],
+      "rerun": "converge",
+      "script": "plex/add_library.ts",
+      "entrypoint": "sportarr",
       "timeout": 180,
       "retries": 0
     }

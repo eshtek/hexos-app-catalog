@@ -1,8 +1,8 @@
 {
   "version": 5,
   "script": {
-    "version": "1.0.1",
-    "changeLog": "Changed default for a question"
+    "version": "1.0.2",
+    "changeLog": "RomM downloads LaunchBox's data every night when LaunchBox metadata is on."
   },
   "installation_questions": [
     {
@@ -68,7 +68,7 @@
     },
     {
       "question": "Enable LaunchBox metadata",
-      "description": "Community-driven metadata database. Requires running a LaunchBox metadata update (manual or scheduled) inside RomM before it can match games.",
+      "description": "Community-driven metadata database. RomM downloads its data overnight, so matches start the next day. To match games sooner, run the LaunchBox metadata update inside RomM.",
       "type": "select",
       "key": "launchbox_api_enabled",
       "required": false,
@@ -131,7 +131,9 @@
       "screenscraper_password": "$IF($QUESTION(screenscraper_password), $QUESTION(screenscraper_password), \"\")",
       "retroachievements_api_key": "$IF($QUESTION(retroachievements_api_key), $QUESTION(retroachievements_api_key), \"\")",
       "steamgriddb_api_key": "$IF($QUESTION(steamgriddb_api_key), $QUESTION(steamgriddb_api_key), \"\")",
-      "additional_envs": []
+      "additional_envs": [
+        { "name": "ENABLE_SCHEDULED_UPDATE_LAUNCHBOX_METADATA", "value": "$QUESTION(launchbox_api_enabled)" }
+      ]
     },
     "storage": {
       "library": "$HOST_PATH($LOCATION(ApplicationsCapacity)/romm/library)",
@@ -143,7 +145,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30446
+        "port_number": "$PORT(30446)"
       }
     },
     "resources": {

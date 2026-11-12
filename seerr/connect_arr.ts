@@ -9,7 +9,9 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * manager: Profilarr's everyday profile when Profilarr has sent it, else the manager's first, and
  * its first root folder, made at the library the HexOS install mounts when it has none yet. Run
  * again, it puts back how Seerr reaches the manager, and keeps the profile, folder and other
- * choices the owner made in Seerr while the manager still has them.
+ * choices the owner made in Seerr while the manager still has them. Seerr knows the manager by its
+ * address, or by its API key once the box's address or the manager's port changed: each install
+ * makes its key at random, so the key is the same manager whatever its address.
  */
 
 /** The profile Profilarr's link sends both managers for everyday requests. */
@@ -25,7 +27,7 @@ type ManagerId = keyof typeof MANAGERS;
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
   return (
     mounts.find((m) => m.containerPath === "/config" || m.containerPath === "/app/config") ??
-    mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`))
+    mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath))
   );
 }
 
@@ -35,6 +37,21 @@ function readText(path: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Seerr's settings for one Radarr or Sonarr, as its `/settings/radarr` and `/settings/sonarr` list them. */
+type SeerrServer = Record<string, unknown> & { id: number; name?: string; hostname: string; port: number; apiKey?: string; is4k?: boolean; isDefault?: boolean };
+
+/** Waits up to about a minute for an app that has only just started, and fails plainly when it doesn't answer. */
+async function waitFor(ctx: HookContext, name: string, url: string) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    // Any answer counts: the app's web server is up
+    const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(2_000) }).catch(() => undefined);
+    await response?.body?.cancel().catch(() => undefined);
+    if (response) return;
+    await ctx.sleep(1_000);
+  }
+  ctx.fail(`${name} isn't answering yet. Try again once it has started.`);
 }
 
 async function call<T>(url: string, apiKey: string, init: RequestInit = {}): Promise<T> {
@@ -49,7 +66,7 @@ async function call<T>(url: string, apiKey: string, init: RequestInit = {}): Pro
 }
 
 async function connect(ctx: HookContext, managerId: ManagerId) {
-  const manager = MANAGERS[managerId];
+  const manager = { ...MANAGERS[managerId], name: ctx.linkedApp?.(managerId)?.displayName ?? MANAGERS[managerId].name };
   await ctx.registerCheckpoints([
     { id: "locate", message: `Finding ${manager.name}` },
     { id: "library", message: `Reading ${manager.name}'s profile and library` },
@@ -59,6 +76,7 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
   const settings = readText(`${configMount(ctx.mounts, "seerr")?.localPath}/settings.json`);
   const seerrKey = settings ? (JSON.parse(settings) as { main?: { apiKey?: string } }).main?.apiKey : undefined;
   if (!seerrKey) ctx.fail("HexOS couldn't read Seerr's API key yet. Try again once it has started.");
+  await waitFor(ctx, "Seerr", `${ctx.baseUrl}/api/v1/status`);
   // Seerr's API key acts as its first admin, who exists only once Seerr is set up with a media server
   const setUp = await fetch(`${ctx.baseUrl}/api/v1/settings/public`, { signal: AbortSignal.timeout(15_000) })
     .then((response) => response.json() as Promise<{ initialized?: boolean }>)
@@ -75,6 +93,7 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
     `${configMount(await ctx.getInstalledAppMounts(managerId), managerId)?.localPath}/config.xml`,
   )?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
   if (!managerKey) ctx.fail(`HexOS couldn't read ${manager.name}'s API key yet. Try again once it has started.`);
+  await waitFor(ctx, manager.name, `${managerUrl}/ping`);
   await ctx.emitCheckpoint("locate");
 
   const managerApi = `${managerUrl}/api/v3`;
@@ -120,10 +139,13 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
   };
 
   const seerrApi = `${ctx.baseUrl}/api/v1/settings/${manager.path}`;
+  let note: string | undefined;
   try {
-    const existing = (await call<Array<Record<string, unknown> & { id: number; hostname: string; port: number }>>(seerrApi, seerrKey)).find(
-      (entry) => entry.hostname === hostname && entry.port === Number(port),
-    );
+    const servers = await call<SeerrServer[]>(seerrApi, seerrKey);
+    // Seerr's list gives each key as it is. A copy has a key of its own, so another copy's entry
+    // never matches.
+    const existing =
+      servers.find((entry) => entry.hostname === hostname && entry.port === Number(port)) ?? servers.find((entry) => entry.apiKey === managerKey);
     if (existing) {
       // What the owner chose in Seerr stays while the manager still has it
       const kept: Record<string, unknown> = { ...existing };
@@ -139,14 +161,19 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
       const connection = { hostname, port: Number(port), apiKey: managerKey, useSsl: false, baseUrl: "" };
       await call(`${seerrApi}/${existing.id}`, seerrKey, { method: "PUT", body: JSON.stringify({ ...kept, ...connection }) });
     } else {
-      await call(seerrApi, seerrKey, { method: "POST", body: JSON.stringify(service) });
+      // Saving a default takes it from the server that had it (one of the same 4K or not), so this
+      // one joins beside a default Seerr has, as a second copy does beside the first
+      const first = servers.find((entry) => entry.isDefault && !entry.is4k);
+      await call(seerrApi, seerrKey, { method: "POST", body: JSON.stringify({ ...service, isDefault: !first }) });
+      // That default may be a manager that's gone, so the owner hears where requests go
+      if (first) note = `Seerr sends requests to ${first.name ?? manager.name} at ${first.hostname}:${first.port} by default. ${manager.name} was added beside it.`;
     }
   } catch (error) {
     ctx.fail(`Seerr didn't accept ${manager.name}`, [
       { label: "Reason", value: error instanceof Error ? error.message : String(error) },
     ]);
   }
-  await ctx.emitCheckpoint("configure");
+  await ctx.emitCheckpoint("configure", note);
 }
 
 export const radarr = (ctx: HookContext) => connect(ctx, "radarr");

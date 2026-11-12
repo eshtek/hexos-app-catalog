@@ -5,7 +5,8 @@
     "changeLog": "Uses the password you choose, and keeps downloads in progress apart from finished ones"
   },
   "sign_in": {
-    "username": false
+    "username": false,
+    "existing": true
   },
   "requirements": {
     "locations": [
@@ -50,7 +51,11 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30038
+        "port_number": "$PORT(30038)"
+      },
+      "torrent_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30039)"
       }
     },
     "storage": {

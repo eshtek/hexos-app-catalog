@@ -1,0 +1,197 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.2",
+    "changeLog": "Runs models on the graphics built into a Ryzen AI Max, which HexOS turns on through Integrated graphics"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsCapacity"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "4GBVRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30068
+    ],
+    "local_only": true
+  },
+  "installation_questions": [
+    {
+      "question": "Graphics card",
+      "description": "Pick the image that matches your graphics card.",
+      "type": "select",
+      "key": "image",
+      "required": true,
+      "installonly": true,
+      "default": "image",
+      "options": [
+        {
+          "text": "NVIDIA",
+          "value": "image"
+        },
+        {
+          "text": "AMD",
+          "value": "rocm_image"
+        }
+      ]
+    },
+    {
+      "question": "Context size",
+      "description": "How much a model keeps in mind at once. A larger size uses more of your card's memory.",
+      "type": "select",
+      "key": "context_length",
+      "required": true,
+      "default": "8192",
+      "options": [
+        {
+          "text": "8K",
+          "value": "8192"
+        },
+        {
+          "text": "16K",
+          "value": "16384"
+        },
+        {
+          "text": "32K",
+          "value": "32768"
+        },
+        {
+          "text": "64K",
+          "value": "65536"
+        },
+        {
+          "text": "128K",
+          "value": "131072"
+        },
+        {
+          "text": "256K",
+          "value": "262144"
+        }
+      ]
+    },
+    {
+      "question": "Model",
+      "description": "The model Ollama runs. One it doesn't have yet downloads first.",
+      "type": "text",
+      "key": "model",
+      "source": "local-ai-models",
+      "required": false,
+      "default": ""
+    },
+    {
+      "question": "Integrated graphics",
+      "description": "HexOS sets this for graphics built into the processor. Leave it blank.",
+      "type": "text",
+      "key": "integrated_gpu",
+      "required": false,
+      "installonly": true,
+      "default": ""
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/ollama/models",
+      "snapshot": {
+        "id": "models"
+      }
+    }
+  ],
+  "app_values": {
+    "ollama": {
+      "image_selector": "$QUESTION(image)",
+      "additional_envs": [
+        {
+          "name": "OLLAMA_CONTEXT_LENGTH",
+          "value": "$QUESTION(context_length)"
+        },
+        {
+          "name": "OLLAMA_NOPRUNE",
+          "value": "1"
+        },
+        {
+          "name": "HEXOS_MODEL",
+          "value": "$QUESTION(model)"
+        },
+        {
+          "name": "OLLAMA_IGPU_ENABLE",
+          "value": "$QUESTION(integrated_gpu)"
+        }
+      ]
+    },
+    "network": {
+      "api_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30068)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsCapacity)/ollama/models)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(75%, 2)",
+        "memory": "$MEMORY(50%, 8192)"
+      },
+      "gpus": "$GPU_CONFIG()"
+    }
+  },
+  "hooks": [
+    {
+      "id": "choose-model",
+      "title": "Choose a model",
+      "description": "Pick a model your graphics card can run.",
+      "events": [
+        "userAction"
+      ],
+      "surfaces": [
+        "card"
+      ],
+      "rerun": "converge",
+      "script": "ollama/models.ts",
+      "entrypoint": "choose",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "download-model",
+      "title": "Download your model",
+      "description": "Downloads the model you chose. If it stopped, it picks up where it left off.",
+      "events": [
+        "userAction"
+      ],
+      "surfaces": [
+        "card"
+      ],
+      "rerun": "converge",
+      "script": "ollama/models.ts",
+      "entrypoint": "download",
+      "timeout": 43200,
+      "retries": 0
+    },
+    {
+      "id": "remove-model",
+      "title": "Remove a model",
+      "description": "Deletes a model from your server, after you confirm.",
+      "events": [
+        "userAction"
+      ],
+      "surfaces": [
+        "card"
+      ],
+      "rerun": "converge",
+      "script": "ollama/models.ts",
+      "entrypoint": "remove",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

@@ -102,6 +102,19 @@ function keccak512Hex(input: string): string {
   return out;
 }
 
+/** Whether Jellyfin takes this account: false only when it refuses it. */
+async function jellyfinTakes(baseUrl: string, signIn: { username: string; password: string }): Promise<boolean> {
+  const response = await fetch(`${baseUrl}/Users/AuthenticateByName`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: JELLYFIN_AUTH_HEADER },
+    body: JSON.stringify({ Username: signIn.username, Pw: signIn.password }),
+  });
+  await response.body?.cancel();
+  if (response.status === 401 || response.status === 403) return false;
+  if (!response.ok) throw new Error(`Jellyfin didn't answer its sign-in (${response.status})`);
+  return true;
+}
+
 async function jellyfinSignIn(baseUrl: string, username: string, password: string): Promise<string> {
   const response = await fetch(`${baseUrl}/Users/AuthenticateByName`, {
     method: "POST",
@@ -131,7 +144,8 @@ async function jellyfinSignIn(baseUrl: string, username: string, password: strin
 }
 
 async function ensureApiKey(baseUrl: string, accessToken: string): Promise<string> {
-  const headers = { "X-Emby-Token": accessToken };
+  // Jellyfin 12 has EnableLegacyAuthorization off, which turns away a token in X-Emby-Token (401)
+  const headers = { Authorization: `MediaBrowser Token="${accessToken}"` };
   const findKey = async (): Promise<string | undefined> => {
     const response = await fetch(`${baseUrl}/Auth/Keys`, { headers });
     if (!response.ok) throw new Error(`Could not list Jellyfin API keys (${response.status})`);
@@ -207,15 +221,38 @@ async function jellystatSignIn(
 }
 
 /**
- * The Jellyfin administrator Jellystat's account and API key come from: the sign-in the owner chose
- * for the install or collection (`ctx.signIn`, which Pre-configure Jellyfin made an administrator),
- * else the answers an older Pre-configure Jellyfin was given, else asked for.
+ * The Jellyfin administrator Jellystat's account and API key come from: the one the owner gave for a
+ * Jellyfin they already had (`ctx.existingSignIns`), else the sign-in they chose for the install or
+ * collection (`ctx.signIn`, which Pre-configure Jellyfin made an administrator), else the answers an
+ * older Pre-configure Jellyfin was given, else asked for.
  */
 async function jellyfinAdmin(ctx: HookContext): Promise<{ username: string; password: string }> {
-  if (ctx.signIn) return { username: ctx.signIn.username, password: ctx.signIn.password };
-  const inherited = { username: ctx.getInput<string>("admin_username"), password: ctx.getInput<string>("admin_password") };
-  // Jellyfin takes an empty password, so an inherited one counts once the username is there
-  if (inherited.username && typeof inherited.password === "string") return inherited;
+  // A Jellyfin the owner already had keeps its own administrator, which they gave in the walk, tried
+  // once in the run (Jellystat's own account then mirrors it, as for any Jellyfin)
+  if (ctx.keptApps?.includes(ctx.resourceId)) {
+    const own = await ctx.tryExistingSignIn?.(
+      ctx.resourceId,
+      async (signIn) => (await jellyfinTakes(ctx.baseUrl, signIn)) ? signIn : undefined,
+      {
+        title: "Sign in to Jellyfin",
+        description: "Jellyfin refused the admin account you gave. Enter an administrator's username and password so HexOS can use it.",
+        username: true,
+        app: "Jellyfin",
+      },
+    );
+    if (own === "refused") {
+      const message = "Jellyfin refused the admin account you gave, so HexOS couldn't connect Jellystat to it. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
+    }
+    if (own) return { username: own.username, password: own.password };
+  } else if (ctx.signIn) return { username: ctx.signIn.username, password: ctx.signIn.password };
+  // Read without getInput, which throws for an answer that isn't there: a run from the card has none.
+  // Jellyfin takes an empty password, so an inherited one counts once the username is there.
+  const inherited = { username: ctx.inputs?.admin_username, password: ctx.inputs?.admin_password };
+  if (typeof inherited.username === "string" && inherited.username && typeof inherited.password === "string") {
+    return { username: inherited.username, password: inherited.password };
+  }
   const inputs: HookInputDeclaration[] = [
     { type: "question", id: "username", question: { question: "Jellyfin username", type: "text", key: "username", required: true } },
     { type: "question", id: "password", question: { question: "Jellyfin password", type: "password", key: "password", required: true } },
@@ -246,6 +283,114 @@ function sameServer(left: string, right: string): boolean {
   return new URL(left).href.replace(/\/+$/, "") === new URL(right).href.replace(/\/+$/, "");
 }
 
+/**
+ * The Jellyfin server that answers at an address now, by its id and name, or undefined when nothing
+ * does. Jellyfin answers `/System/Info/Public` without a sign-in.
+ */
+async function serverAt(url: string): Promise<{ id: string; name?: string } | undefined> {
+  // Only the server's public id is read, so a certificate made for another name (a Jellyfin reached
+  // by its IP over TLS) doesn't count as no answer; nothing is sent
+  const init = { signal: AbortSignal.timeout(10_000), tls: { rejectUnauthorized: false } };
+  const response = await fetch(`${url.replace(/\/+$/, "")}/System/Info/Public`, init as RequestInit).catch(() => undefined);
+  if (!response?.ok) return undefined;
+  const info = (await response.json().catch(() => undefined)) as { Id?: string; ServerName?: string } | undefined;
+  return info?.Id ? { id: info.Id, name: info.ServerName || undefined } : undefined;
+}
+
+interface JellystatConfig {
+  JF_HOST?: string | null;
+  settings?: { ServerID?: string | null } | null;
+}
+
+/**
+ * The Jellyfin servers Jellystat's own records name: the id it saved at its last setup, and the server
+ * each library it hasn't archived was synced from. Undefined when the libraries can't be read, which
+ * proves nothing.
+ */
+async function recordedServers(jellystatUrl: string, token: string, config: JellystatConfig): Promise<string[] | undefined> {
+  const response = await fetch(`${jellystatUrl}/api/getLibraries`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(15_000),
+  }).catch(() => undefined);
+  if (!response?.ok) return undefined;
+  const libraries = (await response.json().catch(() => undefined)) as Array<{ ServerId?: string; archived?: boolean }> | undefined;
+  if (!Array.isArray(libraries)) return undefined;
+  const ids = [config.settings?.ServerID, ...libraries.filter((library) => !library.archived).map((library) => library.ServerId)];
+  return [...new Set(ids.filter((id): id is string => typeof id === "string" && id !== ""))];
+}
+
+/**
+ * Whether the owner wants Jellystat moved off a server that no longer answers. Nothing proves that
+ * server is gone for good (it may be another computer that's switched off), so the owner decides.
+ * False when they say no, skip the question, or the box can't ask.
+ */
+async function ownerSwitches(ctx: HookContext, address: string): Promise<boolean> {
+  if (typeof ctx.askForInputs !== "function") return false;
+  const answers = await ctx
+    .askForInputs(
+      [
+        {
+          type: "question",
+          id: "switch",
+          question: {
+            question: "Switch Jellystat to this Jellyfin server",
+            description: "Jellystat keeps the history it has, and adds this server's plays to it.",
+            type: "boolean",
+            key: "switch",
+            required: true,
+          },
+        },
+      ],
+      { title: "Switch Jellystat's Jellyfin server", description: `Jellystat uses ${address}, which isn't answering.` },
+    )
+    .catch((error: unknown) => {
+      if (error instanceof Error && error.name === "HookInputsUnanswered") return undefined;
+      throw error;
+    });
+  return answers?.switch === true;
+}
+
+/**
+ * The address Jellystat should keep for this server, when the one it has isn't this server's. Jellystat
+ * keeps one Jellyfin server, and its history belongs to that server. It moves to this one when its
+ * address now answers as this server (Jellyfin was reinstalled, or the owner wrote another name for
+ * it), when its address answers nothing and its own records name this server and no other (the box's
+ * address or Jellyfin's port changed), or when the owner says so. It's left alone while its address
+ * answers as another server.
+ */
+async function addressToKeep(
+  ctx: HookContext,
+  jellystatUrl: string,
+  token: string,
+  config: JellystatConfig & { JF_HOST: string },
+): Promise<string> {
+  const thisServer = await serverAt(ctx.baseUrl);
+  if (!thisServer) ctx.fail("Jellyfin didn't answer. Try again once it has started.");
+  const stored = await serverAt(config.JF_HOST);
+  // An address that answers as this server stays as the owner wrote it
+  if (stored?.id === thisServer.id) return config.JF_HOST;
+  // Switching servers is the owner's to do in Jellystat, so trying again can't help
+  const message =
+    "Jellystat is already connected to another Jellyfin server. Change it in Jellystat's own settings, then run Connect to Jellystat from Jellyfin.";
+  const context = [{ label: "Jellystat uses", value: stored?.name ? `${stored.name} at ${config.JF_HOST}` : config.JF_HOST }];
+  // What answers is checked before the records, since Jellystat saves the id of the server its old
+  // settings reach: one moved to another server in its own settings can still name this one
+  if (!stored) {
+    const records = await recordedServers(jellystatUrl, token, config);
+    if (records?.length && records.every((id) => id === thisServer.id)) return ctx.baseUrl;
+    if (await ownerSwitches(ctx, config.JF_HOST)) return ctx.baseUrl;
+  }
+  if (ctx.skip) ctx.skip(message, context);
+  ctx.fail(message, context);
+}
+
+/**
+ * Connects Jellystat to this Jellyfin server with an API key of its own, signing in to Jellystat with
+ * the owner's Jellyfin administrator (and making that account in a fresh Jellystat). Run again, it
+ * moves Jellystat to this server when Jellystat's own is gone: Jellyfin reinstalled at the address
+ * Jellystat has, or this server at an address that no longer reaches it. Read at Jellystat 1.1.12,
+ * the version TrueNAS pins.
+ */
 export async function run(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "locate", message: "Locating Jellystat" },
@@ -269,20 +414,19 @@ export async function run(ctx: HookContext) {
     headers: { Authorization: `Bearer ${jellystatToken}` },
   });
   if (!current.ok) throw new Error(`Could not read Jellystat's existing connection (${current.status})`);
-  const existing = (await current.json()) as { JF_HOST?: string | null };
+  const existing = (await current.json()) as JellystatConfig;
   if (state === 2 && !existing.JF_HOST) throw new Error("Could not confirm Jellystat's existing Jellyfin server");
-  if (existing.JF_HOST && !sameServer(existing.JF_HOST, ctx.baseUrl)) {
-    throw new Error(
-      "Jellystat is already connected to another Jellyfin server. Connect it manually to preserve its existing setup.",
-    );
-  }
+  const host = existing.JF_HOST;
+  const address =
+    host && !sameServer(host, ctx.baseUrl) ? await addressToKeep(ctx, jellystatUrl, jellystatToken, { ...existing, JF_HOST: host }) : ctx.baseUrl;
+  // A Jellyfin that was reinstalled doesn't know the key Jellystat has, so it gets one of its own
   const apiKey = await ensureApiKey(ctx.baseUrl, accessToken);
   await ctx.emitCheckpoint("apikey");
 
   const configure = await fetch(`${jellystatUrl}/api/setconfig`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${jellystatToken}` },
-    body: JSON.stringify({ JF_HOST: ctx.baseUrl, JF_API_KEY: apiKey }),
+    body: JSON.stringify({ JF_HOST: address, JF_API_KEY: apiKey }),
   });
   if (!configure.ok) {
     throw new Error(`Jellystat rejected the configuration (${configure.status})`);
@@ -294,8 +438,8 @@ export async function run(ctx: HookContext) {
   });
   if (!verify.ok) throw new Error(`Could not verify Jellystat's configuration (${verify.status})`);
   const config = (await verify.json()) as { JF_HOST?: string };
-  if (!config.JF_HOST || !sameServer(config.JF_HOST, ctx.baseUrl)) {
-    throw new Error(`Jellystat reports Jellyfin at "${config.JF_HOST}", expected "${ctx.baseUrl}"`);
+  if (!config.JF_HOST || !sameServer(config.JF_HOST, address)) {
+    throw new Error(`Jellystat reports Jellyfin at "${config.JF_HOST}", expected "${address}"`);
   }
   await ctx.emitCheckpoint("verify");
 }

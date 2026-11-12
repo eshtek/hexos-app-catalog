@@ -29,6 +29,20 @@ import {
   WIDGET_MIN_REFRESH_S,
   WIDGET_SLOT_TYPES,
 } from "./contract";
+import {
+  catalogFixedPortClashes,
+  catalogPreferredPortClashes,
+  collectionPortClashes,
+  declaredPortsMatchPins,
+  networkInsideAppValues,
+  portMacrosWellFormed,
+  portsCanMove,
+  preferredPort,
+  publishedPorts,
+  reservedPortsWellFormed,
+  type Finding,
+} from "./ports";
+import { instanceRules, linkCopyRules } from "./instances";
 
 type Problem = { file: string; message: string };
 
@@ -37,6 +51,9 @@ const warnings: Problem[] = [];
 
 const err = (file: string, message: string) => errors.push({ file, message });
 const warn = (file: string, message: string) => warnings.push({ file, message });
+const report = (file: string, findings: Finding[]) => {
+  for (const { level, message } of findings) (level === "error" ? err : warn)(file, message);
+};
 
 /** A question key that names a secret: an API key, a token, a password. */
 const SECRET_KEY = /token|secret|passw(or)?d|api_?key/i;
@@ -262,11 +279,19 @@ function validate(file: string, script: Record<string, unknown>) {
       if (signIn.username !== undefined && typeof signIn.username !== "boolean") {
         err(file, "sign_in.username must be true or false");
       }
-      // An app with several users gets a new administrator in place of a replaced sign-in
+      // An app with users of its own (Jellyfin, Emby); a platform from before installed apps kept their account reads it
       if (signIn.adds_user !== undefined && typeof signIn.adds_user !== "boolean") {
         err(file, "sign_in.adds_user must be true or false");
       }
-      const extra = Object.keys(signIn).filter((key) => key !== "username" && key !== "adds_user");
+      // An app whose first account takes the owner's email: only then does HexOS ask for one
+      if (signIn.email !== undefined && typeof signIn.email !== "boolean") {
+        err(file, "sign_in.email must be true or false");
+      }
+      // An installed copy's setup signs in with the admin account it has, which a collection's walk asks for
+      if (signIn.existing !== undefined && typeof signIn.existing !== "boolean") {
+        err(file, "sign_in.existing must be true or false");
+      }
+      const extra = Object.keys(signIn).filter((key) => !["username", "adds_user", "email", "existing"].includes(key));
       if (extra.length > 0) err(file, `sign_in: unknown keys ${extra.join(", ")}`);
     }
     // The sign-in is set by a hook; a script with none would promise the owner one it never gets
@@ -348,6 +373,14 @@ function validate(file: string, script: Record<string, unknown>) {
         err(file, `${where}: select question "${key}" has no options`);
       }
     }
+    // The deck fills a sourced question's answers itself; it knows one source, for a typed answer
+    if (q.source !== undefined && (q.source !== "local-ai-models" || q.type !== "text")) {
+      err(file, `${where}: question "${key}" has source "${String(q.source)}", which only a text question may take as "local-ai-models"`);
+    }
+    // The install asks an attestation as a checkbox Install waits on, so only a required yes will do
+    if (q.attestation === true && (q.type !== "boolean" || q.required !== true)) {
+      err(file, `${where}: attestation question "${key}" must be a required boolean`);
+    }
     // The app's Settings tab shows a text answer as it is and hides a password until asked
     if (q.type === "text" && SECRET_KEY.test(key)) {
       err(file, `${where}: question "${key}" names a secret, so make its type "password"`);
@@ -391,6 +424,12 @@ function validate(file: string, script: Record<string, unknown>) {
     if (entry.network_share !== undefined && typeof entry.network_share !== "boolean") {
       err(file, `${where}.network_share must be a boolean`);
     }
+    if (entry.start_mount !== undefined) {
+      if (typeof entry.start_mount !== "string" || !entry.start_mount.startsWith("/")) {
+        err(file, `${where}.start_mount must be an absolute path inside the app`);
+      }
+      if (entry.owner === undefined) err(file, `${where}.start_mount needs an owner to give the folder to`);
+    }
   }
 
   // --- app_values ---
@@ -418,6 +457,29 @@ function validate(file: string, script: Record<string, unknown>) {
     }
     if (isObject(scriptMeta) && typeof scriptMeta.version === "string" && !/^\d+\.\d+\.\d+$/.test(scriptMeta.version)) {
       err(file, `script.version "${scriptMeta.version}" must be x.y.z: servers compare it with semver to offer the update`);
+    }
+  }
+
+  // --- generated_sign_in: a sign-in the app writes to one of its own folders ---
+  const generatedSignIn = script.generated_sign_in;
+  if (generatedSignIn !== undefined) {
+    if (!isObject(generatedSignIn)) {
+      err(file, "generated_sign_in must be an object");
+    } else {
+      for (const key of ["file", "username", "password"]) {
+        if (typeof generatedSignIn[key] !== "string") err(file, `generated_sign_in.${key} must be a string`);
+      }
+      const path = generatedSignIn.file;
+      if (typeof path === "string" && (path.split("/").length < 2 || path.split("/").some((part) => [".", "..", ""].includes(part)))) {
+        err(file, "generated_sign_in.file must start at one of the app's folders, with no . or .. in it");
+      }
+      const changeHook = generatedSignIn.change_hook;
+      const hook = ((script.hooks as unknown[]) ?? []).find((each) => isObject(each) && each.id === changeHook);
+      if (changeHook !== undefined && !isObject(hook)) {
+        err(file, `generated_sign_in.change_hook names no hook: ${String(changeHook)}`);
+      } else if (isObject(hook) && !(Array.isArray(hook.surfaces) && hook.surfaces.includes("settings"))) {
+        err(file, `generated_sign_in.change_hook "${String(changeHook)}" must have the settings surface`);
+      }
     }
   }
 
@@ -528,6 +590,14 @@ function validate(file: string, script: Record<string, unknown>) {
             err(file, `${where}: rerun "${String(hook.rerun)}" is not a known rerun mode`);
           }
           if (!userTriggerable) err(file, `${where}: rerun applies to user firings only`);
+        }
+        // The box runs a link again after a change it passes on; one it can't run again has none
+        if (hook.rerunsOn !== undefined) {
+          const triggers = hook.rerunsOn;
+          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model")) {
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model"`);
+          }
+          if (hook.rerun !== "converge" && hook.rerun !== "idempotent") err(file, `${where}: rerunsOn needs a hook that may run again`);
         }
         if (hook.optional !== undefined && lifecycleCount === 0) {
           err(file, `${where}: optional requires a lifecycle trigger`);
@@ -837,7 +907,8 @@ function validateCollection(file: string, collection: Record<string, unknown>, c
   const id = file.slice(COLLECTIONS_DIR.length + 1).replace(/\.json$/, "");
   if (!COLLECTION_ID.test(id)) err(file, "the file name must be the collection id: lowercase words joined by hyphens");
   if (collection.type !== "collection") err(file, 'type must be "collection"');
-  if (collection.version !== 1) err(file, "version must be 1");
+  if (collection.version !== 1 && collection.version !== 2) err(file, "version must be 1 or 2");
+  if (collection.version === 1 && collection.localAi !== undefined) err(file, "localAi needs a file of version 2");
   for (const field of ["name", "description"]) {
     if (typeof collection[field] !== "string" || !(collection[field] as string).trim()) err(file, `${field} is required`);
   }
@@ -936,8 +1007,8 @@ for (const file of files) {
 
 // A hook reaches an app at the box's LAN IP and the app's requirements.ports[0] (getInstalledAppUrl,
 // ctx.baseUrl), so an app a hook runs on or names must publish its web UI on that port, pinned in
-// app_values.network (web_port, or http_port for Emby). A container's own port (Radarr's 7878) is not
-// where TrueNAS publishes it.
+// app_values.network (web_port, or http_port for Emby), or a custom app's app_values.ports,
+// as a number or $PORT(n). A container's own port (Radarr's 7878) is not where TrueNAS publishes it.
 const parsedScripts = new Map<string, Record<string, unknown>>();
 for (const file of files) {
   try {
@@ -962,16 +1033,30 @@ for (const appId of [...linkedApps].sort()) {
   const declared = Array.isArray(requirements.ports) ? requirements.ports[0] : undefined;
   const appValues = isObject(script.app_values) ? script.app_values : {};
   const network = isObject(appValues.network) ? appValues.network : {};
-  const pinned = Object.values(network)
+  const namedPins = Object.values(network)
     .filter(isObject)
-    .map((port) => port.port_number)
+    .map((port) => preferredPort(port.port_number))
     .filter((port) => port !== undefined);
+  const customPins = script.custom === true
+    ? publishedPorts(script).flatMap((pin) => "port" in pin && pin.path.startsWith("app_values.ports[") ? [pin.port] : [])
+    : [];
+  const pinned = [...namedPins, ...customPins];
+  const pinLocation = script.custom === true ? "app_values.ports" : "app_values.network";
   if (pinned.length === 0) {
-    warn(`${appId}.json`, `takes part in a hook, so pin its web port in app_values.network (requirements.ports[0] is ${declared ?? "missing"})`);
+    warn(`${appId}.json`, `takes part in a hook, so pin its web port in ${pinLocation} (requirements.ports[0] is ${declared ?? "missing"})`);
   } else if (!pinned.includes(declared)) {
-    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in app_values.network (${pinned.join(", ")})`);
+    err(`${appId}.json`, `takes part in a hook, so requirements.ports[0] (${declared ?? "missing"}) must be a port it pins in ${pinLocation} (${pinned.join(", ")})`);
   }
 }
+
+// What each script publishes, and what scripts would fight over on one box (see ports.ts)
+for (const [appId, script] of parsedScripts) {
+  report(`${appId}.json`, [...declaredPortsMatchPins(script), ...networkInsideAppValues(script), ...portMacrosWellFormed(script), ...portsCanMove(script), ...reservedPortsWellFormed(script), ...instanceRules(appId, script)]);
+}
+const runsInCopies = (appId: string) =>
+  (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
+for (const [appId, script] of parsedScripts) report(`${appId}.json`, linkCopyRules(appId, script, runsInCopies));
+report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 
 const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));
 const collectionFiles = existsSync(COLLECTIONS_DIR)
@@ -993,6 +1078,7 @@ for (const file of collectionFiles) {
     continue;
   }
   validateCollection(file, parsed, catalogApps);
+  report(file, collectionPortClashes(parsed, parsedScripts));
 }
 
 // Assets are cheap to orphan and invisible when they rot, so name the ones

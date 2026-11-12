@@ -1,0 +1,173 @@
+{
+  "version": 6,
+  "custom": true,
+  "metadata": {
+    "name": "OpenCode",
+    "description": "A coding agent that runs on your own model. It can reach the internet and Ollama, and nothing else at home.",
+    "icon": "opencode/icon.svg",
+    "version": "1.19.5",
+    "categories": [
+      "productivity"
+    ],
+    "keywords": [
+      "opencode",
+      "coding",
+      "agent",
+      "ai"
+    ],
+    "homepage": "https://opencode.ai",
+    "sources": [
+      "https://github.com/anomalyco/opencode"
+    ],
+    "screenshots": []
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "OpenCode codes with your own model, kept off your home network."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "1GB",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      4096
+    ],
+    "contained": {
+      "partner": "ollama"
+    },
+    "local_only": true
+  },
+  "installation_questions": [
+    {
+      "question": "Password",
+      "description": "You open OpenCode with this password. Change it here any time.",
+      "type": "password",
+      "key": "password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/opencode/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/opencode/workspace",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "workspace"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "eshtek/opencode",
+      "tag": "1.19.5-1",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      {
+        "name": "OPENCODE_SERVER_PASSWORD",
+        "value": "$QUESTION(password)"
+      }
+    ],
+    "ports": [
+      {
+        "bind_mode": "published",
+        "port_number": "$PORT(4096)",
+        "container_port": 4096,
+        "protocol": "tcp",
+        "host_ips": []
+      }
+    ],
+    "networks": [
+      {
+        "name": "hexos-agents"
+      }
+    ],
+    "portals": [
+      {
+        "name": "Web UI",
+        "scheme": "http",
+        "use_node_ip": true,
+        "host": "",
+        "port": "$PORT(4096)",
+        "path": "/"
+      }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/data",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/opencode/data"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/workspace",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/opencode/workspace"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "connect-ollama",
+      "title": "Connect to Ollama",
+      "description": "Lets OpenCode use the models on your graphics card.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ollama"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "opencode"
+        }
+      ],
+      "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
+      "script": "opencode/connect_ollama.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

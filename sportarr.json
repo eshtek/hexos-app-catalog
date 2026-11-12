@@ -1,8 +1,11 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation"
+    "version": "1.1.1",
+    "changeLog": "Makes a folder in Downloads for each download client as it installs, so Sportarr sees what a client you add later downloads"
+  },
+  "sign_in": {
+    "username": true
   },
   "requirements": {
     "locations": ["ApplicationsPerformance", "Downloads", "Media"],
@@ -26,6 +29,15 @@
       "path": "$LOCATION(Downloads)/qbittorrent"
     },
     {
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
       "path": "$LOCATION(Media)/sports"
     },
     {
@@ -37,14 +49,15 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 1867
+        "port_number": "$PORT(1867)"
       }
     },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sportarr/config)",
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
-        "$MOUNTED_HOST_PATH($LOCATION(Media)/sports, /media/sports)"
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/sports, /media/sports)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)"
       ]
     },
     "resources": {
@@ -53,5 +66,137 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "configure-sportarr",
+      "title": "Pre-configure Sportarr",
+      "description": "Setting up Sportarr",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "sportarr/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-qbittorrent",
+      "title": "Connect to qBittorrent",
+      "description": "Sends what Sportarr grabs to qBittorrent.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "qbittorrent",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-deluge",
+      "title": "Connect to Deluge",
+      "description": "Sends what Sportarr grabs to Deluge.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "deluge",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-sabnzbd",
+      "title": "Connect to SABnzbd",
+      "description": "Sends what Sportarr grabs to SABnzbd.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "sabnzbd",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-nzbget",
+      "title": "Connect to NZBGet",
+      "description": "Sends what Sportarr grabs to NZBGet.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "nzbget",
+      "timeout": 900,
+      "retries": 0
+    }
+  ]
 }
