@@ -83,6 +83,7 @@
       "id": "configure-deluge",
       "title": "Pre-configure Deluge",
       "description": "Gives Deluge the password you chose and its download folders",
+      "summary": "Sets Deluge's password at install and keeps downloads in progress apart from finished ones. Running it again from here changes nothing once Deluge has your password.",
       "events": [
         "onAfterInstall",
         "userAction"
