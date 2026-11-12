@@ -17,18 +17,26 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Bindarr](bindarr.json) | Trading card collection manager ([notes](bindarr/README.md)) |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
+| [Cloudflared](cloudflared.json) | Cloudflare Tunnel connector for remote access |
+| [Code Server](code-server.json) | VS Code in the browser |
 | [Collabora](collabora.json) | Documents you edit together in Nextcloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
+| [Dockge](dockge.json) | Docker Compose stack manager |
 | [Donetick](donetick.json) | Smart task manager |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
+| [Euro-Office](eurooffice-document-server.json) | Office documents in the browser, a fork of ONLYOFFICE |
 | [Excalidraw](excalidraw.json) | Virtual whiteboard for sketching |
+| [FileBrowser Quantum](filebrowser-quantum.json) | Web file manager for your folders |
 | [Factorio Server](factorio.json) | Factory-building game server |
 | [Firefly III](firefly-iii.json) | Financial planning software |
 | [Fladder](fladder.json) | Front-end interface for Jellyfin |
 | [FlareSolverr](flaresolverr.json) | Lets Prowlarr reach indexers behind Cloudflare |
+| [Frigate](frigate.json) | Camera recorder with object detection |
+| [Forgejo](forgejo.json) | Self-hosted Git server |
+| [FreshRSS](freshrss.json) | RSS feed reader |
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |
@@ -40,22 +48,28 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Lidarr](lidarr.json) | Music collection manager |
 | [Linkwarden](linkwarden.json) | Webpage archiving utility |
 | [LubeLogger](lubelogger.json) | Vehicle maintenance tracker |
+| [Maintainerr](maintainerr.json) | Rule-based clean-up of watched media |
 | [Mealie](mealie.json) | Recipe Management |
 | [Memos](memos.json) | Note taking tool |
 | [Minecraft](minecraft.json) | Minecraft Java Edition server |
 | [Minecraft Bedrock](minecraft-bedrock.json) | Minecraft Bedrock Edition server, for phones, consoles and Windows |
 | [MKVToolNix](mkvtoolnix.json) | A set of tools to create, alter and inspect Matroska files |
 | [Navidrome](navidrome.json) | Music server and streamer |
+| [Nevu](nevu.json) | Front-end interface for Plex, in Media library as a Plex companion |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Nginx Proxy Manager](nginx-proxy-manager.json) | Gives your apps their own web addresses, with HTTPS |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
+| [ONLYOFFICE](onlyoffice-document-server.json) | Office documents in the browser |
+| [OpenCloud](opencloud.json) | File sync and sharing, a folder per person |
 | [PairDrop](pairdrop.json) | Transfer files cross-platform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
+| [Planka](planka.json) | A Kanban tool for those who want their work visible and organized |
 | [Pelican Panel](pelican-panel.json) | Game server panel; its game servers run in Pelican Wings |
 | [Pelican Wings](pelican-wings.json) | Runs Pelican's game servers, on ports 27200 to 27219 |
 | [Plex](plex.json) | Media server with Plex Pass support |
+| [Portainer](portainer.json) | Docker container management |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |
 | [Project Zomboid](project-zomboid.json) | Zombie survival game server |
@@ -68,17 +82,26 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Radarr](radarr.json) | Movie collection manager |
 | [Ratelog](ratelog.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
+| [RustDesk](rust-desk.json) | Remote desktop server, used with RustDesk Relay |
+| [RustDesk Relay](rust-desk-relay.json) | Relay server for RustDesk |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
 | [Satisfactory Server](satisfactory-server.json) | Satisfactory game server |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
+| [Scrypted](scrypted.json) | Camera hub for Google Home, Alexa and Home Assistant |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
+| [SparkyFitness](sparkyfitness.json) | Food, exercise and weight tracker |
 | [Sportarr](sportarr.json) | Sports collection manager |
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Vikunja](vikunja.json) | Task manager with lists |
+| [Tailscale](tailscale.json) | Private access to the server from anywhere |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
+| [UniFi Controller](unifi-controller.json) | Manages UniFi network devices |
+| [UniFi Protect Backup](unifi-protect-backup.json) | Backs up UniFi Protect camera events |
+| [Trilium Notes](trilium-notes.json) | Notes and personal knowledge base |
 | [Terraria](terraria.json) | 2D sandbox adventure game server |
 | [Terraria TShock](terraria-tshock.json) | Terraria server with admin tools and plugins |
 | [The Lounge](the-lounge.json) | Always-connected web IRC client ([notes](the-lounge/README.md)) |
@@ -156,7 +179,7 @@ A port is the first one HexOS tries. `"$PORT(30146)"` starts at 30146, and when 
 - A range whose `start` and `end` are both `$PORT(...)` moves as one block, by the same offset.
 - `requirements.ports` stays a plain list of preferred numbers, and each `$PORT(n)` names one of them.
 
-Write every published port this way. A bare number is a port the protocol ties to one number, which means DNS, DHCP, NTP, SSDP, STUN, mDNS and Plex's GDM discovery, where moving it would give a clean install of something that doesn't work. It stays where it is, and the deck tells the owner what holds it. Don't ask the owner for a port in a question. A move happens only when a port is first placed, so an app that's installed keeps the ports its owner may have forwarded.
+Write every published port this way. A bare number is a port the protocol ties to one number, which means DNS, DHCP, NTP, SSDP, STUN, mDNS, Plex's GDM discovery and RustDesk's ID server and relay ports, where moving it would give a clean install of something that doesn't work. It stays where it is, and the deck tells the owner what holds it. Don't ask the owner for a port in a question. A move happens only when a port is first placed, so an app that's installed keeps the ports its owner may have forwarded.
 
 ### What the validator checks
 
@@ -267,6 +290,8 @@ The few words HexOS shows under an app's name on its catalog card live in the de
 Jellyfin offers optional connections to Jellystat and Seerr, plus a read-only Fladder/Jellyfin reachability check. Jellystat and Seerr depend on Pre-configure Jellyfin (`requiresHooks`), whose administrator they sign in with: the one the owner gave for a Jellyfin they already had (`ctx.tryExistingSignIn`, checked with Jellyfin before Seerr is handed it), else the sign-in the owner chose for the install or collection (`ctx.signIn`), else the answers an older Pre-configure Jellyfin was given, and asked for last. Pre-configure Jellyfin remains optional.
 
 An existing Jellystat account must authenticate; the connector only creates an account when Jellystat reports a fresh setup. Both connectors leave alone a binding to another server that still answers, and in a collection they step aside (`ctx.skip`) rather than wait on a Try again. Run again, they move to this server when their own is gone: the stored address now answers as this server (Jellyfin was reinstalled; a new API key is made), or nothing answers there and the app's own records name this server (the box's address or Jellyfin's port changed). When nothing answers and nothing proves the old server was this one, they ask the owner. Plex's Seerr and Tautulli links follow the same rule, by Plex's `/identity`. So do the download-client and *arr links (Radarr, Sonarr, Lidarr, Chaptarr and Prowlarr to each download client, Prowlarr and Seerr to each *arr, Sportarr to its clients): an entry at an old address is moved when the manager's own test proves its stored key is ours (SABnzbd, Prowlarr), or, once nothing answers there, when it holds our sign-in and that sign-in isn't a shared default; otherwise the owner is asked, and with no yes the link steps aside rather than adding a second entry. Fladder's check does not change its configured server address.
+
+Nevu offers Connect to Plex, in Media library and on its card. Nevu's one setting is the Plex address in its own TrueNAS values, which the install fills with Plex's usual port, so the link sets it to where Plex answers now (`ctx.updateAppValues`) and leaves it alone when it already matches. Nevu has no account of its own: its sign-in page sends the owner to plex.tv and looks for this server among that Plex account's servers. When nobody has signed in to Plex yet, the link still sets the address and then ends with `ctx.skip`, telling the owner to sign in to Plex first.
 
 Run the mocked API and password-hash compatibility tests with `bun test _lib/`, then the catalog validator with `bun _lib/validate.ts`. The hook tests make no network requests.
 

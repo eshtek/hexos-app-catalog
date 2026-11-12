@@ -262,9 +262,10 @@ export function declaredPortsMatchPins(script: Script): Finding[] {
 
 /**
  * Ports a protocol ties to one number, where moving them gives a clean install of something that
- * doesn't work: DNS, DHCP, NTP, SSDP, STUN, mDNS and Plex's GDM discovery.
+ * doesn't work: DNS, DHCP, NTP, SSDP, STUN, mDNS, Plex's GDM discovery, and RustDesk's ID server and
+ * relay, which a RustDesk client reaches at 21115 to 21117 on the one address it is given.
  */
-const PORTS_TIED_TO_A_PROTOCOL = new Set([53, 67, 68, 123, 1900, 3478, 5353, 32410, 32412, 32413, 32414]);
+const PORTS_TIED_TO_A_PROTOCOL = new Set([53, 67, 68, 123, 1900, 3478, 5353, 21115, 21116, 21117, 32410, 32412, 32413, 32414]);
 
 /**
  * A port is the first one HexOS tries, and owners never pick one or hear about a move. A number stays
