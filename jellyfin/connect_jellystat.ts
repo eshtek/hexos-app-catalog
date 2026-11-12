@@ -102,6 +102,19 @@ function keccak512Hex(input: string): string {
   return out;
 }
 
+/** Whether Jellyfin takes this account: false only when it refuses it. */
+async function jellyfinTakes(baseUrl: string, signIn: { username: string; password: string }): Promise<boolean> {
+  const response = await fetch(`${baseUrl}/Users/AuthenticateByName`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: JELLYFIN_AUTH_HEADER },
+    body: JSON.stringify({ Username: signIn.username, Pw: signIn.password }),
+  });
+  await response.body?.cancel();
+  if (response.status === 401 || response.status === 403) return false;
+  if (!response.ok) throw new Error(`Jellyfin didn't answer its sign-in (${response.status})`);
+  return true;
+}
+
 async function jellyfinSignIn(baseUrl: string, username: string, password: string): Promise<string> {
   const response = await fetch(`${baseUrl}/Users/AuthenticateByName`, {
     method: "POST",
@@ -208,12 +221,32 @@ async function jellystatSignIn(
 }
 
 /**
- * The Jellyfin administrator Jellystat's account and API key come from: the sign-in the owner chose
- * for the install or collection (`ctx.signIn`, which Pre-configure Jellyfin made an administrator),
- * else the answers an older Pre-configure Jellyfin was given, else asked for.
+ * The Jellyfin administrator Jellystat's account and API key come from: the one the owner gave for a
+ * Jellyfin they already had (`ctx.existingSignIns`), else the sign-in they chose for the install or
+ * collection (`ctx.signIn`, which Pre-configure Jellyfin made an administrator), else the answers an
+ * older Pre-configure Jellyfin was given, else asked for.
  */
 async function jellyfinAdmin(ctx: HookContext): Promise<{ username: string; password: string }> {
-  if (ctx.signIn) return { username: ctx.signIn.username, password: ctx.signIn.password };
+  // A Jellyfin the owner already had keeps its own administrator, which they gave in the walk, tried
+  // once in the run (Jellystat's own account then mirrors it, as for any Jellyfin)
+  if (ctx.keptApps?.includes(ctx.resourceId)) {
+    const own = await ctx.tryExistingSignIn?.(
+      ctx.resourceId,
+      async (signIn) => (await jellyfinTakes(ctx.baseUrl, signIn)) ? signIn : undefined,
+      {
+        title: "Sign in to Jellyfin",
+        description: "Jellyfin refused the admin account you gave. Enter an administrator's username and password so HexOS can use it.",
+        username: true,
+        app: "Jellyfin",
+      },
+    );
+    if (own === "refused") {
+      const message = "Jellyfin refused the admin account you gave, so HexOS couldn't connect Jellystat to it. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
+    }
+    if (own) return { username: own.username, password: own.password };
+  } else if (ctx.signIn) return { username: ctx.signIn.username, password: ctx.signIn.password };
   // Read without getInput, which throws for an answer that isn't there: a run from the card has none.
   // Jellyfin takes an empty password, so an inherited one counts once the username is there.
   const inherited = { username: ctx.inputs?.admin_username, password: ctx.inputs?.admin_password };

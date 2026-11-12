@@ -1,0 +1,66 @@
+{
+  "version": 6,
+  "internal": true,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: runs as root, so it starts in about a minute instead of 15 or more"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30020,
+      30021,
+      30022
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/nginx-proxy-manager/data",
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/nginx-proxy-manager/letsencrypt",
+      "snapshot": {
+        "id": "certs"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30020)"
+      },
+      "http_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30021)"
+      },
+      "https_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30022)"
+      }
+    },
+    "run_as": {
+      "user": 0,
+      "group": 0
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nginx-proxy-manager/data)",
+      "certs": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nginx-proxy-manager/letsencrypt)"
+    }
+  }
+}

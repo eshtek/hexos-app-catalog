@@ -331,3 +331,19 @@ describe("SearXNG's link to Open WebUI", () => {
     await expect(connectSearxng(contextFor("searxng"))).rejects.toThrow("Open WebUI stopped answering. Run this again.");
   });
 });
+
+// An Open WebUI the owner already had keeps its own account (Aaron, 2026-11-08): the run's chosen
+// sign-in, which it never took, is never tried against it, so the owner is asked for theirs
+describe("a kept Open WebUI", () => {
+  test.each([
+    ["Open WebUI's link to Ollama", "open-webui", (ctx: HookContext) => connectOllama(ctx)],
+    ["SearXNG's link to Open WebUI", "searxng", (ctx: HookContext) => connectSearxng(ctx)],
+  ] as const)("%s never tries the run's sign-in against it", async (_name, app, run) => {
+    const { contextFor, signIns, questions } = openWebUi({ signIn: RUN_SIGN_IN, owner: { email: ADMIN.email, password: ADMIN.password } });
+    const ctx = contextFor(app);
+    Object.assign(ctx, { resourceId: app, keptApps: ["open-webui"] });
+    await run(ctx);
+    expect(questions).toHaveLength(1);
+    expect(signIns).toEqual([ADMIN.email]);
+  });
+});

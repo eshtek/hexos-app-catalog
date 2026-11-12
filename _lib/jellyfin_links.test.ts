@@ -406,6 +406,35 @@ test("Jellystat takes the run's sign-in over inherited answers", async () => {
   expect(calls.find((c) => c.path === "/auth/createuser")?.body.username).toBe("chosen");
 });
 
+// A Jellyfin the owner already had keeps its own administrator (Aaron, 2026-11-08), which the run's
+// new sign-in never became; it is tried once in the whole run
+function keptJellyfin(ctx: HookContext, refusedBefore = false) {
+  Object.assign(ctx, {
+    resourceId: "jellyfin",
+    signIn: { username: "chosen", password: "chosen-password" },
+    keptApps: ["jellyfin"],
+    ...(refusedBefore ? { refusedSignIns: ["jellyfin"] } : { existingSignIns: { jellyfin: { username: "jellyadmin", password: "their-own" } } }),
+    tryExistingSignIn: async <T,>(_name: string, signsIn: (account: { username: string; password: string }) => Promise<T | undefined>) =>
+      refusedBefore ? "refused" : ((await signsIn({ username: "jellyadmin", password: "their-own" })) ?? "refused"),
+  });
+}
+
+test("Jellystat takes a kept Jellyfin's own administrator over the run's sign-in", async () => {
+  const { ctx, calls } = apis();
+  keptJellyfin(ctx);
+  await connectJellystat(ctx);
+  const logins = calls.filter((c) => c.path === "/Users/AuthenticateByName").map((c) => c.body);
+  expect(logins[0]).toMatchObject({ Username: "jellyadmin", Pw: "their-own" });
+  expect(logins.some((body) => body.Pw === "chosen-password")).toBe(false);
+});
+
+test("Jellystat stops without trying an account an earlier hook of the run found refused", async () => {
+  const { ctx, calls } = apis();
+  keptJellyfin(ctx, true);
+  await expect(connectJellystat(ctx)).rejects.toThrow("Jellyfin refused the admin account you gave");
+  expect(calls.some((c) => c.path === "/Users/AuthenticateByName")).toBe(false);
+});
+
 test("Jellystat reuses its named API key", async () => {
   const { ctx, calls } = apis({ keyExists: true });
   await connectJellystat(ctx);
