@@ -2,8 +2,8 @@
   "version": 6,
   "internal": true,
   "script": {
-    "version": "1.0.1",
-    "changeLog": "The install's two screens are titled Settings and Web apps"
+    "version": "1.0.2",
+    "changeLog": "Connecting an office gives OpenCloud the office's certificate, so the editor opens without a second browser warning. The install's two screens are titled Settings and Web apps"
   },
   "sign_in": {
     "username": true,
