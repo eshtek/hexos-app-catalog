@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "LanguageTool checks spelling and grammar in your documents."
