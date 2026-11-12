@@ -20,7 +20,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Collabora](collabora.json) | Documents you edit together in Nextcloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
-| [Donetick](dozzle.json) | Smart task manager |
+| [Donetick](donetick.json) | Smart task manager |
 | [Dozzle](dozzle.json) | Real-time Docker log viewer |
 | [Draw.io](drawio.json) | Diagram and whiteboard editor |
 | [Emby](emby.json) | Media server |
@@ -49,7 +49,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Nginx Proxy Manager](nginx-proxy-manager.json) | Gives your apps their own web addresses, with HTTPS |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
-| [PairDrop](pairdrop.json) | Transfer files cross-clatform |
+| [PairDrop](pairdrop.json) | Transfer files cross-platform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
@@ -66,7 +66,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [qui](qui.json) | A qBittorrent web UI |
 | [Rackula](rackula.json) | A drag and drop rack visualizer |
 | [Radarr](radarr.json) | Movie collection manager |
-| [Ratelog](radarr.json) | App for rating movies and TV shows |
+| [Ratelog](ratelog.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
 | [Satisfactory Server](satisfactory-server.json) | Satisfactory game server |
@@ -102,8 +102,9 @@ For schema documentation, macros reference, and contribution guidelines, see [do
 | `{n}MBRAM` / `{n}GBRAM` | Minimum memory | `512MBRAM`, `8GBRAM` |
 | `{n}GBVRAM` | Minimum dedicated graphics memory | `4GBVRAM` |
 | `GPU` | GPU recommended | `GPU` |
+| `DISPLAY` | The app draws on a TV or monitor plugged into the server | `DISPLAY` |
 
-Every value must match `^(\d+)(MBRAM|GBRAM|GBVRAM|MB|GB|CORE)$` or be the literal `GPU` â€” anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
+Every value must match `^(\d+)(MBRAM|GBRAM|GBVRAM|MB|GB|CORE)$` or be the literal `GPU` or `DISPLAY` â€” anything else fails the catalog sync for that app. Use the largest natural unit (`1GB`, not `1024MB`; `8GBRAM`, not `8192MBRAM`) so the rendered text reads cleanly.
 
 ```json
 "requirements": {
