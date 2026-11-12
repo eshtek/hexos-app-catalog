@@ -72,6 +72,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
 | [Satisfactory Server](satisfactory-server.json) | Satisfactory game server |
 | [Scrutiny](scrutiny.json) | Hard drive S.M.A.R.T. monitoring |
+| [Scrypted](scrypted.json) | Camera hub for Google Home, Alexa and Home Assistant |
 | [Seerr](seerr.json) | Request management and media discovery tool |
 | [SnapOtter](snapotter.json) | File editing toolkit |
 | [Sonarr](sonarr.json) | TV series collection manager |
