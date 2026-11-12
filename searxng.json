@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "SearXNG can give Open WebUI private web search."
+    "version": "1.2.0",
+    "changeLog": "SearXNG can give AnythingLLM private web search, as it does Open WebUI."
   },
   "requirements": {
     "locations": [
@@ -47,7 +47,6 @@
       }
     }
   },
-  "internal": true,
   "hooks": [
     {
       "id": "connect-open-webui",
@@ -72,8 +71,36 @@
         }
       ],
       "rerun": "converge",
-      "script": "searxng/connect_open_webui.ts",
-      "entrypoint": "run",
+      "script": "searxng/connect.ts",
+      "entrypoint": "openWebui",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-anything-llm",
+      "title": "Connect to AnythingLLM",
+      "description": "Gives AnythingLLM private web search.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "anything-llm"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "anything-llm"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "searxng"
+        }
+      ],
+      "rerun": "converge",
+      "script": "searxng/connect.ts",
+      "entrypoint": "anythingLlm",
       "timeout": 300,
       "retries": 0
     }
