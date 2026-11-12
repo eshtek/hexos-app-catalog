@@ -81,6 +81,7 @@
       "entrypoint": "setPassword",
       "timeout": 420,
       "description": "Setting the Frigate admin password",
+      "summary": "Sets the password of Frigate's admin account. Run it again to change it, which signs out open admin sessions.",
       "optional": true,
       "retries": 0,
       "inputs": [

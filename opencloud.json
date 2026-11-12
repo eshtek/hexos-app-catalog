@@ -352,6 +352,7 @@
       "id": "configure-opencloud",
       "title": "Pre-configure OpenCloud",
       "description": "Makes your sign-in OpenCloud's administrator.",
+      "summary": "Makes your sign-in OpenCloud's administrator. Run it again to choose a sign-in if OpenCloud still has its default one.",
       "events": [
         "onAfterInstall",
         "userAction"
