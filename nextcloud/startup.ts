@@ -1,4 +1,5 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
+import { createHash } from "node:crypto";
 import { chmodSync, chownSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 import type { ContextMount, HookContext } from "../_lib/hook_context";
@@ -54,6 +55,23 @@ apply_collabora() {
     occ_try richdocuments:activate-config
 }
 
+# Euro-Office's and ONLYOFFICE's apps are the same with another name. The office's secret waits
+# beside the wanted file only until it's applied, and its certificate is the server's own. The
+# chart's overwrite.cli.url is http://localhost, so the office is told Nextcloud's own address.
+apply_office() {
+  url=$(value_of "$1" url)
+  storage=$(value_of "$1" storage)
+  secret_file="\${1%.wanted}.secret"
+  [ -n "$url" ] && [ -n "$storage" ] && [ -s "$secret_file" ] || return 1
+  app_on "$2" &&
+    occ_try config:app:set "$2" verify_peer_off --value=true &&
+    occ_try config:app:set "$2" DocumentServerUrl --value="$url/" &&
+    occ_try config:app:set "$2" StorageUrl --value="$storage/" &&
+    occ_try config:app:set "$2" jwt_secret --value="$(cat "$secret_file")" &&
+    occ_try "$2:documentserver" --check &&
+    rm -f "$secret_file"
+}
+
 apply_drawio() {
   url=$(value_of "$1" url)
   [ -n "$url" ] || return 1
@@ -81,6 +99,7 @@ apply_ollama() {
     echo "$(date -u +%FT%TZ) applying $name"
     case "$name" in
       collabora) apply_collabora "$file" ;;
+      eurooffice | onlyoffice) apply_office "$file" "$name" ;;
       drawio) apply_drawio "$file" ;;
       paperless) apply_paperless "$file" ;;
       ollama) apply_ollama "$file" ;;
@@ -192,9 +211,29 @@ interface Link {
   file: string;
   /** The address to give Nextcloud, from the one HexOS knows. */
   address?: (known: string) => Promise<string>;
+  /** A secret the two apps share, for the start-up script to set. */
+  secret?: () => Promise<string | undefined>;
+  /** Whether the office needs Nextcloud's own address, for its requests back. */
+  storage?: boolean;
 }
 
 const insecure = { tls: { rejectUnauthorized: false } } as RequestInit;
+
+/** Euro-Office and ONLYOFFICE serve https only, on the server's default certificate. */
+export const officeAddress = async (known: string) => known.replace(/^http:/, "https:").replace(/\/+$/, "");
+
+/**
+ * The office's JWT_SECRET, read from its running container over the Docker socket, as OpenCloud's
+ * link does: a hook can only read its own app's values.
+ */
+async function officeSecret(appId: string, service: string): Promise<string | undefined> {
+  const docker = (path: string) => fetch(`http://docker${path}`, { unix: "/var/run/docker.sock", signal: AbortSignal.timeout(10_000) } as RequestInit);
+  const filters = encodeURIComponent(JSON.stringify({ label: [`com.docker.compose.project=ix-${appId}`, `com.docker.compose.service=${service}`] }));
+  const found = (await (await docker(`/containers/json?filters=${filters}`)).json()) as Array<{ Id: string }>;
+  if (!found[0]) return undefined;
+  const { Config } = (await (await docker(`/containers/${found[0].Id}/json`)).json()) as { Config?: { Env?: string[] } };
+  return Config?.Env?.find((line) => line.startsWith("JWT_SECRET="))?.slice("JWT_SECRET=".length);
+}
 
 /**
  * Collabora serves https once OpenCloud is on this server too (collabora/configure.ts), on the same
@@ -219,12 +258,20 @@ async function connect(ctx: HookContext, link: Link) {
   const known = await ctx.getInstalledAppUrl(link.appId);
   if (!known) ctx.fail(`${link.name} isn't installed, or HexOS can't find its port`);
   const url = link.address ? await link.address(known!) : known;
+  const secret = link.secret ? await link.secret().catch(() => undefined) : undefined;
+  if (link.secret && !secret) ctx.fail(`HexOS couldn't read ${link.name}'s secret from its container`);
   await ctx.emitCheckpoint("locate");
 
   writeStartScript(mount);
   const state = `${mount.localPath}/${STATE_DIR}`;
-  const wanted = `url=${url}\n`;
+  // A new secret counts as a new wish, and only its hash stays on disk
+  const storage = link.storage ? `storage=${ctx.baseUrl.replace(/\/+$/, "")}\n` : "";
+  const wanted = `url=${url}\n${storage}${secret ? `secret=${createHash("sha256").update(secret).digest("hex")}\n` : ""}`;
   const applied = () => readText(`${state}/${link.file}.applied`) === wanted;
+  if (secret && !applied()) {
+    writeFileSync(`${state}/${link.file}.secret`, secret, { mode: 0o600 });
+    own(`${state}/${link.file}.secret`);
+  }
   writeFileSync(`${state}/${link.file}.wanted`, wanted, { mode: 0o640 });
   own(`${state}/${link.file}.wanted`);
 
@@ -248,6 +295,10 @@ async function connect(ctx: HookContext, link: Link) {
 }
 
 export const collabora = (ctx: HookContext) => connect(ctx, { appId: "collabora", name: "Collabora", file: "collabora", address: collaboraAddress });
+export const eurooffice = (ctx: HookContext) =>
+  connect(ctx, { appId: "eurooffice-document-server", name: "Euro-Office", file: "eurooffice", address: officeAddress, storage: true, secret: () => officeSecret("eurooffice-document-server", "eurooffice") });
+export const onlyoffice = (ctx: HookContext) =>
+  connect(ctx, { appId: "onlyoffice-document-server", name: "ONLYOFFICE", file: "onlyoffice", address: officeAddress, storage: true, secret: () => officeSecret("onlyoffice-document-server", "onlyoffice") });
 export const drawio = (ctx: HookContext) => connect(ctx, { appId: "drawio", name: "Draw.io", file: "drawio" });
 export const paperless = (ctx: HookContext) => connect(ctx, { appId: "paperless-ngx", name: "Paperless", file: "paperless" });
 export const ollama = (ctx: HookContext) => connect(ctx, { appId: "ollama", name: "Ollama", file: "ollama" });

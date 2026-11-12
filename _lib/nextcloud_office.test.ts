@@ -6,9 +6,11 @@ import type { ContextMount, HookContext } from "./hook_context";
 
 // Giving a file to Nextcloud's user needs root, so the ownership is checked on a real install
 mock.module("node:fs", () => ({ ...require("node:fs"), chownSync: () => {} }));
-const { collabora, START_FOLDER, writeStartScript } = await import("../nextcloud/startup");
+const { collabora, eurooffice, onlyoffice, START_FOLDER, writeStartScript } = await import("../nextcloud/startup");
 
-// Nextcloud's links to the offices, against the real start-up script with a stand-in for occ.
+// Nextcloud's links to Euro-Office and ONLYOFFICE, against the real start-up script with a stand-in
+// for occ. Their Nextcloud apps are the same with another name, and both share the office's secret,
+// which waits beside the wanted file only until occ has applied it.
 
 const realFetch = globalThis.fetch;
 const dirs: string[] = [];
@@ -64,6 +66,71 @@ function context(mount: ContextMount, base: string, address: string) {
   } as unknown as HookContext;
 }
 
+const office = () =>
+  respond({
+    "containers/json": () => Response.json([{ Id: "office" }]),
+    "containers/office/json": () => Response.json({ Config: { Env: ["JWT_SECRET=shared-secret"] } }),
+    "status.php": () => Response.json({ installed: true, maintenance: false }),
+  });
+
+describe("Nextcloud's links to Euro-Office and ONLYOFFICE", () => {
+  test.each([
+    ["Euro-Office", eurooffice, "eurooffice", "http://10.0.0.5:30461", "https://10.0.0.5:30461/"],
+    ["ONLYOFFICE", onlyoffice, "onlyoffice", "http://10.0.0.5:30136/", "https://10.0.0.5:30136/"],
+  ])("%s is set up with occ over https, and its secret doesn't stay on disk", async (_name, link, app, known, documentServer) => {
+    const { base, mount, state } = nextcloud();
+    office();
+    await link(context(mount, base, known));
+    const log = occ(base);
+    expect(log[0]).toBe(`app:enable ${app}`);
+    expect(log).toContain(`config:app:set ${app} verify_peer_off --value=true`);
+    expect(log).toContain(`config:app:set ${app} DocumentServerUrl --value=${documentServer}`);
+    expect(log).toContain(`config:app:set ${app} StorageUrl --value=http://10.0.0.5:30027/`);
+    expect(log).toContain(`config:app:set ${app} jwt_secret --value=shared-secret`);
+    expect(log.at(-1)).toBe(`${app}:documentserver --check`);
+    expect(existsSync(`${state}/${app}.secret`)).toBe(false);
+    expect(readFileSync(`${state}/${app}.applied`, "utf-8")).not.toContain("shared-secret");
+  });
+
+  test("when occ fails, the secret waits for the next start and nothing counts as applied", async () => {
+    const { base, state } = nextcloud();
+    writeFileSync(`${state}/onlyoffice.wanted`, "url=https://10.0.0.5:30136\nstorage=http://10.0.0.5:30027\nsecret=abc\n");
+    writeFileSync(`${state}/onlyoffice.secret`, "shared-secret");
+    await start(base, 1);
+    expect(existsSync(`${state}/onlyoffice.applied`)).toBe(false);
+    expect(existsSync(`${state}/onlyoffice.secret`)).toBe(true);
+  });
+
+  test("a second start with nothing new runs no occ", async () => {
+    const { base, mount } = nextcloud();
+    office();
+    await eurooffice(context(mount, base, "http://10.0.0.5:30461"));
+    const before = occ(base);
+    await start(base);
+    expect(occ(base)).toEqual(before);
+  });
+
+  test("a new secret counts as a new wish, so it's applied again", async () => {
+    const { base, mount } = nextcloud();
+    office();
+    await eurooffice(context(mount, base, "http://10.0.0.5:30461"));
+    respond({
+      "containers/json": () => Response.json([{ Id: "office" }]),
+      "containers/office/json": () => Response.json({ Config: { Env: ["JWT_SECRET=another-secret"] } }),
+      "status.php": () => Response.json({ installed: true, maintenance: false }),
+    });
+    await eurooffice(context(mount, base, "http://10.0.0.5:30461"));
+    expect(occ(base)).toContain("config:app:set eurooffice jwt_secret --value=another-secret");
+  });
+
+  test("with no secret to read, nothing is written and the link says why", async () => {
+    const { base, mount, state } = nextcloud();
+    respond({ "containers/json": () => Response.json([]) });
+    await expect(onlyoffice(context(mount, base, "http://10.0.0.5:30136"))).rejects.toThrow("couldn't read ONLYOFFICE's secret");
+    expect(existsSync(`${state}/onlyoffice.wanted`)).toBe(false);
+  });
+});
+
 describe("Nextcloud's link to Collabora", () => {
   test.each([
     ["on https, as beside OpenCloud, Nextcloud skips the check of the server's own certificate", "https://10.0.0.5:9980", () => new Response(""), "yes"],
@@ -75,5 +142,22 @@ describe("Nextcloud's link to Collabora", () => {
     const log = occ(base);
     expect(log).toContain(`config:app:set richdocuments disable_certificate_verification --value=${verify}`);
     expect(log).toContain(`config:app:set richdocuments wopi_url --value=${address}`);
+  });
+});
+
+describe("the Office suite", () => {
+  test("offers all three editors beside either files app, each with a link from it, and starts on Collabora", () => {
+    const json = (name: string) => JSON.parse(readFileSync(join(import.meta.dir, "..", name), "utf-8"));
+    const editors = (json("_collections/office.json").groups as Array<{ id: string; options: Array<{ app: string; requires?: string[]; default?: boolean }> }>).find(
+      (group) => group.id === "editor",
+    )!.options;
+    expect(editors.map((editor) => [editor.app, editor.requires, editor.default ?? false])).toEqual([
+      ["collabora", undefined, true],
+      ["onlyoffice-document-server", undefined, false],
+      ["eurooffice-document-server", undefined, false],
+    ]);
+    for (const files of ["nextcloud", "opencloud"])
+      for (const { app } of editors)
+        expect((json(`${files}.json`).hooks as Array<{ kind?: string; conditions?: Array<{ app?: string }> }>).some((hook) => hook.kind === "connect" && hook.conditions?.some((c) => c.app === app))).toBe(true);
   });
 });
