@@ -13,8 +13,8 @@
     "sources": ["https://github.com/pelican-dev/wings"]
   },
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: joins the server's Pelican Panel as its node, with game servers on ports 27200 to 27219"
+    "version": "1.0.1",
+    "changeLog": "Runs ghcr.io/pelican/wings v1.0.0-rc.2."
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -49,7 +49,7 @@
   "app_values": {
     "image": {
       "repository": "ghcr.io/pelican/wings",
-      "tag": "v1.0.0-rc.1@sha256:cf62cae99329dde1a0507d144fc5fb0c5e9d6c8346e6987d67dc08bc323e5644",
+      "tag": "v1.0.0-rc.2@sha256:45a970378805c1fb9ba25c8f933c25f2339e5a7a87d9925721b89459abe66c7b",
       "pull_policy": "missing"
     },
     "restart_policy": "unless-stopped",
