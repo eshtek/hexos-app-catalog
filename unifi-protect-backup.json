@@ -1,0 +1,94 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "installation_questions": [
+    {
+      "question": "UniFi console address",
+      "description": "The address of your UniFi console, such as 192.168.1.1. On its first start the app saves the last 7 days of events, and it deletes clips older than 7 days.",
+      "placeholder": "192.168.1.1",
+      "type": "text",
+      "key": "address",
+      "required": true
+    },
+    {
+      "question": "UniFi username",
+      "description": "A local UniFi user whose role has Full Management for Protect, with all cameras assigned. Add the role and user under Users in your console.",
+      "type": "text",
+      "key": "username",
+      "required": true
+    },
+    {
+      "question": "UniFi password",
+      "description": "The password of that UniFi user.",
+      "type": "password",
+      "key": "password",
+      "required": true
+    }
+  ],
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "Media"
+    ],
+    "specifications": [
+      "1CORE",
+      "10GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": []
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(Media)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/unifi-protect-backup/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/unifi-protect-backup/config/database",
+      "owner": {
+        "user": "apps"
+      }
+    },
+    {
+      "path": "$LOCATION(Media)/unifi-protect-backup",
+      "owner": {
+        "user": "apps"
+      }
+    }
+  ],
+  "app_values": {
+    "unifi_protect_backup": {
+      "address": "$QUESTION(address)",
+      "username": "$QUESTION(username)",
+      "password": "$QUESTION(password)",
+      "port": 443,
+      "ssl_verify": false
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/unifi-protect-backup/config)",
+      "data": "$HOST_PATH($LOCATION(Media)/unifi-protect-backup)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  }
+}
