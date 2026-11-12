@@ -72,7 +72,7 @@ describe("the catalog's hooks", () => {
   test("the hook Jellyfin names for its graphics card says it also limits streams from outside the network", () => {
     const jellyfin = scripts.find(({ app }) => app === "jellyfin")?.script;
     const hook = (jellyfin?.hooks as Hook[]).find((each) => each.id === jellyfin?.requirements.gpu_hook);
-    expect(hook?.summary).toContain("graphics card");
+    expect(hook?.summary).toContain("GPU");
     expect(sentencesOf(hook?.summary)).toContainEqual(expect.stringMatching(/^Also limits streams from outside your network to 20 Mbps\b/));
     // Its title is its install step's label, which a description would replace
     expect(hook?.description).toBeUndefined();
@@ -81,7 +81,7 @@ describe("the catalog's hooks", () => {
   test("that hook's summary reads true on a server with no card Jellyfin could use, where it is its row's line", () => {
     const jellyfin = scripts.find(({ app }) => app === "jellyfin")?.script;
     const hook = (jellyfin?.hooks as Hook[]).find((each) => each.id === jellyfin?.requirements.gpu_hook);
-    expect(sentencesOf(hook?.summary)[0]).toBe("Sets Jellyfin's video settings for its graphics card, or for none.");
+    expect(sentencesOf(hook?.summary)[1]).toBe("Uses your selected GPU, if available.");
     // A card it would match or test is one the server may not have
     expect(hook?.summary).not.toMatch(/\b(match|test)\b/);
   });
