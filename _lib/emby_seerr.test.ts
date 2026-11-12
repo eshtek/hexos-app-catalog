@@ -310,3 +310,76 @@ for (const options of [{ initializeNoop: true }, { verifiedType: JELLYFIN }]) {
     await expect(connectSeerr(ctx)).rejects.toThrow(/didn't finish its setup/);
   });
 }
+
+// An Emby the owner already had keeps its own administrator (Aaron, 2026-11-08). Seerr is signed
+// in as the one they gave in the collection's walk, never the run's new sign-in, which Emby never took,
+// and that account is tried once in the whole run: one refused before isn't tried, and reaches no
+// Seerr, which would try it against Emby again.
+const OWN = { username: "embyadmin", password: "their-own" };
+
+/** Makes `ctx` the run's link from a kept Emby, with the box's try-once. */
+function keptEmby(ctx: HookContext, run: { given?: typeof OWN; refusedBefore?: boolean; refuses?: boolean } = { given: OWN }) {
+  const seen = { refused: [] as string[], logins: [] as string[] };
+  const served = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname.endsWith("/Users/AuthenticateByName")) {
+      seen.logins.push(String(JSON.parse(String(init?.body)).Pw));
+      if (run.refuses) return new Response(null, { status: 401 });
+    }
+    return served(input, init);
+  }) as typeof fetch;
+  Object.assign(ctx, {
+    resourceId: "emby",
+    keptApps: ["emby"],
+    ...(run.given ? { existingSignIns: { emby: run.given } } : {}),
+    ...(run.refusedBefore ? { refusedSignIns: ["emby"] } : {}),
+    tryExistingSignIn: async <T,>(name: string, signsIn: (account: typeof OWN) => Promise<T | undefined>) => {
+      if (run.refusedBefore) return "refused";
+      if (!run.given) return undefined;
+      const taken = await signsIn(run.given);
+      if (taken !== undefined) return taken;
+      seen.refused.push(name);
+      return "refused";
+    },
+  });
+  return seen;
+}
+
+test("Seerr signs in as a kept Emby's own administrator, checked with Emby first, never as the run's sign-in", async () => {
+  const { ctx, calls } = apis();
+  const seen = keptEmby(ctx);
+  await connectSeerr(ctx);
+  expect(seen.logins[0]).toBe(OWN.password);
+  expect(seen.logins).not.toContain("owner-password");
+  expect(calls.find((c) => c.path === "/api/v1/auth/jellyfin")?.body).toMatchObject({ username: OWN.username, password: OWN.password });
+});
+
+test("a kept Emby that refuses the account stops the link before Seerr tries it, naming no username", async () => {
+  const { ctx, calls } = apis();
+  const seen = keptEmby(ctx, { given: OWN, refuses: true });
+  const error = await connectSeerr(ctx).catch((caught: unknown) => caught);
+  expect(error).toBeInstanceOf(Skipped);
+  expect((error as Error).message).toContain("Emby refused the admin account you gave");
+  expect((error as Error).message).not.toContain(OWN.username);
+  expect(seen.logins).toEqual([OWN.password]);
+  expect(seen.refused).toEqual(["emby"]);
+  expect(calls.some((c) => c.path === "/api/v1/auth/jellyfin")).toBe(false);
+});
+
+test("an account an earlier hook of the run found refused isn't tried by Emby or by Seerr", async () => {
+  const { ctx, calls } = apis();
+  const seen = keptEmby(ctx, { refusedBefore: true });
+  await expect(connectSeerr(ctx)).rejects.toThrow(Skipped);
+  expect(seen.logins).toEqual([]);
+  expect(calls.some((c) => c.path === "/api/v1/auth/jellyfin")).toBe(false);
+});
+
+test("a Seerr already on a kept Emby gains no administrator from the run's sign-in", async () => {
+  const { ctx, calls } = apis({ initialized: true, mediaServerType: EMBY });
+  const seen = keptEmby(ctx);
+  await connectSeerr(ctx);
+  // Not even looked up: the run's sign-in is no Emby user of this server
+  expect(seen.logins).toEqual([]);
+  expect(changes(calls).filter((c) => c.path.startsWith("/api/v1/user"))).toHaveLength(0);
+});

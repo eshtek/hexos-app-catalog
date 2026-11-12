@@ -54,7 +54,11 @@ const tarOf = (name: string, content: Uint8Array | string) => {
 };
 
 /** Docker's archive endpoint holding `files` in the app's container, and the app answering everything else. */
-function box(app: string, files: Files, appResponse: () => Response): Seen {
+function box(
+  app: string,
+  files: Files,
+  appResponse: (url: URL, headers: Headers, signal?: AbortSignal | null) => Response | Promise<Response>,
+): Seen {
   const seen: Seen = { docker: [], headers: [] };
   const archive = (requested: URL) => {
     expect(requested.pathname).toBe(`/containers/ix-${app}-${app}-1/archive`);
@@ -66,8 +70,9 @@ function box(app: string, files: Files, appResponse: () => Response): Seen {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit & { unix?: string }) => {
     const url = new URL(String(input));
     if (url.hostname !== "docker") {
-      seen.headers.push(new Headers(init?.headers));
-      return appResponse();
+      const headers = new Headers(init?.headers);
+      seen.headers.push(headers);
+      return appResponse(url, headers, init?.signal);
     }
     expect(init?.unix).toBe("/var/run/docker.sock");
     expect(init?.signal).toBeInstanceOf(AbortSignal);
@@ -262,7 +267,7 @@ describe.each([
     file: "/config/data/authentication.db",
     localFile: "data/authentication.db",
     prefix: "hexos-emby-",
-    reason: "Sign in to Emby to see what's playing here",
+    reason: "Sign in to Emby as an administrator to see what's playing here",
     token: (seen: Seen, at = 0) => seen.headers[at]?.get("X-Emby-Token"),
     schema: (token: string) => [
       "CREATE TABLE Tokens_2 (AccessToken TEXT, DeviceId INT, UserId TEXT, IsActive INT, DateLastActivityInt INT)",
@@ -446,5 +451,357 @@ describe.each([
     const withPax = tar(header("pax", 27, "x"), pax, header("file", 9, "0"), padded(new TextEncoder().encode("the bytes")));
     expect(tarFile(withPax)).toEqual({ start: 1536, size: 9 });
     expect(tarFile(new Uint8Array(1024))).toBeNull();
+  });
+});
+
+// Emby shows a token every stream only when it's an administrator's: anyone else's sees just their
+// own. Emby's API reference lists the server's devices to an administrator alone (an API key acts
+// as one), while its configuration is open to any signed-in user, so the card reads sessions only
+// with a token that just listed the devices.
+describe("emby, whose card reads sessions as an administrator", () => {
+  const script = "emby/widget_now_playing.ts";
+  const FILE = "/config/data/authentication.db";
+  const REASON = "Sign in to Emby as an administrator to see what's playing here";
+  const STREAM = [{ UserName: "sam", DeviceName: "Living room", NowPlayingItem: { Id: "1", Name: "Coco" } }];
+  const DEVICES = "/emby/Devices";
+  const SESSIONS = "/emby/Sessions";
+
+  /** Sign-ins of other users, each a token and when it was last used. */
+  const signIns = (...rows: Array<[token: string, lastUsed: number]>) => [
+    "CREATE TABLE Tokens_2 (AccessToken TEXT, DeviceId INT, UserId TEXT, IsActive INT, DateLastActivityInt INT)",
+    "CREATE TABLE Devices2 (Id INT, ReportedDeviceId TEXT)",
+    ...rows.map(([token, lastUsed], i) => `INSERT INTO Tokens_2 VALUES ('${token}', ${i + 1}, 'user-${token}', 1, ${lastUsed})`),
+  ];
+
+  interface Emby {
+    admins: Set<string>;
+    /** False while Emby can't answer, as while it starts. */
+    answering: boolean;
+    /** An Emby from before /Devices, which answers it with a 404 for any sign-in it doesn't refuse. */
+    noDevices?: boolean;
+    asked: Array<{ path: string; token: string | null }>;
+    /** Awaited before each answer about the devices, to hold one back. */
+    gate?: (signal?: AbortSignal | null) => Promise<void>;
+    answer: (url: URL, headers: Headers, signal?: AbortSignal | null) => Promise<Response>;
+  }
+
+  /** An Emby whose `admins` list its devices and see the one stream; anyone else reads its configuration, and sees none of theirs. */
+  function emby(...admins: string[]): Emby {
+    const app: Emby = {
+      admins: new Set(admins),
+      answering: true,
+      asked: [],
+      answer: async (url, headers, signal) => {
+        const token = headers.get("X-Emby-Token");
+        app.asked.push({ path: url.pathname, token });
+        if (url.pathname === DEVICES) await app.gate?.(signal);
+        if (!app.answering) return new Response("", { status: 503 });
+        const admin = app.admins.has(token ?? "");
+        if (url.pathname === DEVICES && app.noDevices) return new Response("", { status: token === "signed-out" ? 401 : 404 });
+        if (url.pathname === DEVICES) return admin ? Response.json({ Items: [] }) : new Response("", { status: 403 });
+        if (url.pathname === "/emby/System/Configuration") return Response.json({ ServerName: "emby" });
+        if (url.pathname === SESSIONS) return Response.json(admin ? STREAM : []);
+        return new Response("", { status: 404 });
+      },
+    };
+    return app;
+  }
+
+  const asked = (app: Emby, path: string) => app.asked.filter((request) => request.path === path).map((request) => request.token);
+  const streams = (result: WidgetQueryResult) => {
+    const field = result.fields?.streams;
+    return field?.type === "stat" ? field.value : undefined;
+  };
+
+  const START = new Date("2026-10-31T12:00:00Z").getTime();
+  const at = (ms: number) => setSystemTime(new Date(START + ms));
+  const aborted = (signal?: AbortSignal | null) =>
+    new Promise<never>((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal.reason)));
+
+  const datasetWith = (statements: string[]) => {
+    const dir = scratch();
+    mkdirSync(join(dir, "data"));
+    const db = new Database(join(dir, "data/authentication.db"));
+    for (const statement of statements) db.run(statement);
+    db.close();
+    return dir;
+  };
+
+  describe.each([
+    {
+      place: "copied through Docker",
+      open: (statements: string[], app: Emby) => {
+        const seen = box("emby", { [FILE]: checkpointedDatabase(statements) }, app.answer);
+        return { seen, ctx: context("emby", NOT_MOUNTED()) };
+      },
+    },
+    {
+      place: "on the dataset",
+      open: (statements: string[], app: Emby) => {
+        const seen = box("emby", {}, app.answer);
+        return { seen, ctx: context("emby", datasetWith(statements)) };
+      },
+    },
+  ])("with the database $place", ({ open }) => {
+    test("a newer sign-in that isn't an administrator's is passed over for an older one that is", async () => {
+      const { run } = await fresh(script);
+      const app = emby("owner");
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      const result = await run(ctx);
+      expect(streams(result)).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["member", "owner"]);
+      expect(asked(app, SESSIONS)).toEqual(["owner"]);
+    });
+
+    test("with no administrator's sign-in, the card asks for one and reads no sessions", async () => {
+      const { run } = await fresh(script);
+      const app = emby();
+      const { ctx } = open(signIns(["member", 200], ["guest", 100]), app);
+      expect(await run(ctx)).toEqual({ needsSetup: true, reason: REASON });
+      expect(asked(app, SESSIONS)).toEqual([]);
+    });
+
+    test("only the five sign-ins used last are tried, so a refresh stays inside the widget's time", async () => {
+      const { run } = await fresh(script);
+      const app = emby("owner");
+      const members = [1, 2, 3, 4, 5].map((n): [string, number] => [`member-${n}`, 200 - n]);
+      const { ctx } = open(signIns(...members, ["owner", 100]), app);
+      expect(await run(ctx)).toEqual({ needsSetup: true, reason: REASON });
+      expect(asked(app, DEVICES)).toHaveLength(5);
+    });
+
+    test("every sign-in is asked about at once, so slow answers cost one wait, not five", async () => {
+      const { run } = await fresh(script);
+      const app = emby("owner");
+      const members = [1, 2, 3, 4].map((n): [string, number] => [`member-${n}`, 200 - n]);
+      const { ctx } = open(signIns(...members, ["owner", 100]), app);
+      // Emby answers none until all five are asked: one at a time, the first would wait out its time
+      let arrived = 0;
+      let allAsked!: () => void;
+      const everyone = new Promise<void>((resolve) => (allAsked = resolve));
+      app.gate = async (signal) => {
+        if (++arrived === 5) allAsked();
+        await Promise.race([everyone, aborted(signal)]);
+      };
+      expect(streams(await run(ctx))).toBe("1");
+    });
+
+    test("a refresh between checks asks Emby nothing about the sign-in, for five minutes", async () => {
+      const { run } = await fresh(script);
+      at(0);
+      const app = emby("owner");
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      await run(ctx);
+      app.asked.length = 0;
+      for (const later of [5_000, 60_000, 299_000]) {
+        at(later);
+        expect(streams(await run(ctx))).toBe("1");
+      }
+      expect(asked(app, DEVICES)).toEqual([]);
+      at(300_000);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["owner"]);
+    });
+
+    test("an Emby from before /Devices reads as the card did before, with HexOS's setup sign-in", async () => {
+      const { run } = await fresh(script);
+      at(0);
+      const app = emby("setup");
+      app.noDevices = true;
+      const { ctx } = open([...signIns(["member", 200], ["setup", 100]), "INSERT INTO Devices2 VALUES (2, 'hexos-emby-setup')"], app);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, SESSIONS)).toEqual(["setup"]);
+      app.asked.length = 0;
+      at(5_000);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual([]);
+      // Checked again once five minutes are up, then left for another five
+      at(300_000);
+      expect(streams(await run(ctx))).toBe("1");
+      at(305_000);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["setup"]);
+    });
+
+    test("on an Emby from before /Devices, a sign-in it refuses is never the one read with", async () => {
+      const { run } = await fresh(script);
+      const app = emby("member");
+      app.noDevices = true;
+      const { ctx } = open([...signIns(["signed-out", 300], ["member", 200]), "INSERT INTO Devices2 VALUES (1, 'hexos-emby-setup')"], app);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, SESSIONS)).toEqual(["member"]);
+    });
+
+    test("a five-minute check Emby doesn't answer keeps the sign-in, and asks again at the next refresh", async () => {
+      const { run } = await fresh(script);
+      at(0);
+      const app = emby("owner");
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      expect(streams(await run(ctx))).toBe("1");
+      app.asked.length = 0;
+      at(300_000);
+      app.gate = () => Promise.reject(new Error("timed out"));
+      expect(streams(await run(ctx))).toBe("1");
+      app.gate = undefined;
+      at(305_000);
+      expect(streams(await run(ctx))).toBe("1");
+      expect(asked(app, DEVICES)).toEqual(["owner", "owner"]);
+    });
+
+    test("an Emby that doesn't answer is never read as having no administrator", async () => {
+      const { run } = await fresh(script);
+      setSystemTime(new Date("2026-10-31T12:00:00Z"));
+      const app = emby("owner");
+      app.answering = false;
+      const { ctx } = open(signIns(["member", 200], ["owner", 100]), app);
+      await expect(run(ctx)).rejects.toThrow();
+      // Five seconds on, inside the minute before another copy, Emby is up
+      setSystemTime(new Date("2026-10-31T12:00:05Z"));
+      app.answering = true;
+      expect(streams(await run(ctx))).toBe("1");
+    });
+  });
+
+  test("a kept sign-in that stops being an administrator's is replaced, and never read for the card", async () => {
+    const { run } = await fresh(script);
+    setSystemTime(new Date("2026-10-31T12:00:00Z"));
+    const app = emby("owner");
+    box("emby", { [FILE]: checkpointedDatabase(signIns(["member", 200], ["owner", 100])) }, app.answer);
+    expect(streams(await run(context("emby", NOT_MOUNTED())))).toBe("1");
+
+    // The owner hands the server to a partner, and is no longer an administrator
+    setSystemTime(new Date("2026-10-31T13:00:00Z"));
+    app.admins = new Set(["partner"]);
+    app.asked.length = 0;
+    const seen = box("emby", { [FILE]: checkpointedDatabase(signIns(["member", 300], ["partner", 250], ["owner", 100])) }, app.answer);
+    expect(await run(context("emby", NOT_MOUNTED()))).toEqual({ needsSetup: true, reason: REASON });
+    // Only the administrator's token was kept from the first copy, so only it is asked about
+    expect(asked(app, DEVICES)).toEqual(["owner"]);
+    expect(seen.docker).toEqual([]);
+    expect(streams(await run(context("emby", NOT_MOUNTED())))).toBe("1");
+    expect(seen.docker).toContain(FILE);
+    expect(asked(app, SESSIONS)).toEqual(["partner"]);
+  });
+
+  test("on the dataset, a sign-in that stops being an administrator's is passed over at the next check", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby("owner");
+    const ctx = context("emby", datasetWith(signIns(["member", 300], ["partner", 250], ["owner", 100])));
+    box("emby", {}, app.answer);
+    expect(streams(await run(ctx))).toBe("1");
+    app.admins = new Set(["partner"]);
+    app.asked.length = 0;
+    at(300_000);
+    expect(streams(await run(ctx))).toBe("1");
+    expect(asked(app, SESSIONS)).toEqual(["partner"]);
+  });
+
+  test("the checks share what's left of the refresh after a slow copy, so it ends inside the widget's 10 s", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby("owner");
+    const database = checkpointedDatabase(signIns(["member", 200], ["owner", 100]));
+    box("emby", { [FILE]: database }, app.answer);
+    // The copy takes eight and a half seconds
+    dockerOverHttp((options) => {
+      at(8_500);
+      return String(options.path).endsWith(encodeURIComponent(FILE))
+        ? answer(200, Readable.from([Buffer.from(tarOf("authentication.db", database))]))
+        : answer(404, Readable.from([]));
+    });
+    const timeouts: number[] = [];
+    const timeout = AbortSignal.timeout.bind(AbortSignal);
+    spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+      timeouts.push(ms);
+      return timeout(ms);
+    });
+    expect(streams(await run(context("emby", NOT_MOUNTED())))).toBe("1");
+    // The copy's own, then one the checks share, ending nine seconds into the refresh
+    expect(timeouts).toHaveLength(2);
+    expect(timeouts[1]).toBeLessThanOrEqual(500);
+  });
+
+  test("a sign-in Emby refuses between checks is dropped at once, and the next copy finds another", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const owner = emby("owner");
+    box("emby", { [FILE]: checkpointedDatabase(signIns(["owner", 100])) }, owner.answer);
+    expect(streams(await run(context("emby", NOT_MOUNTED())))).toBe("1");
+    // The owner signs out on that device, and Emby refuses its token
+    at(5_000);
+    box("emby", { [FILE]: checkpointedDatabase(signIns(["owner", 100])) }, () => new Response("", { status: 401 }));
+    expect(await run(context("emby", NOT_MOUNTED()))).toEqual({ needsSetup: true, reason: REASON });
+    at(65_000);
+    const partner = emby("partner");
+    box("emby", { [FILE]: checkpointedDatabase(signIns(["partner", 300])) }, partner.answer);
+    expect(streams(await run(context("emby", NOT_MOUNTED())))).toBe("1");
+    expect(asked(partner, SESSIONS)).toEqual(["partner"]);
+  });
+
+  test("on the dataset, sign-ins with no administrator among them aren't asked about again for a minute", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby();
+    const ctx = context("emby", datasetWith(signIns(["member", 200], ["guest", 100])));
+    box("emby", {}, app.answer);
+    expect(await run(ctx)).toEqual({ needsSetup: true, reason: REASON });
+    expect(asked(app, DEVICES)).toHaveLength(2);
+    at(59_000);
+    expect(await run(ctx)).toEqual({ needsSetup: true, reason: REASON });
+    expect(asked(app, DEVICES)).toHaveLength(2);
+    at(60_000);
+    await run(ctx);
+    expect(asked(app, DEVICES)).toHaveLength(4);
+  });
+
+  test("on the dataset, the administrator's sign-in is kept when five newer ones push it out of those asked about", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby("owner");
+    const dir = datasetWith(signIns(["member", 200], ["owner", 100]));
+    box("emby", {}, app.answer);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    const db = new Database(join(dir, "data/authentication.db"));
+    for (const n of [1, 2, 3, 4, 5]) db.run(`INSERT INTO Tokens_2 VALUES ('guest-${n}', ${10 + n}, 'user-guest-${n}', 1, ${300 + n})`);
+    db.close();
+    app.asked.length = 0;
+    at(5_000);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    expect(asked(app, DEVICES)).toEqual([]);
+    at(300_000);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    expect(asked(app, DEVICES)).toEqual(["owner"]);
+  });
+
+  test("on the dataset, a kept sign-in that's signed out is dropped at once", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby("owner", "partner");
+    const dir = datasetWith(signIns(["owner", 200], ["partner", 100]));
+    box("emby", {}, app.answer);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    const db = new Database(join(dir, "data/authentication.db"));
+    db.run("UPDATE Tokens_2 SET IsActive = 0 WHERE AccessToken = 'owner'");
+    db.close();
+    app.admins.delete("owner");
+    app.asked.length = 0;
+    at(5_000);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
+    expect(asked(app, SESSIONS)).toEqual(["partner"]);
+  });
+
+  test("on the dataset, a new sign-in is asked about at once, so signing in shows the streams", async () => {
+    const { run } = await fresh(script);
+    at(0);
+    const app = emby("owner");
+    const dir = datasetWith(signIns(["member", 200]));
+    box("emby", {}, app.answer);
+    expect(await run(context("emby", dir))).toEqual({ needsSetup: true, reason: REASON });
+    const db = new Database(join(dir, "data/authentication.db"));
+    db.run("INSERT INTO Tokens_2 VALUES ('owner', 9, 'user-owner', 1, 300)");
+    db.close();
+    at(5_000);
+    expect(streams(await run(context("emby", dir)))).toBe("1");
   });
 });
