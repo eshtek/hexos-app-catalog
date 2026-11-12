@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hookSummaryProblems, needsSummary } from "./hook_summary";
+import { hookSummaryProblems, linkRowProblems, needsSummary } from "./hook_summary";
 
 // An app's own actions (Pre-configure, Jellyfin's transcoding) have rows on its Customize tab. A
 // row shows the hook's summary while nothing runs, and without one it shows the description, which
@@ -152,6 +152,34 @@ describe("which hooks need a summary", () => {
   ])("%s", (_name, hook, expected) => expect(needsSummary(hook)).toBe(expected));
 });
 
+describe("a link that would be drawn as one of its app's own setup actions", () => {
+  const link = (over: object = {}) => ({
+    id: "check-other",
+    title: "Check Other and App",
+    kind: "maintain",
+    conditions: [
+      { role: "visibility", type: "appInstalled", app: "other" },
+      { role: "availability", type: "appRunning", app: "app" },
+    ],
+    ...over,
+  });
+
+  test.each<[string, Hook, boolean]>([
+    ["one off the install picker with no kind connect", link({ surfaces: ["card"] }), true],
+    ["one on the card and a widget only", link({ surfaces: ["card", "widget"] }), true],
+    ["one with the default surfaces, which the install offers as a link", link(), false],
+    ["one that keeps the install picker", link({ surfaces: ["installPicker", "card"] }), false],
+    ["one that says kind connect", link({ kind: "connect", surfaces: ["card"] }), false],
+    ["one with no row on the card", link({ surfaces: ["settings"] }), false],
+    ["a hook whose conditions name only its own app", link({ surfaces: ["card"], conditions: [{ role: "availability", type: "appRunning", app: "app" }] }), false],
+    ["a hook with no conditions", link({ surfaces: ["card"], conditions: undefined }), false],
+  ])("%s", (_name, hook, refused) => expect(linkRowProblems(hook, "app").length > 0).toBe(refused));
+
+  test("is none of the catalog's hooks", () => {
+    expect(named(hooks.filter(({ app, hook }) => linkRowProblems(hook, app).length > 0))).toEqual([]);
+  });
+});
+
 describe("what the validator refuses", () => {
   test("nothing, for a setup hook with a summary", () =>
     expect(hookSummaryProblems(setup({ summary: "Adds your Movies folder. Run it again if the folder is missing." }))).toEqual([]));
@@ -207,4 +235,15 @@ describe("validate.ts", () => {
     expect(code).toBe(1);
   });
 
+  test("refuses a link narrowed to the card that doesn't say it is a connection", () => {
+    const { code, output } = run({
+      id: "check-other",
+      title: "Check Other and App",
+      events: ["userAction"],
+      surfaces: ["card"],
+      conditions: [{ role: "visibility", type: "appInstalled", app: "other" }],
+    });
+    expect(output).toContain('hooks[0]: a hook that names another app in conditions and leaves "installPicker" out of surfaces needs "kind": "connect"');
+    expect(code).toBe(1);
+  });
 });

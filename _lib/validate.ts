@@ -42,7 +42,7 @@ import {
   reservedPortsWellFormed,
   type Finding,
 } from "./ports";
-import { hookSummaryProblems } from "./hook_summary";
+import { hookSummaryProblems, linkRowProblems } from "./hook_summary";
 import { videoCardProblems } from "./video_card";
 import { instanceRules, linkCopyRules } from "./instances";
 
@@ -509,6 +509,7 @@ function validate(file: string, script: Record<string, unknown>) {
         err(file, `${where}: title is missing`);
       }
       for (const problem of hookSummaryProblems(hook)) err(file, `${where}: ${problem}`);
+      for (const problem of linkRowProblems(hook, file.replace(/\.json$/, ""))) err(file, `${where}: ${problem}`);
       if (hook.kind !== undefined) {
         if (typeof hook.kind !== "string" || !(HOOK_KINDS as readonly string[]).includes(hook.kind)) {
           err(file, `${where}: kind "${String(hook.kind)}" is not a known hook kind`);

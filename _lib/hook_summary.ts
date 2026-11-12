@@ -13,6 +13,25 @@ export function needsSummary(hook: Record<string, unknown>): boolean {
   return Array.isArray(hook.surfaces) ? hook.surfaces.includes("card") : hook.target === undefined;
 }
 
+/**
+ * A hook that links another app but would be drawn with its own app's setup actions. HexOS puts a
+ * hook on the Connections tab when it says `"kind": "connect"`, or when it is one of the links the
+ * install offers, which it builds only from hooks on the install picker (the default for a hook
+ * that names another app). A link narrowed to the card alone is neither.
+ */
+export function linkRowProblems(hook: Record<string, unknown>, appId: string): string[] {
+  const conditions: unknown[] = Array.isArray(hook.conditions) ? hook.conditions : [];
+  const namesAnother = conditions.some((condition) => {
+    const app = (condition as { app?: unknown } | null)?.app;
+    return typeof app === "string" && app !== appId;
+  });
+  if (!namesAnother || hook.kind === "connect" || !Array.isArray(hook.surfaces)) return [];
+  if (!hook.surfaces.includes("card") || hook.surfaces.includes("installPicker")) return [];
+  return [
+    'a hook that names another app in conditions and leaves "installPicker" out of surfaces needs "kind": "connect": without it its row is drawn with the app\'s own setup actions, not its connections',
+  ];
+}
+
 /** What is wrong with a hook's summary, one line each. */
 export function hookSummaryProblems(hook: Record<string, unknown>): string[] {
   const { summary } = hook;
