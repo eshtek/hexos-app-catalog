@@ -17,6 +17,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Bindarr](bindarr.json) | Trading card collection manager ([notes](bindarr/README.md)) |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
+| [Cloudflared](cloudflared.json) | Cloudflare Tunnel connector for remote access |
 | [Code Server](code-server.json) | VS Code in the browser |
 | [Collabora](collabora.json) | Documents you edit together in Nextcloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
