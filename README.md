@@ -99,6 +99,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Vikunja](vikunja.json) | Task manager with lists |
 | [Tailscale](tailscale.json) | Private access to the server from anywhere |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
+| [UniFi Controller](unifi-controller.json) | Manages UniFi network devices |
 | [UniFi Protect Backup](unifi-protect-backup.json) | Backs up UniFi Protect camera events |
 | [Trilium Notes](trilium-notes.json) | Notes and personal knowledge base |
 | [Terraria](terraria.json) | 2D sandbox adventure game server |
