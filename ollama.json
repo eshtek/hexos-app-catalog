@@ -1,9 +1,8 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Ollama runs AI models on your own graphics card."
+    "version": "1.0.2",
+    "changeLog": "Runs models on the graphics built into a Ryzen AI Max, which HexOS turns on through Integrated graphics"
   },
   "requirements": {
     "locations": [
@@ -29,6 +28,7 @@
       "type": "select",
       "key": "image",
       "required": true,
+      "installonly": true,
       "default": "image",
       "options": [
         {
@@ -64,15 +64,33 @@
         {
           "text": "64K",
           "value": "65536"
+        },
+        {
+          "text": "128K",
+          "value": "131072"
+        },
+        {
+          "text": "256K",
+          "value": "262144"
         }
       ]
     },
     {
-      "question": "Model to download",
-      "description": "An Ollama model name. Leave it blank to choose one later from this app's Connections tab.",
+      "question": "Model",
+      "description": "The model Ollama runs. One it doesn't have yet downloads first.",
       "type": "text",
       "key": "model",
+      "source": "local-ai-models",
       "required": false,
+      "default": ""
+    },
+    {
+      "question": "Integrated graphics",
+      "description": "HexOS sets this for graphics built into the processor. Leave it blank.",
+      "type": "text",
+      "key": "integrated_gpu",
+      "required": false,
+      "installonly": true,
       "default": ""
     }
   ],
@@ -102,6 +120,10 @@
         {
           "name": "HEXOS_MODEL",
           "value": "$QUESTION(model)"
+        },
+        {
+          "name": "OLLAMA_IGPU_ENABLE",
+          "value": "$QUESTION(integrated_gpu)"
         }
       ]
     },

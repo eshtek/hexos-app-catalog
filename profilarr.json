@@ -5,7 +5,8 @@
     "changeLog": "Profilarr links to each copy of Radarr and Sonarr, by the name you gave it"
   },
   "sign_in": {
-    "username": true
+    "username": true,
+    "existing": true
   },
   "requirements": {
     "locations": [

@@ -1,0 +1,130 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.1",
+    "changeLog": "Its card shows who's online, and folds back while nobody is on."
+  },
+  "sign_in": {
+    "username": false
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity"
+    ],
+    "specifications": [
+      "2CORE",
+      "4GBRAM",
+      "5GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30525,
+      7777
+    ],
+    "game_port": 7777,
+    "instances": "many"
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(tmodloader)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/$INSTANCE(tmodloader)/backups",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "backups"
+      }
+    }
+  ],
+  "app_values": {
+    "tmodloader": {
+      "world_name": "HexOS",
+      "world_size": 2,
+      "world_difficulty": 0,
+      "password": ""
+    },
+    "network": {
+      "server_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(7777)"
+      },
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30525)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(tmodloader)/data)",
+      "backups": "$HOST_PATH($LOCATION(ApplicationsCapacity)/$INSTANCE(tmodloader)/backups)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(25%, 6144)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "set-admin",
+      "title": "Sign in to tModLoader's dashboard",
+      "description": "Setting up the dashboard's sign-in",
+      "events": [
+        "onAfterInstall"
+      ],
+      "script": "tmodloader/setup.ts",
+      "entrypoint": "setAdmin",
+      "timeout": 600
+    }
+  ],
+  "widgets": [
+    {
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's playing on this server's world.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "tmodloader"
+        }
+      ],
+      "background": {
+        "field": "online"
+      },
+      "slots": [
+        {
+          "type": "stat",
+          "field": "count"
+        },
+        {
+          "type": "list",
+          "field": "online",
+          "rows": 1
+        }
+      ],
+      "script": "tmodloader/widget_players.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}

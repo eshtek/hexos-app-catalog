@@ -72,8 +72,9 @@ export interface HookContext {
    * The sign-in the owner chose for this install or collection run, for an app whose script
    * declares `sign_in` (a username of at least 3 characters and a password of at least 8). Undefined for a card run outside an
    * install or collection, and from a deck that predates it: a hook then falls back to what it did
-   * before, or asks with `askForInputs`. Never write it to a file of HexOS's own; the app's own
-   * settings are where it belongs.
+   * before, or asks with `askForInputs`. Undefined too for a hook whose own app and linked apps the
+   * owner all already had in a collection run, since none of them took it. Never write it to a file
+   * of HexOS's own; the app's own settings are where it belongs.
    */
   readonly signIn?: {
     username: string;
@@ -81,6 +82,48 @@ export interface HookContext {
     /** The owner's email, for an app whose first account takes one (Seerr's, made through Jellyfin or Emby). */
     email?: string;
   };
+  /**
+   * Of the hook's own app and the apps it links to, the ones the owner already had in a collection
+   * run, by the name each runs under (`resourceId` for its own, `linkedApp(id)?.name ?? id` for one
+   * it links to). Each keeps its own sign-in: never try `signIn` against one of them, which it never
+   * took. Undefined outside such a run.
+   */
+  readonly keptApps?: readonly string[];
+  /**
+   * The admin account each of those apps keeps, by the same name, as the owner typed it for an app
+   * whose script declares `sign_in.existing`. `username` is empty for an app that takes a password
+   * alone. Sign in with it and never change it or make another account beside it. Undefined outside
+   * such a run, and on a box from before it.
+   */
+  readonly existingSignIns?: Readonly<Record<string, { username: string; password: string }>>;
+  /** Those apps whose account a hook earlier in the run found refused: none is tried again. */
+  readonly refusedSignIns?: readonly string[];
+  /**
+   * Sign in to a kept app (one of `keptApps`) with the account the owner gave for it, tried once in
+   * the whole run, since an app may lock an account after a few refusals. `signsIn` answers undefined
+   * only when the app refuses the account, and throws when it can't be reached. A first refusal asks
+   * the owner once to put it right (`ask`'s title and description, `username` false for a password
+   * alone, `app` naming the fields), and an account put right is kept for the hooks after; otherwise
+   * the run forgets it. Resolves with what `signsIn` gave, "refused" (now or by an earlier hook:
+   * stop and say so, naming no username), or undefined when the run gave no account for the app.
+   * Present whenever `keptApps` is.
+   *
+   * @example
+   * ```ts
+   * const token = await ctx.tryExistingSignIn?.(ctx.resourceId, (account) => logIn(ctx, account), {
+   *   title: "Sign in to Kavita",
+   *   description: "Kavita refused the account you gave. Enter it again so HexOS can use it.",
+   *   username: true,
+   *   app: "Kavita",
+   * });
+   * if (token === "refused") stop(ctx, "Kavita refused the account you gave, so HexOS left it as it is.");
+   * ```
+   */
+  tryExistingSignIn?<T>(
+    appId: string,
+    signsIn: (account: { username: string; password: string }) => Promise<T | undefined>,
+    ask: { title: string; description: string; username: boolean; app: string },
+  ): Promise<T | "refused" | undefined>;
 
   /**
    * File-targeted actions only: the files the user selected. `containerPath`
@@ -325,7 +368,13 @@ export interface HookContext {
   /** What this server's graphics cards can run, for a hook that offers models. Missing on a box from before it. */
   readLocalAiHardware?(): Promise<{
     cards: Array<{ pciSlot: string; name: string; memoryGB: number | null }>;
-    ollama?: { pciSlot?: string; models: string[]; wanted?: string };
+    ollama?: {
+      pciSlot?: string;
+      models: string[];
+      wanted?: string;
+      /** The context it runs models at, in tokens (its OLLAMA_CONTEXT_LENGTH). Absent on a box from before it. */
+      contextLength?: number;
+    };
   }>;
 
   /** Async sleep helper */
