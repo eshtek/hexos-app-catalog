@@ -1,0 +1,87 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: the panel opens with the owner's own account; Pterodactyl Wings runs the game servers"
+  },
+  "sign_in": {
+    "username": true,
+    "email": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM",
+      "5GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30162
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pterodactyl-panel/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pterodactyl-panel/mariadb",
+      "owner": {
+        "user": "netdata",
+        "group": "docker"
+      },
+      "snapshot": {
+        "id": "db"
+      }
+    }
+  ],
+  "app_values": {
+    "pterodactyl": {
+      "db_password": "$RANDOM_STRING(32)",
+      "db_root_password": "$RANDOM_STRING(32)",
+      "redis_password": "$RANDOM_STRING(32)",
+      "app_key": "$RANDOM_STRING(32)",
+      "app_url": "http://$SERVER_LAN_IP:$PORT(30162)"
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30162)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/pterodactyl-panel/config)",
+      "mariadb_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/pterodactyl-panel/mariadb)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "create-admin",
+      "title": "Create your Pterodactyl account",
+      "description": "Creating your administrator account",
+      "events": ["onAfterInstall"],
+      "script": "pterodactyl/setup.ts",
+      "entrypoint": "createAdmin",
+      "timeout": 600
+    }
+  ]
+}

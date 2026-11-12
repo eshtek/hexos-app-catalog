@@ -36,7 +36,7 @@
     "network": {
       "relay_port": {
         "bind_mode": "published",
-        "port_number": "$PORT(21117)"
+        "port_number": 21117
       },
       "relay_web_clients_port": {
         "bind_mode": "",

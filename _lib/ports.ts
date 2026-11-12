@@ -145,7 +145,62 @@ function footprint(script: Script) {
   if (usesHostNetwork(script)) {
     for (const port of declaredPorts(script)) if (!preferred.has(port)) fixed.add(port);
   }
+  // HexOS holds a reserved port for the app as it holds a fixed one
+  for (const port of reservedPorts(script)) fixed.add(port);
   return { fixed, preferred };
+}
+
+/** The widest block a script may reserve. Pterodactyl Wings' 20 game ports are the reason the field exists. */
+export const MAX_RESERVED_BLOCK = 100;
+
+type ReservedEntry = { port: number } | { start: number; end: number };
+
+/** A well-formed `requirements.reserved_ports` entry, or null. */
+function reservedEntry(entry: unknown): ReservedEntry | null {
+  if (isPort(entry)) return { port: entry };
+  if (!isObject(entry) || !isPort(entry.start) || !isPort(entry.end) || entry.end < entry.start) return null;
+  if (entry.end - entry.start + 1 > MAX_RESERVED_BLOCK) return null;
+  return { start: entry.start, end: entry.end };
+}
+
+/** Every port in `requirements.reserved_ports`, one by one. Entries the validator refuses are left out. */
+export function reservedPorts(script: Script): number[] {
+  const requirements = isObject(script.requirements) ? script.requirements : {};
+  if (!Array.isArray(requirements.reserved_ports)) return [];
+  return requirements.reserved_ports.flatMap((entry) => {
+    const read = reservedEntry(entry);
+    if (!read) return [];
+    return "port" in read ? [read.port] : Array.from({ length: read.end - read.start + 1 }, (_, i) => read.start + i);
+  });
+}
+
+/**
+ * Rule (g): `requirements.reserved_ports` names ports the app opens outside what TrueNAS publishes for
+ * it, which HexOS holds while the app is installed (Pterodactyl Wings' game servers). Each is a fixed
+ * number or an inclusive `{start, end}` block of at most MAX_RESERVED_BLOCK. A port the script
+ * publishes is held already, and a fixed block can't serve several copies of an app.
+ */
+export function reservedPortsWellFormed(script: Script): Finding[] {
+  const requirements = isObject(script.requirements) ? script.requirements : {};
+  if (requirements.reserved_ports === undefined) return [];
+  if (!Array.isArray(requirements.reserved_ports)) return [error("requirements.reserved_ports must be a list")];
+  const findings: Finding[] = [];
+  for (const [i, entry] of requirements.reserved_ports.entries()) {
+    if (!reservedEntry(entry)) {
+      findings.push(
+        error(
+          `requirements.reserved_ports[${i}]: ${JSON.stringify(entry)} is not a port or a {start, end} block of at most ${MAX_RESERVED_BLOCK} ports`,
+        ),
+      );
+    }
+  }
+  const published = new Set(publishedPorts(script).flatMap(members));
+  const both = reservedPorts(script).filter((port) => published.has(port));
+  if (both.length > 0) findings.push(error(`requirements.reserved_ports holds ${listPorts(both)}, which the script publishes already`));
+  if (requirements.instances === "many" && reservedPorts(script).length > 0) {
+    findings.push(error("requirements.reserved_ports can't go with instances: many, since every copy would want the same ports"));
+  }
+  return findings;
 }
 
 /** 25565, 25566, 25567 and 19132 read as "19132, 25565-25567". */
@@ -207,9 +262,10 @@ export function declaredPortsMatchPins(script: Script): Finding[] {
 
 /**
  * Ports a protocol ties to one number, where moving them gives a clean install of something that
- * doesn't work: DNS, DHCP, NTP, SSDP, STUN, mDNS and Plex's GDM discovery.
+ * doesn't work: DNS, DHCP, NTP, SSDP, STUN, mDNS, Plex's GDM discovery, and RustDesk's ID server and
+ * relay, which a RustDesk client reaches at 21115 to 21117 on the one address it is given.
  */
-const PORTS_TIED_TO_A_PROTOCOL = new Set([53, 67, 68, 123, 1900, 3478, 5353, 32410, 32412, 32413, 32414]);
+const PORTS_TIED_TO_A_PROTOCOL = new Set([53, 67, 68, 123, 1900, 3478, 5353, 21115, 21116, 21117, 32410, 32412, 32413, 32414]);
 
 /**
  * A port is the first one HexOS tries, and owners never pick one or hear about a move. A number stays

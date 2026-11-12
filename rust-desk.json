@@ -37,11 +37,11 @@
     "network": {
       "nat_type_test_port": {
         "bind_mode": "published",
-        "port_number": "$PORT(21115)"
+        "port_number": 21115
       },
       "id_reg_hole_punch_port": {
         "bind_mode": "published",
-        "port_number": "$PORT(21116)"
+        "port_number": 21116
       },
       "server_web_clients_port": {
         "bind_mode": "",

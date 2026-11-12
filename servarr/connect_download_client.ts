@@ -1,5 +1,5 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
-import { chownSync, mkdirSync, readFileSync } from "node:fs";
+import { chownSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
@@ -16,14 +16,24 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * looks, with no remote path mapping: a mapping belongs to the box's address, not to one client,
  * and would send every other client's downloads astray.
  *
- * The manager gets the client's sign-in HexOS has just signed in with: the one the owner chose for
- * the install or collection (`ctx.signIn`), else the one in the client's own settings, else HexOS's
- * default. Only when HexOS knows none does the manager keep what it has, and the owner is asked when
+ * A client installed after the manager started gets its folder of Downloads as a dataset of its own,
+ * which TrueNAS mounts after the manager's bind mount of Downloads was made. That mount passes no
+ * later mount on (rprivate, the apps library's default), so the manager sees an empty folder there
+ * until it restarts, and reports the client's downloads folder missing. So the link asks the manager
+ * whether it sees a folder the client has made, and restarts the manager once when it doesn't.
+ *
+ * The manager gets the client's sign-in HexOS has just signed in with: for a Deluge the owner
+ * already had, the password they gave for it (`ctx.existingSignIns`), else the one the owner chose
+ * for the install or collection (`ctx.signIn`), else the one in the client's own settings, else
+ * HexOS's default. Only when HexOS knows none does the manager keep what it has, and the owner is asked when
  * that fails too. The manager's own may be an old password, and qBittorrent locks out an address
  * after five failed sign-ins, so it is never tried ahead of one HexOS knows works.
  *
  * Run again, a link puts back how the manager reaches the client and its sign-in, and fills only the
- * choices the owner left empty.
+ * choices the owner left empty. A manager names each client once, so an entry under the client's name
+ * that it reaches at another address (the box's address or the client's port changed) is moved to
+ * this client: with proof it was this one, or with the owner's yes once nothing answers there. One
+ * that may be another client the owner chose is left as it is, and the link says which.
  */
 
 /** The user the TrueNAS charts run the download clients as. */
@@ -80,6 +90,19 @@ interface ClientPlan {
    * locked the manager out: the manager is given the sign-in anyway and connects once it ends.
    */
   lockout?: (managerName: string) => string;
+  /**
+   * What it proves when the manager's test of an entry's saved secret passes against this client:
+   * "key", a key only this client has (SABnzbd's); "sign-in", one the owner may use for another
+   * client too, so it counts only once nothing answers at the entry's address. Absent where a pass
+   * proves nothing: qBittorrent lets its home network in with any sign-in and counts each refused
+   * one toward its lockout, and a sign-in every install starts with is anyone's.
+   */
+  proof?: "key" | "sign-in";
+  /**
+   * A folder the client has made in its own folder of Downloads, at the path the manager sees it
+   * at: the one the manager reports missing when it can't see the client's folder.
+   */
+  folder?: string;
 }
 
 interface Client {
@@ -113,12 +136,24 @@ function readJson<T>(path: string): T | undefined {
 
 const isEmpty = (value: unknown) => value === undefined || value === null || value === "";
 
+/** The fields that say where a manager reaches a client: what moving an entry to this client rewrites. */
+const ADDRESS_FIELDS = ["host", "port", "useSsl", "urlBase"];
+
 async function until(ctx: HookContext, check: () => Promise<boolean>, attempts: number): Promise<boolean> {
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (await check().catch(() => false)) return true;
     await ctx.sleep(1_000);
   }
   return false;
+}
+
+/** Whether anything answers at this address now. An app that's off, or an address nobody has any more, doesn't. */
+async function answering(url: string, timeoutMs = 10_000): Promise<boolean> {
+  // Any answer counts, so a certificate made for another name isn't taken for silence; nothing is sent
+  const init = { redirect: "manual", signal: AbortSignal.timeout(timeoutMs), tls: { rejectUnauthorized: false } };
+  const response = await fetch(url, init as RequestInit).catch(() => undefined);
+  await response?.body?.cancel().catch(() => undefined);
+  return response !== undefined;
 }
 
 async function managerApi<T>(ctx: HookContext, apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
@@ -161,6 +196,10 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
   if (!manager) ctx.fail(`HexOS can't add a download client to ${ctx.resourceId}`);
   const apiKey = readText(`${configMount(ctx.mounts, managerId)?.localPath}/config.xml`)?.match(/<ApiKey>([^<]+)<\/ApiKey>/)?.[1];
   if (!apiKey) ctx.fail(`HexOS couldn't read ${manager.name}'s API key yet. Try again once it has started.`);
+  // A manager that has only just started answers nothing for a while
+  if (!(await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 30))) {
+    ctx.fail(`${manager.name} isn't answering yet. Try again once it has started.`);
+  }
   const url = await ctx.getInstalledAppUrl(appId);
   if (!url) ctx.fail(`${name} isn't installed, or HexOS can't find its port`);
   const parsed = new URL(url);
@@ -176,6 +215,7 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
   await ctx.emitCheckpoint("locate");
 
   const plan = await prepare(client);
+  if (plan.folder) await seeClientFolder(ctx, apiKey, client, name, plan.folder);
   await ctx.emitCheckpoint("prepare");
 
   const connection: Record<string, unknown> = { host: client.host, port: client.port, useSsl: false, ...plan.connection };
@@ -184,12 +224,49 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
     ...("alsoCategoryField" in manager ? { [manager.alsoCategoryField]: client.category } : {}),
     ...plan.preferences,
   };
-  const existing = (await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient")).find(
+  const here = `${client.host}:${client.port}`;
+  // An entry under the client's name at another address: the box's address or the client's port
+  // changed, or it's another client the owner chose. It moves here with proof it was this client, or
+  // with the owner's yes once nothing answers there, and is left as it is otherwise.
+  const repair = async (entry: DownloadClient): Promise<DownloadClient> => {
+    const value = (field: string) => entry.fields.find((each) => each.name === field)?.value;
+    const at = `${value("host")}:${value("port")}`;
+    if (entry.implementation === plan.implementation) {
+      // The manager shows a secret it holds as ******** (SchemaBuilder) and tests an entry sent by id
+      // with the one it holds, so a pass at this client's address says the saved secret is this client's
+      const moved = {
+        ...entry,
+        fields: entry.fields.map((field) => (ADDRESS_FIELDS.includes(field.name) && field.name in connection ? { ...field, value: connection[field.name] } : field)),
+      };
+      const proven =
+        plan.proof !== undefined &&
+        (await managerApi(ctx, apiKey, "/downloadclient/test", { method: "POST", body: JSON.stringify(moved) }).then(
+          () => true,
+          () => false,
+        ));
+      if (proven && plan.proof === "key") return entry;
+      const silent = !(await answering(`${value("useSsl") === true ? "https" : "http"}://${at}${value("urlBase") ?? ""}`));
+      if (silent && (proven || (await ownerSwitches(ctx, manager.name, name, entry.name, at)))) return entry;
+    }
+    // It may be another client the owner chose, so it's theirs to change: trying again can't help
+    const message = `${manager.name} already has a download client named ${entry.name}, at ${at}. Rename that one in ${manager.name}'s Settings, under Download Clients, then run Connect to ${name} again.`;
+    const context = [
+      { label: `${manager.name}'s ${entry.name}`, value: at },
+      { label: `This ${name}`, value: here },
+    ];
+    if (ctx.skip) ctx.skip(message, context);
+    ctx.fail(message, context);
+  };
+  const entries = await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient");
+  const atThisAddress = entries.find(
     (entry) =>
       entry.implementation === plan.implementation &&
       entry.fields.some((field) => field.name === "host" && field.value === client.host) &&
       entry.fields.some((field) => field.name === "port" && Number(field.value) === client.port),
   );
+  // A manager refuses a second client under a name it has, whatever its case (ProviderControllerBase)
+  const named = atThisAddress ? undefined : entries.find((entry) => entry.name.toLowerCase() === plan.name.toLowerCase());
+  const existing = atThisAddress ?? (named ? await repair(named) : undefined);
   const template =
     existing ??
     (await managerApi<DownloadClient[]>(ctx, apiKey, "/downloadclient/schema")).find(
@@ -267,11 +344,126 @@ async function link(ctx: HookContext, appId: string, name: string, prepare: (cli
       return;
     }
   }
+  // One added since the list was read: a run again finds it under the name
+  if (refused !== undefined && /should be unique/i.test(reasonOf(refused))) {
+    ctx.fail(`${manager.name} already has a download client named ${plan.name}. Run Connect to ${name} again to check it.`);
+  }
   if (refused !== undefined) {
     const message = signInRefused(refused) ? `${name} didn't accept ${manager.name}'s sign-in` : `${manager.name} couldn't reach ${name}`;
     ctx.fail(message, [{ label: "Reason", value: reasonOf(refused) }]);
   }
-  await ctx.emitCheckpoint("configure");
+  await ctx.emitCheckpoint("configure", existing && !atThisAddress ? `${manager.name} reaches ${name} at its new address` : undefined);
+}
+
+/**
+ * Whether the manager sees a folder, by its own listing of the folder above it. A folder that isn't
+ * there lists as an empty list of directories (FileSystemLookupService and FileSystemResult, the same
+ * in Radarr, Sonarr, Lidarr and Chaptarr 0.9.965). Undefined for anything else: a refusal, or an
+ * answer without that list.
+ */
+async function managerSees(ctx: HookContext, apiKey: string, folder: string): Promise<boolean | undefined> {
+  const parent = folder.slice(0, folder.lastIndexOf("/") + 1);
+  const listing = await managerApi<{ directories?: unknown }>(ctx, apiKey, `/filesystem?${new URLSearchParams({ path: parent })}`).catch(
+    () => undefined,
+  );
+  if (!Array.isArray(listing?.directories)) return undefined;
+  return listing.directories.some((entry) => (entry as { name?: unknown } | null)?.name === folder.slice(parent.length));
+}
+
+/**
+ * A manager's restart in flight, by its TrueNAS name. A
+ * manager's links all run in this one module, and two of them may run at once (Connect to SABnzbd
+ * and Connect to NZBGet from the card), so a link that finds a folder missing while another link
+ * restarts the manager waits for that restart rather than queue a second one (app.redeploy takes a
+ * lock per app), which would stop the manager under the other link.
+ */
+const restarting = new Map<string, Promise<{ refused?: unknown; answered: boolean }>>();
+
+/** Restarts the manager once for every link that needs it now, and waits until it answers again. */
+function restartManager(ctx: HookContext) {
+  const key = ctx.resourceId;
+  const running = restarting.get(key);
+  if (running) return running;
+  const restart = (async () => {
+    const refused = await ctx.restartApp?.().then(
+      () => undefined,
+      (error: unknown) => error ?? new Error("The restart failed"),
+    );
+    if (refused !== undefined) return { refused, answered: false };
+    return { answered: await until(ctx, () => answering(`${ctx.baseUrl}/ping`, 2_000), 60) };
+  })().finally(() => {
+    restarting.delete(key);
+  });
+  restarting.set(key, restart);
+  return restart;
+}
+
+/**
+ * Makes sure the manager sees the client's folder, restarting the manager once when it doesn't: a
+ * restart mounts Downloads again, with the client's folder in it. Only the manager restarts, never
+ * the client. A manager without Downloads (Prowlarr imports nothing), a folder the box doesn't have,
+ * and a manager that can't say what it sees are left as they are.
+ */
+async function seeClientFolder(ctx: HookContext, apiKey: string, client: Client, name: string, path: string) {
+  const managerName = client.managerName;
+  const folder = path.replace(/\/+/g, "/").replace(/(.)\/$/, "$1");
+  if (!ctx.mounts.some((m) => m.containerPath === "/downloads")) return;
+  const own = client.mounts
+    .filter((m) => m.containerPath && (folder === m.containerPath || folder.startsWith(`${m.containerPath}/`)))
+    .sort((a, b) => (b.containerPath?.length ?? 0) - (a.containerPath?.length ?? 0))[0];
+  if (!own?.containerPath || !existsSync(`${own.localPath}${folder.slice(own.containerPath.length)}`)) return;
+
+  // A restart another link started may be all this one needs, so look once it's done
+  await restarting.get(ctx.resourceId);
+  const sees = await managerSees(ctx, apiKey, folder);
+  if (sees === undefined) ctx.log(`${managerName} couldn't list ${folder}, so HexOS didn't check it sees ${name}'s folder`);
+  if (sees !== false) return;
+
+  const context = [{ label: "Folder", value: folder }];
+  const stuck = `${managerName} can't see ${name}'s downloads folder yet. Stop ${managerName} and start it again, then run Connect to ${name} again.`;
+  if (typeof ctx.restartApp !== "function") ctx.fail(stuck, context);
+  await ctx.updateCheckpointMessage("prepare", `Restarting ${managerName} so it sees ${name}'s downloads folder`);
+  const { refused, answered } = await restartManager(ctx);
+  if (refused !== undefined) ctx.fail(stuck, [...context, { label: "Reason", value: refused instanceof Error ? refused.message : String(refused) }]);
+  if (!answered) ctx.fail(`${managerName} didn't answer after HexOS restarted it. Try again once it has started.`);
+  // Its API answers a little after its port does
+  let after: boolean | undefined;
+  for (let attempt = 0; attempt < 30 && after === undefined; attempt++) {
+    after = await managerSees(ctx, apiKey, folder);
+    if (after === undefined) await ctx.sleep(1_000);
+  }
+  if (!after) {
+    ctx.fail(
+      `${managerName} still can't see ${name}'s downloads folder after HexOS restarted it. Stop ${managerName} and start it again, then run Connect to ${name} again.`,
+      context,
+    );
+  }
+}
+
+/**
+ * Whether the owner wants a manager's entry moved to this client, once nothing answers at its
+ * address. Nothing proves it was this one (it may be another computer that's switched off), so the
+ * owner decides. False when they say no, skip the question, or this HexOS can't ask.
+ */
+async function ownerSwitches(ctx: HookContext, managerName: string, name: string, entryName: string, at: string): Promise<boolean> {
+  const answers = await ask(
+    ctx,
+    [
+      {
+        type: "question",
+        id: "switch",
+        question: {
+          question: `Switch ${managerName} to this ${name}`,
+          description: `${managerName} keeps its other settings for it.`,
+          type: "boolean",
+          key: "switch",
+          required: true,
+        },
+      },
+    ],
+    { title: `Switch ${managerName}'s ${name}`, description: `${managerName} sends downloads to ${entryName} at ${at}, which isn't answering.` },
+  );
+  return answers?.switch === true;
 }
 
 /** The owner's answers, or undefined when they skip, the wait runs out, or this HexOS can't ask. */
@@ -324,6 +516,21 @@ async function qbittorrentOpen(url: string): Promise<boolean> {
   return response?.status === 200;
 }
 
+/** Whether qBittorrent's WebUI answers at all: a failed sign-in is a refusal only when it does. */
+async function qbittorrentAnswers(url: string): Promise<boolean> {
+  const response = await fetch(`${url}/api/v2/app/version`, { headers: qbittorrentHeaders(url), signal: AbortSignal.timeout(10_000) }).catch(
+    () => undefined,
+  );
+  await response?.body?.cancel();
+  return response !== undefined;
+}
+
+/** Ends a link whose client refused the account the owner gave for it: trying again can't help. */
+function stopRefused(ctx: HookContext, message: string): never {
+  if (ctx.skip) ctx.skip(message);
+  ctx.fail(message);
+}
+
 export const qbittorrent = (ctx: HookContext) =>
   link(ctx, "qbittorrent", "qBittorrent", async ({ url, mounts, managerName }) => {
     // A download in progress kept apart from the finished ones, when qBittorrent lets HexOS in to say so
@@ -354,6 +561,27 @@ export const qbittorrent = (ctx: HookContext) =>
         `qBittorrent is locking ${managerName} out for now after sign-ins with its old password failed. ${managerName} has the new sign-in and connects on its own within the hour.`,
       signIn: {
         known: async () => {
+          // A qBittorrent the owner already had: the account they gave, tried once in the run. The
+          // run's sign-in never is, since it never took it and each refusal counts toward its lockout
+          const name = ctx.linkedApp?.("qbittorrent")?.name ?? "qbittorrent";
+          if (ctx.keptApps?.includes(name)) {
+            const own = await ctx.tryExistingSignIn?.(
+              name,
+              async (account) => {
+                if (await qbittorrentSignsIn(url, account)) return account;
+                if (!(await qbittorrentAnswers(url))) ctx.fail("HexOS couldn't reach qBittorrent. Try again once it's running.");
+                return undefined;
+              },
+              {
+                title: "Sign in to qBittorrent",
+                description: "qBittorrent refused the account you gave. Enter it again so HexOS can use it.",
+                username: true,
+                app: "qBittorrent",
+              },
+            );
+            if (own === "refused") stopRefused(ctx, `qBittorrent refused the account you gave, so ${managerName} wasn't connected to it.`);
+            return own ? { username: own.username, password: own.password } : undefined;
+          }
           for (const candidate of [ctx.signIn, saved]) {
             if (candidate && (await qbittorrentSignsIn(url, candidate))) {
               return { username: candidate.username, password: candidate.password };
@@ -427,10 +655,23 @@ export const deluge = (ctx: HookContext) =>
         ]),
       );
     let password: string | undefined;
-    for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
-      if (candidate && (await signsIn(candidate))) {
-        password = candidate;
-        break;
+    const name = ctx.linkedApp?.("deluge")?.name ?? "deluge";
+    if (ctx.keptApps?.includes(name)) {
+      // A Deluge the owner already had: the password they gave, tried once in the run, and no guesses
+      const own = await ctx.tryExistingSignIn?.(name, async (account) => ((await signsIn(account.password)) ? account.password : undefined), {
+        title: "Sign in to Deluge",
+        description: "Deluge refused the password you gave. Enter it again so HexOS can use it.",
+        username: false,
+        app: "Deluge",
+      });
+      if (own === "refused") stopRefused(ctx, `Deluge refused the password you gave, so ${managerName} wasn't connected to it.`);
+      password = own;
+    } else {
+      for (const candidate of new Set([ctx.signIn?.password, saved?.password, DELUGE_STOCK_PASSWORD])) {
+        if (candidate && (await signsIn(candidate))) {
+          password = candidate;
+          break;
+        }
       }
     }
     if (!password) {
@@ -496,6 +737,7 @@ export const deluge = (ctx: HookContext) =>
       signIn: { known: async () => signIn, ask: async () => signIn },
       // Deluge's own folder in Downloads, which HexOS mounts in Deluge at the path the managers see it at
       preferences: DELUGE_FOLDERS,
+      folder: DELUGE_FOLDERS.completedDirectory,
     };
   });
 
@@ -529,14 +771,18 @@ export const sabnzbd = (ctx: HookContext) =>
     if (!apiKey) ctx.fail("HexOS couldn't read SABnzbd's API key yet. Try again once it has started.");
     // Listing the categories is what makes SABnzbd's own (movies, tv, audio, software) the first time
     const categories = async () => (await sabnzbdApi<{ categories: string[] }>(url, apiKey, { mode: "get_cats" })).categories;
+    // Where a category with no folder of its own finishes, which SABnzbd makes as it starts (cfg.py)
+    let completeDir: string | undefined;
     try {
       const { misc } = (await sabnzbdApi<{ config: SabnzbdConfig }>(url, apiKey, { mode: "get_config", section: "misc" })).config;
       // A SABnzbd HexOS didn't set up finishes downloads where the managers can see them
       for (const [keyword, stock] of Object.entries(SABNZBD_STOCK_FOLDERS) as Array<[keyof typeof SABNZBD_FOLDERS, string]>) {
         if (misc[keyword] === stock) {
           await sabnzbdApi(url, apiKey, { mode: "set_config", section: "misc", keyword, value: SABNZBD_FOLDERS[keyword] });
+          misc[keyword] = SABNZBD_FOLDERS[keyword];
         }
       }
+      if (typeof misc.complete_dir === "string") completeDir = misc.complete_dir.replace(/\/+$/, "");
       if (!(await categories()).includes(category)) {
         await sabnzbdApi(url, apiKey, { mode: "set_config", section: "categories", keyword: category });
       }
@@ -546,13 +792,16 @@ export const sabnzbd = (ctx: HookContext) =>
       ]);
     }
     if (!(await categories()).includes(category)) ctx.fail(`SABnzbd didn't make its ${category} category`);
-    return { name: "SABnzbd", implementation: "Sabnzbd", connection: { apiKey, urlBase: "" } };
+    // SABnzbd makes its API key at random when it first starts
+    return { name: "SABnzbd", implementation: "Sabnzbd", connection: { apiKey, urlBase: "" }, proof: "key", folder: completeDir };
   });
 
 // --- NZBGet ------------------------------------------------------------------
 
 /** What NZBGet's settings file starts with (nzbget.conf at v26.3, the version TrueNAS pins). */
 const NZBGET_STOCK = { username: "nzbget", password: "tegbzn6789", mainDir: "/downloads" };
+/** Sign-ins many NZBGets have: its own to start with, and the one HexOS gives it when nobody chose one. */
+const NZBGET_SHARED = [NZBGET_STOCK, { username: "admin", password: "admin" }];
 /** The Downloads folder HexOS gives NZBGet, which it also sees at /downloads. */
 const NZBGET_MAIN_DIR = "/downloads/nzbget";
 
@@ -582,14 +831,15 @@ async function nzbgetApi<T>(url: string, signIn: { username: string; password: s
 
 /**
  * NZBGet makes a category's folder at its first download, and until then the managers' health check
- * says the folder is missing. It's made now, worked out as the managers work it out (Nzbget.cs).
+ * says the folder is missing. It's made now, worked out as the managers work it out (Nzbget.cs), and
+ * returned when it's in NZBGet's own folder of Downloads.
  */
 async function makeCategoryFolder(
   url: string,
   signIn: { username: string; password: string },
   category: string,
   mounts: ContextMount[],
-) {
+): Promise<string | undefined> {
   const active = await nzbgetApi<NzbgetOption[]>(url, signIn, "config");
   const valueOf = (name: string) => active.find((option) => option.Name === name)?.Value ?? "";
   const index = active
@@ -601,13 +851,15 @@ async function makeCategoryFolder(
     if (valueOf("AppendCategoryDir") !== "no") folder = `${folder}/${category}`;
   }
   const downloads = mounts.find((m) => m.containerPath === NZBGET_MAIN_DIR);
-  if (!downloads || !folder.startsWith(`${NZBGET_MAIN_DIR}/`)) return;
+  if (!downloads || !folder.startsWith(`${NZBGET_MAIN_DIR}/`)) return undefined;
   const local = `${downloads.localPath}${folder.slice(NZBGET_MAIN_DIR.length)}`;
   const first = mkdirSync(local, { recursive: true });
-  if (!first) return;
-  for (let dir = local; dir.length >= first.length; dir = dir.slice(0, dir.lastIndexOf("/"))) {
-    chownSync(dir, APPS_UID, APPS_UID);
+  if (first) {
+    for (let dir = local; dir.length >= first.length; dir = dir.slice(0, dir.lastIndexOf("/"))) {
+      chownSync(dir, APPS_UID, APPS_UID);
+    }
   }
+  return folder;
 }
 
 export const nzbget = (ctx: HookContext) =>
@@ -618,6 +870,7 @@ export const nzbget = (ctx: HookContext) =>
       username: conf.match(/^ControlUsername=(.*)$/m)?.[1] ?? NZBGET_STOCK.username,
       password: conf.match(/^ControlPassword=(.*)$/m)?.[1] ?? NZBGET_STOCK.password,
     };
+    let folder: string | undefined;
     try {
       const options = await nzbgetApi<NzbgetOption[]>(url, signIn, "loadconfig");
       const changes: NzbgetOption[] = [];
@@ -650,7 +903,7 @@ export const nzbget = (ctx: HookContext) =>
         );
         if (!taken) throw new Error("NZBGet didn't take its new settings");
       }
-      await makeCategoryFolder(url, signIn, category, mounts);
+      folder = await makeCategoryFolder(url, signIn, category, mounts);
     } catch (error) {
       ctx.fail(`HexOS couldn't get NZBGet ready for ${managerName}. Try again once it's running.`, [
         { label: "Reason", value: error instanceof Error ? error.message : String(error) },
@@ -658,10 +911,13 @@ export const nzbget = (ctx: HookContext) =>
     }
     // NZBGet's own settings file says what it takes now, so it's what the manager is given
     const current = { username: signIn.username, password: signIn.password };
+    const shared = NZBGET_SHARED.some((each) => each.username === current.username && each.password === current.password);
     return {
       name: "NZBGet",
       implementation: "Nzbget",
       connection: { urlBase: "" },
       signIn: { known: async () => current, ask: async () => current },
+      proof: shared ? undefined : "sign-in",
+      folder,
     };
   });

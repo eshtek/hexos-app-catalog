@@ -1,0 +1,88 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": false,
+  "metadata": {
+    "name": "Pelican Panel",
+    "description": "A website for running game servers: start Minecraft, Valheim, Palworld and hundreds more from ready-made templates, then manage their files, consoles and backups. Its game servers run in Pelican Wings.",
+    "icon": "pelican/icon.svg",
+    "version": "1.0.0-rc.2",
+    "categories": ["games"],
+    "keywords": ["pelican", "pterodactyl", "game server", "game panel", "minecraft", "valheim", "palworld"],
+    "homepage": "https://pelican.dev/",
+    "sources": ["https://github.com/pelican-dev/panel"]
+  },
+  "script": {
+    "version": "1.0.1",
+    "changeLog": "Gives the panel its data folder before setting it up, so it can save its settings and database on a new folder"
+  },
+  "sign_in": {
+    "username": true,
+    "email": true
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GBRAM", "5GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30180]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pelican-panel/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/pelican/panel",
+      "tag": "1.0.0-rc.2@sha256:ac6e4262421a9ab0a7df4436e76a900e2c9cb5d1409c5153eb9e1c8acde184c3",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      { "name": "APP_URL", "value": "http://$SERVER_LAN_IP:$PORT(30180)" },
+      { "name": "XDG_DATA_HOME", "value": "/pelican-data" },
+      { "name": "BEHIND_PROXY", "value": "true" },
+      { "name": "DB_CONNECTION", "value": "sqlite" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": "$PORT(30180)", "container_port": 80, "protocol": "tcp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/pelican-data",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/pelican-panel/data"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "set-up-panel",
+      "title": "Set up Pelican Panel",
+      "description": "Creating your account and adding games",
+      "events": ["onAfterInstall"],
+      "script": "pelican/setup.ts",
+      "entrypoint": "setUpPanel",
+      "timeout": 900
+    }
+  ]
+}
