@@ -292,7 +292,7 @@
     {
       "id": "connect-sportarr",
       "title": "Connect to Sportarr",
-      "description": "Adds a Sports library to Plex for what Sportarr fetches.",
+      "description": "Adds a Sports library to Plex for what Sportarr fetches. What Sportarr adds or renames shows in it right away.",
       "kind": "connect",
       "requiresHooks": [
         "configure-plex"
@@ -317,7 +317,7 @@
       "rerun": "converge",
       "script": "plex/add_library.ts",
       "entrypoint": "sportarr",
-      "timeout": 180,
+      "timeout": 300,
       "retries": 0
     },
     {

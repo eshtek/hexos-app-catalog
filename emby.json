@@ -169,7 +169,7 @@
     {
       "id": "connect-sportarr",
       "title": "Connect to Sportarr",
-      "description": "Adds a Sports library to Emby for what Sportarr fetches.",
+      "description": "Adds a Sports library to Emby for what Sportarr fetches. What Sportarr adds or renames shows in it right away.",
       "kind": "connect",
       "conditions": [
         {

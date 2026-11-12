@@ -27,6 +27,7 @@ beforeEach(() => {
 });
 
 const TOKEN = "admin-token";
+const SPORTARR = "http://10.0.0.5:1867";
 type Server = "jellyfin" | "emby";
 const NAMES: Record<Server, string> = { jellyfin: "Jellyfin", emby: "Emby" };
 const LINKS = { jellyfin: jellyfinLibraries, emby: embyLibraries };
@@ -77,9 +78,21 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
     return existsSync(join(media, path.slice("/media".length)));
   };
 
+  // Sportarr, which Connect to Sportarr adds the server to once the library is there
+  // (media_server_sportarr.test.ts): it takes any connection and keeps it
+  const sportarrConfig = join(root, "sportarr", "config");
+  mkdirSync(sportarrConfig, { recursive: true });
+  writeFileSync(join(sportarrConfig, "config.xml"), "<Config><ApiKey>sportarr-key</ApiKey></Config>");
+  const connections: unknown[] = [];
+  const keys: Array<{ AppName: string; AccessToken: string; DateCreated: string }> = [];
+
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
+    if (url.origin === SPORTARR) {
+      if (url.pathname === "/api/notification" && method === "POST") connections.push(JSON.parse(String(init?.body)));
+      return Response.json(url.pathname === "/api/notification" && method === "GET" ? connections : { success: true });
+    }
     if (restartingNow) throw new TypeError("fetch failed");
     const path = url.pathname.replace(/^\/emby/, "");
     const headers = new Headers(init?.headers);
@@ -87,6 +100,10 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
     if (path === "/System/Info/Public") return Response.json({ Version: "1" });
     if (token !== TOKEN) return new Response(null, { status: 401 });
     if (path === "/System/Configuration") return Response.json({});
+    if (path === "/Auth/Keys") {
+      if (method === "POST") keys.push({ AppName: "Sportarr", AccessToken: "sportarr-media-key", DateCreated: "2026-11-12" });
+      return Response.json({ Items: keys });
+    }
     if (path === "/Library/VirtualFolders" && method === "GET") {
       lists++;
       if (options.holdSecondList && lists === 2) {
@@ -129,6 +146,11 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
             if (options.media === "after restart") stale = false;
           },
         }),
+    getInstalledAppUrl: async () => SPORTARR,
+    getInstalledAppMounts: async () => [
+      { containerPath: "/config", hostPath: "/mnt/pool/apps/sportarr/config", localPath: sportarrConfig },
+      { containerPath: "/media/sports", hostPath: "/mnt/pool/Media/sports", localPath: join(media, "sports") },
+    ],
     registerCheckpoints: async () => {},
     emitCheckpoint: async () => {},
     updateCheckpointMessage: async () => {},
@@ -141,15 +163,17 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
   } as unknown as HookContext;
   // What HexOS left in the library folders: nothing of its own once the link is done
   const leftovers = () => readdirSync(media, { recursive: true }).map(String).filter((entry) => entry.includes(".hexos"));
-  return { ctx, libraries, restarts, looks, leftovers, media };
+  return { ctx, libraries, restarts, looks, leftovers, media, connections };
 }
 
 for (const server of ["jellyfin", "emby"] as const) {
   const name = NAMES[server];
 
   test(`${name}: a Sports folder it can't see inside gets one restart and a second look, then the library is added`, async () => {
-    const { ctx, libraries, restarts, looks, leftovers } = fakes(server, "sportarr", { media: "after restart" });
+    const { ctx, libraries, restarts, looks, leftovers, connections } = fakes(server, "sportarr", { media: "after restart" });
     await LINKS[server].sportarr(ctx);
+    // Sportarr gets the server once the library is there
+    expect(connections).toHaveLength(1);
     // The library folder, then HexOS's own in it, before the restart; HexOS's own again after
     expect(restarts).toEqual([2]);
     expect(looks).toHaveLength(3);
@@ -177,12 +201,13 @@ for (const server of ["jellyfin", "emby"] as const) {
   });
 
   test(`${name}: a folder still missing after the restart fails the link with what to do, and no library is added`, async () => {
-    const { ctx, libraries, restarts, leftovers } = fakes(server, "sportarr", { media: "hidden" });
+    const { ctx, libraries, restarts, leftovers, connections } = fakes(server, "sportarr", { media: "hidden" });
     await expect(LINKS[server].sportarr(ctx)).rejects.toThrow(
       `${name} still can't see your Sports folder after HexOS restarted it. Stop ${name} and start it again, then run Connect to Sportarr again.`,
     );
     expect(restarts).toEqual([2]);
     expect(libraries).toEqual([]);
+    expect(connections).toEqual([]);
     expect(leftovers()).toEqual([]);
   });
 
