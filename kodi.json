@@ -1,0 +1,118 @@
+{
+  "version": 6,
+  "custom": true,
+  "metadata": {
+    "name": "Kodi",
+    "description": "Play your movies, shows and music on the TV plugged into this server. Kodi draws straight through the server's own graphics card, so no other computer or streaming box is needed. Your Movies, Shows and Music folders are in its library from the first start, and your Photos are ready to browse.",
+    "icon": "kodi/icon.svg",
+    "version": "21.2",
+    "categories": ["media"],
+    "keywords": ["kodi", "tv", "media player", "htpc", "hdmi"],
+    "screenshots": ["kodi/screenshot.jpg"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Kodi on the TV plugged into the server, through its Intel, AMD or NVIDIA graphics card."
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "Media", "Photos", "Music", "Movies", "Shows", "Videos"],
+    "specifications": ["2CORE", "1GB", "DISPLAY"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [8080]
+  },
+  "installation_questions": [
+    {
+      "question": "Remote control password",
+      "description": "For Kodi's web remote and phone remotes such as Kore. The user name is kodi.",
+      "type": "password",
+      "key": "remote_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(Media)", "network_share": true },
+    { "path": "$LOCATION(Photos)", "network_share": true },
+    { "path": "$LOCATION(Music)", "network_share": true },
+    { "path": "$LOCATION(Movies)", "network_share": true },
+    { "path": "$LOCATION(Shows)", "network_share": true },
+    { "path": "$LOCATION(Videos)", "network_share": true },
+    { "path": "$LOCATION(ApplicationsPerformance)/kodi/config", "snapshot": { "id": "config" } }
+  ],
+  "app_values": {
+    "image": { "repository": "eshtek/kodi", "tag": "21.2-1", "pull_policy": "missing" },
+    "host_network": true,
+    "restart_policy": "unless-stopped",
+    "devices": "$DISPLAY_DEVICES()",
+    "envs": [
+      { "name": "HEXOS_DISPLAY_PCI", "value": "$DISPLAY_GPU_PCI()" },
+      { "name": "HEXOS_DISPLAY_PORT", "value": "$DISPLAY_PORT()" },
+      { "name": "KODI_WEB_PASSWORD", "value": "$QUESTION(remote_password)" },
+      { "name": "KODI_WEB_PORT", "value": "$PORT(8080)" }
+    ],
+    "portals": [
+      {
+        "name": "Remote",
+        "scheme": "http",
+        "use_node_ip": true,
+        "host": "",
+        "port": "$PORT(8080)",
+        "path": "/"
+      }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/config",
+        "host_path_config": { "path": "$LOCATION(ApplicationsPerformance)/kodi/config" }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/run/udev",
+        "read_only": true,
+        "host_path_config": { "path": "/run/udev" }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/media/media",
+        "read_only": true,
+        "host_path_config": { "path": "$LOCATION(Media)" }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/media/movies",
+        "read_only": true,
+        "host_path_config": { "path": "$LOCATION(Movies)" }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/media/shows",
+        "read_only": true,
+        "host_path_config": { "path": "$LOCATION(Shows)" }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/media/videos",
+        "read_only": true,
+        "host_path_config": { "path": "$LOCATION(Videos)" }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/media/music",
+        "read_only": true,
+        "host_path_config": { "path": "$LOCATION(Music)" }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/media/photos",
+        "read_only": true,
+        "host_path_config": { "path": "$LOCATION(Photos)" }
+      }
+    ],
+    "resources": {
+      "limits": { "cpus": 2, "memory": 4096 },
+      "gpus": "$DISPLAY_GPU_CONFIG()"
+    }
+  }
+}

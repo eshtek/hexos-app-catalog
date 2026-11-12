@@ -1,0 +1,161 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": false,
+  "metadata": {
+    "name": "Valheim",
+    "description": "A collaborative exploration and survival game for 1-10 players, set in a procedurally generated afterlife inspired by Viking culture. Battle, build, and conquer your way to a saga worthy of Odin's patronage! Supports crossplay between PC and consoles.",
+    "icon": "valheim/icon.png",
+    "version": "1.4.1",
+    "categories": ["games"],
+    "screenshots": [
+      "valheim/screenshot-1.jpg",
+      "valheim/screenshot-2.jpg",
+      "valheim/screenshot-3.jpg",
+      "valheim/screenshot-4.jpg",
+      "valheim/screenshot-5.jpg",
+      "valheim/screenshot-6.jpg",
+      "valheim/screenshot-7.jpg",
+      "valheim/screenshot-8.jpg"
+    ],
+    "keywords": ["valheim", "game server", "dedicated server", "crossplay", "multiplayer", "steam", "xbox"],
+    "homepage": "https://www.valheimgame.com/",
+    "sources": ["https://github.com/community-valheim-tools/valheim-server-docker"]
+  },
+  "script": {
+    "version": "1.1.1",
+    "changeLog": "The server notes who joins and leaves, and the world it runs, so the app card shows who's online."
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "4GBRAM", "2GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [2456, 2457, 2458],
+    "game_port": 2456,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "Server name",
+      "type": "text",
+      "key": "server_name",
+      "required": true,
+      "default": "HexOS Valheim"
+    },
+    {
+      "question": "Password",
+      "description": "Players type it when they join. At least 5 characters, and not part of the server name.",
+      "type": "password",
+      "key": "server_password",
+      "required": true
+    },
+    {
+      "question": "World name",
+      "description": "Changing it later starts a new world. The old one stays on the server.",
+      "type": "text",
+      "key": "world_name",
+      "required": true,
+      "default": "Midgard"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "worlds"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/server",
+      "owner": {
+        "user": "apps"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/community-valheim-tools/valheim-server",
+      "tag": "1.4.1@sha256:f34d67ba8023e343b10ffda0144759a8c8d986f276510460315a01051bed8a6d",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      { "name": "SERVER_NAME", "value": "$QUESTION(server_name)" },
+      { "name": "SERVER_PASS", "value": "$QUESTION(server_password)" },
+      { "name": "WORLD_NAME", "value": "$QUESTION(world_name)" },
+      { "name": "CROSSPLAY", "value": "true" },
+      { "name": "SERVER_PUBLIC", "value": "false" },
+      { "name": "PUID", "value": "568" },
+      { "name": "PGID", "value": "568" },
+      { "name": "VALHEIM_LOG_FILTER_CONTAINS_HexosSession", "value": "with join code" },
+      { "name": "ON_VALHEIM_LOG_FILTER_CONTAINS_HexosSession", "value": "cat > /config/hexos-session.txt" },
+      { "name": "VALHEIM_LOG_FILTER_CONTAINS_HexosNewCode", "value": "Created new join code" },
+      { "name": "ON_VALHEIM_LOG_FILTER_CONTAINS_HexosNewCode", "value": "cat > /config/hexos-session.txt" },
+      { "name": "VALHEIM_LOG_FILTER_CONTAINS_HexosPlayerIn", "value": "Got character ZDOID from" },
+      { "name": "ON_VALHEIM_LOG_FILTER_CONTAINS_HexosPlayerIn", "value": "cat >> /config/hexos-players.txt" },
+      { "name": "VALHEIM_LOG_FILTER_CONTAINS_HexosPlayerOut", "value": "Destroying abandoned non persistent zdo" },
+      { "name": "ON_VALHEIM_LOG_FILTER_CONTAINS_HexosPlayerOut", "value": "cat >> /config/hexos-players.txt" },
+      { "name": "PRE_SERVER_RUN_HOOK", "value": "rm -f /config/hexos-session.txt /config/hexos-players.txt; printf '%s' \"${WORLD_NAME}\" > /config/hexos-world.txt" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": "$PORT(2456)", "container_port": 2456, "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(2457)", "container_port": 2457, "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(2458)", "container_port": 2458, "protocol": "udp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/config",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/config"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/opt/valheim",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(valheim)/server"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": {
+        "cpus": "$CPUS(50%, 2)",
+        "memory": "$MEMORY(50%, 6144)"
+      }
+    }
+  },
+  "widgets": [
+    {
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's online in this server's world, and the code friends join it with.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "valheim"
+        }
+      ],
+      "background": { "field": "online" },
+      "slots": [
+        { "type": "stat", "field": "count" },
+        { "type": "list", "field": "online", "rows": 1 }
+      ],
+      "settings": [{ "field": "code" }],
+      "script": "valheim/widget_players.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}

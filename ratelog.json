@@ -8,7 +8,7 @@
     {
       "question": "Input your TMDB api key",
       "description": "A TMDB API key can be obtained at https://www.themoviedb.org/settings/api",
-      "type": "text",
+      "type": "password",
       "key": "tmdb_api_key",
       "required": true
     }
@@ -35,7 +35,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30466
+        "port_number": "$PORT(30466)"
       }
     },
     "storage": {

@@ -1,0 +1,87 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "1CORE"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      21115,
+      21116
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/rust-desk/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "nat_type_test_port": {
+        "bind_mode": "published",
+        "port_number": 21115
+      },
+      "id_reg_hole_punch_port": {
+        "bind_mode": "published",
+        "port_number": 21116
+      },
+      "server_web_clients_port": {
+        "bind_mode": "",
+        "port_number": 21118
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/rust-desk/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 1,
+        "memory": 512
+      }
+    }
+  },
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "client-settings",
+      "title": "Client settings",
+      "description": "What to enter in RustDesk on each device, under Settings, Network, ID/Relay server.",
+      "refresh": 300,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "rust-desk"
+        }
+      ],
+      "slots": [
+        {
+          "type": "list",
+          "field": "settings",
+          "rows": 2
+        }
+      ],
+      "script": "rust-desk/widget_client_settings.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "LanguageTool checks spelling and grammar in your documents."
+  },
+  "requirements": {
+    "locations": [],
+    "specifications": [
+      "2CORE",
+      "1GBRAM"
+    ],
+    "permissions": [],
+    "ports": [
+      30449
+    ]
+  },
+  "app_values": {
+    "languagetool": {
+      "java_xms_mb": 256,
+      "java_xmx_mb": 1024
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30449)"
+      }
+    },
+    "storage": {
+      "ngrams": {
+        "type": "ix_volume",
+        "ix_volume_config": {
+          "acl_enable": false,
+          "dataset_name": "ngrams"
+        }
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}

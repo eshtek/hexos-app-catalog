@@ -1,0 +1,18 @@
+{
+  "type": "collection",
+  "version": 1,
+  "internal": true,
+  "name": "Game server panel",
+  "description": "Run Minecraft, Rust and Source game servers from one website, each in its own container.",
+  "groups": [
+    {
+      "id": "panel",
+      "type": "fixed",
+      "title": "Game server panel",
+      "options": [
+        { "app": "pterodactyl-panel", "summary": "The website" },
+        { "app": "pterodactyl-wings", "summary": "Runs the game servers" }
+      ]
+    }
+  ]
+}

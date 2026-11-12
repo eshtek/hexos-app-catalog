@@ -1,5 +1,8 @@
 import type { HookContext, PlexOAuthResult } from "../_lib/hook_context";
 
+/** The most a stream outside the owner's network gets. */
+const REMOTE_BITRATE_LIMIT_KBPS = 20_000;
+
 export async function afterInstall(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "plexReady", message: "Starting Plex server" },
@@ -20,17 +23,22 @@ export async function afterInstall(ctx: HookContext) {
   await ctx.waitForApp("/identity", { headers: { Accept: "application/json" } });
   await ctx.emitCheckpoint("plexReady");
 
-  if (await isServerClaimed(authToken, ctx)) {
+  // Run again from the card or a collection, a server already claimed keeps the name it has
+  const claimedBefore = await isServerClaimed(authToken, ctx);
+  if (claimedBefore) {
     ctx.log("Server already claimed, skipping.");
   } else {
     await claimServer(authToken, ctx);
   }
   await ctx.emitCheckpoint("serverClaimed");
 
-  await setPreferences(authToken, ctx, serverName);
+  await setPreferences(authToken, ctx, claimedBefore ? undefined : serverName);
   await ctx.emitCheckpoint("prefsSet");
 
   await createLibraries(authToken, ctx);
+
+  // Plex uses the GPU by itself on Plex Pass, so this only readies the firmware for the next restart
+  await ctx.prepareHardwareVideo?.().catch((error: unknown) => ctx.log(`GPU firmware not set up: ${error}`));
 }
 
 function getServerName(ctx: HookContext): string {
@@ -96,11 +104,17 @@ async function claimServer(authToken: string, ctx: HookContext) {
   ctx.log("Fallback claim applied.");
 }
 
-async function setPreferences(authToken: string, ctx: HookContext, serverName: string) {
+export async function setPreferences(authToken: string, ctx: HookContext, serverName: string | undefined) {
   const prefs: Record<string, string | number> = {
     AcceptedEULA: 1,
     PublishServerOnPlexOnlineKey: 1,
-    FriendlyName: serverName,
+    // Only for a server just claimed: a rerun leaves an owner's name and limit as they are
+    ...(serverName ? { FriendlyName: serverName, WanPerStreamMaxUploadRate: REMOTE_BITRATE_LIMIT_KBPS } : {}),
+    // Plex scans only by hand until these are on, so what Radarr and Sonarr download would never appear
+    FSEventLibraryUpdatesEnabled: 1,
+    FSEventLibraryPartialScanEnabled: 1,
+    ScheduledLibraryUpdatesEnabled: 1,
+    ScheduledLibraryUpdateInterval: 43200,
   };
 
   for (const [key, value] of Object.entries(prefs)) {

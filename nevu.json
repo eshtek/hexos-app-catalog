@@ -1,5 +1,6 @@
 {
   "version": 5,
+  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial script"
@@ -26,7 +27,7 @@
   "network": {
     "web_port": {
       "bind_mode": "published",
-      "port_number": 30267
+      "port_number": "$PORT(30267)"
     }
   },
     "resources": {

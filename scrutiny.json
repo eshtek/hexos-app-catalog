@@ -28,11 +28,11 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 31054
+        "port_number": "$PORT(31054)"
       },
       "influxdb_port": {
         "bind_mode": "published",
-        "port_number": 31055
+        "port_number": "$PORT(31055)"
       },
       "host_network": false
     },
@@ -59,7 +59,7 @@
       }
     }
   },
-  "widgetsSchema": 2,
+  "widgetsSchema": 3,
   "widgets": [
     {
       "id": "disk-health",
@@ -73,28 +73,28 @@
           "app": "scrutiny"
         }
       ],
-      "sizes": {
-        "small": {
-          "slots": [
-            {
-              "type": "stat",
-              "field": "passing"
-            }
-          ]
+      "slots": [
+        {
+          "type": "stat",
+          "field": "passing"
         },
-        "large": {
+        {
+          "type": "list",
+          "field": "disks",
+          "rows": 2
+        }
+      ],
+      "slides": [
+        {
+          "title": "Temperatures",
           "slots": [
             {
-              "type": "stat",
-              "field": "passing"
-            },
-            {
-              "type": "list",
-              "field": "disks"
+              "type": "chart",
+              "field": "temps"
             }
           ]
         }
-      },
+      ],
       "script": "scrutiny/widget_disk_health.ts",
       "entrypoint": "run",
       "timeout": 10

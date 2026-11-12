@@ -1,0 +1,100 @@
+{
+  "version": 6,
+  "custom": true,
+  "metadata": {
+    "name": "Bindarr",
+    "description": "Keep track of your Pokémon, Magic: The Gathering, Lorcana and Riftbound cards. See what they're worth, which binder page each one is on, and which deck it's in.",
+    "icon": "bindarr/icon.svg",
+    "version": "1.9.0",
+    "categories": ["productivity"],
+    "keywords": ["trading cards", "tcg", "pokemon", "magic the gathering", "lorcana", "riftbound", "collection", "binder"],
+    "homepage": "https://thenotoriousjeremy.github.io/bindarr/",
+    "sources": ["https://github.com/thenotoriousJeremy/bindarr"],
+    "screenshots": []
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Install Bindarr 1.9.0, with its collection, backups and scan catalogs kept in one folder."
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GB", "1GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30470, 30471]
+  },
+  "installation_questions": [
+    {
+      "question": "pokemontcgapi.com API key",
+      "description": "Optional. Bindarr only needs it if you choose pokemontcgapi.com as the Pokémon card source in its Admin settings. Leave it empty to skip.",
+      "type": "password",
+      "key": "pokemontcgapi_key",
+      "required": false
+    }
+  ],
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/bindarr/data",
+      "snapshot": { "id": "data" }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/thenotoriousjeremy/bindarr",
+      "tag": "1.9.0@sha256:220060aefff4f94cdfc2fd4873ac9198c6dd9edb32ec604354a7fab3912e0fa6",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      {
+        "name": "POKEMONTCGAPI_KEY",
+        "value": "$IF($QUESTION(pokemontcgapi_key), $QUESTION(pokemontcgapi_key), \"\")"
+      }
+    ],
+    "ports": [
+      {
+        "bind_mode": "published",
+        "port_number": "$PORT(30470)",
+        "container_port": 3001,
+        "protocol": "tcp",
+        "host_ips": []
+      },
+      {
+        "bind_mode": "published",
+        "port_number": "$PORT(30471)",
+        "container_port": 3443,
+        "protocol": "tcp",
+        "host_ips": []
+      }
+    ],
+    "portals": [
+      {
+        "name": "Web UI",
+        "scheme": "http",
+        "use_node_ip": true,
+        "host": "",
+        "port": "$PORT(30470)",
+        "path": "/"
+      },
+      {
+        "name": "Web UI (HTTPS, for card scanning)",
+        "scheme": "https",
+        "use_node_ip": true,
+        "host": "",
+        "port": "$PORT(30471)",
+        "path": "/"
+      }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/app/database",
+        "host_path_config": { "path": "$LOCATION(ApplicationsPerformance)/bindarr/data" }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": { "cpus": "$CPUS(50%, 2)", "memory": "$MEMORY(10%, 2048)" }
+    }
+  }
+}

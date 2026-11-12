@@ -1,10 +1,23 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Upgraded to V4 install script format"
+    "version": "1.4.1",
+    "changeLog": "Makes a folder in Downloads for each download client as it installs, so Lidarr sees what a client you add later downloads"
+  },
+  "sign_in": {
+    "username": true
   },
   "requirements": {
+    "instances": "many",
+    "shared_folders": [
+      "$LOCATION(Downloads)/qbittorrent",
+      "$LOCATION(Downloads)/deluge",
+      "$LOCATION(Downloads)/sabnzbd",
+      "$LOCATION(Downloads)/nzbget"
+    ],
+    "copy_libraries": [
+      "Music"
+    ],
     "locations": [
       "ApplicationsPerformance",
       "ApplicationsCapacity",
@@ -18,7 +31,9 @@
     "permissions": [
       "READ_WRITE_LOCATIONS"
     ],
-    "ports": [30071]
+    "ports": [
+      30071
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -39,22 +54,34 @@
       "path": "$LOCATION(Downloads)/qbittorrent"
     },
     {
-      "path": "$LOCATION(ApplicationsPerformance)/lidarr/config",
-      "snapshot": { "id": "config" }
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(lidarr)/config",
+      "snapshot": {
+        "id": "config"
+      }
     }
   ],
   "app_values": {
     "storage": {
-      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/lidarr/config)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(lidarr)/config)",
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
-        "$MOUNTED_HOST_PATH($LOCATION(Music), /music)"
+        "$MOUNTED_HOST_PATH($LOCATION(Music), /music)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)"
       ]
     },
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30071
+        "port_number": "$PORT(30071)"
       }
     },
     "resources": {
@@ -63,5 +90,149 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "seed-sign-in",
+      "title": "Set Lidarr's sign-in",
+      "description": "Creating admin account",
+      "events": [
+        "onBeforeInstall"
+      ],
+      "optional": true,
+      "script": "servarr/configure.ts",
+      "entrypoint": "seed",
+      "timeout": 60
+    },
+    {
+      "id": "configure-lidarr",
+      "title": "Pre-configure Lidarr",
+      "description": "Setting up Lidarr",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "servarr/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-qbittorrent",
+      "title": "Connect to qBittorrent",
+      "description": "Sends what Lidarr grabs to qBittorrent.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "lidarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "qbittorrent",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-deluge",
+      "title": "Connect to Deluge",
+      "description": "Sends what Lidarr grabs to Deluge.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "lidarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "deluge",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-sabnzbd",
+      "title": "Connect to SABnzbd",
+      "description": "Sends what Lidarr grabs to SABnzbd.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "lidarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "sabnzbd",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-nzbget",
+      "title": "Connect to NZBGet",
+      "description": "Sends what Lidarr grabs to NZBGet.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "lidarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "servarr/connect_download_client.ts",
+      "entrypoint": "nzbget",
+      "timeout": 900,
+      "retries": 0
+    }
+  ]
 }

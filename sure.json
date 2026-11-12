@@ -43,7 +43,7 @@
         "network": {
             "web_port": {
                 "bind_mode": "published",
-                "port_number": 30404
+                "port_number": "$PORT(30404)"
             }
         },
         "resources": {
