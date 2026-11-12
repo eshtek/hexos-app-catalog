@@ -19,6 +19,9 @@ const hooks = scripts.flatMap(({ app, script }) =>
   script.version === 6 && Array.isArray(script.hooks) ? (script.hooks as Hook[]).map((hook) => ({ app, hook })) : [],
 );
 const named = (list: Array<{ app: string; hook: Hook }>) => list.map(({ app, hook }) => `${app} ${hook.id}`);
+const sentencesOf = (summary: unknown) => String(summary).split(/(?<=\.)\s+/);
+/** The row's line sits in a narrow column beside its button, so a long one runs to five lines on a phone. */
+const LONGEST_SUMMARY = 150;
 
 const setup = (over: object = {}) => ({
   id: "configure-app",
@@ -41,14 +44,23 @@ describe("the catalog's hooks", () => {
     expect(named(hooks.filter(({ hook }) => hookSummaryProblems(hook).length > 0))).toEqual([]);
   });
 
-  test("a summary is one or two whole sentences, and never the step's label again", () => {
+  test("a summary is one to three whole sentences, and never the step's label again", () => {
     const summarised = hooks.filter(({ hook }) => hook.summary !== undefined);
     const wrong = summarised.filter(({ hook }) => {
       const summary = String(hook.summary);
-      const sentences = summary.split(/(?<=\.)\s+/);
-      return !summary.endsWith(".") || summary.includes("\u2014") || summary === hook.description || sentences.length > 2;
+      return !summary.endsWith(".") || summary.includes("\u2014") || summary === hook.description || sentencesOf(summary).length > 3;
     });
     expect(named(wrong)).toEqual([]);
+  });
+
+  test(`a summary is no longer than ${LONGEST_SUMMARY} characters`, () => {
+    const summarised = hooks.filter(({ hook }) => hook.summary !== undefined);
+    expect(named(summarised.filter(({ hook }) => String(hook.summary).length > LONGEST_SUMMARY))).toEqual([]);
+  });
+
+  test("a summary gives each thought a sentence of its own, with no semicolon to join two", () => {
+    const summarised = hooks.filter(({ hook }) => hook.summary !== undefined);
+    expect(named(summarised.filter(({ hook }) => String(hook.summary).includes(";")))).toEqual([]);
   });
 
   test("a summary names no tab, since the row moved from Connections to Customize and an older deck still draws it there", () => {
@@ -60,14 +72,23 @@ describe("the catalog's hooks", () => {
     const jellyfin = scripts.find(({ app }) => app === "jellyfin")?.script;
     const hook = (jellyfin?.hooks as Hook[]).find((each) => each.id === jellyfin?.requirements.gpu_hook);
     expect(hook?.summary).toContain("graphics card");
-    expect(hook?.summary).toContain("20 Mbps");
+    expect(sentencesOf(hook?.summary)).toContainEqual(expect.stringMatching(/^Also limits streams from outside your network to 20 Mbps\b/));
     // Its title is its install step's label, which a description would replace
     expect(hook?.description).toBeUndefined();
   });
 
-  test.each(["emby", "plex"])("Pre-configure %s says it limits streams from outside the network too", (app) => {
+  test("that hook's summary reads true on a server with no card Jellyfin could use, where it is its row's line", () => {
+    const jellyfin = scripts.find(({ app }) => app === "jellyfin")?.script;
+    const hook = (jellyfin?.hooks as Hook[]).find((each) => each.id === jellyfin?.requirements.gpu_hook);
+    expect(sentencesOf(hook?.summary)[0]).toBe("Sets Jellyfin's video settings for its graphics card, or for none.");
+    // A card it would match or test is one the server may not have
+    expect(hook?.summary).not.toMatch(/\b(match|test)\b/);
+  });
+
+  test.each(["emby", "plex"])("Pre-configure %s says it limits streams from outside the network too, in a sentence of its own", (app) => {
     const script = scripts.find((each) => each.app === app)?.script;
-    expect((script?.hooks as Hook[]).find((each) => each.id === `configure-${app}`)?.summary).toContain("20 Mbps");
+    const summary = (script?.hooks as Hook[]).find((each) => each.id === `configure-${app}`)?.summary;
+    expect(sentencesOf(summary)).toContain("Also limits streams from outside your network to 20 Mbps.");
   });
 });
 
@@ -139,4 +160,5 @@ describe("validate.ts", () => {
     expect(output).toContain("hooks[0]: summary must be text");
     expect(code).toBe(1);
   });
+
 });

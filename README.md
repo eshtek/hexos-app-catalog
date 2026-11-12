@@ -220,16 +220,16 @@ A row reads three fields of its hook:
   "id": "configure-radarr",
   "title": "Pre-configure Radarr",
   "description": "Setting up Radarr",
-  "summary": "Sets up Radarr's sign-in, Movies folder and file renaming. Run it again if Radarr has no Movies folder; it keeps your other settings.",
+  "summary": "Sets up Radarr's sign-in, Movies folder and file renaming. Run it again if Radarr has no Movies folder. It keeps your other settings.",
   "events": ["onAfterInstall", "userAction"],
   "rerun": "converge",
   "surfaces": ["card"]
 }
 ```
 
-Write a summary as one or two short sentences, in plain words, for an owner who isn't technical. The first says what the action sets up. The second says when to run it again and what a second run keeps, or that a second run changes nothing. Read the script before writing it, since Pre-configure does different things in each app. A run from the row gets no sign-in (`ctx.signIn` is undefined there), so a setup that only acts on the sign-in the owner chose at install changes nothing from its row, and its summary says so (Audiobookshelf, Kavita, Open WebUI, SABnzbd). A summary also names a second thing the hook does when its owner would want to know: Pre-configure Emby, Pre-configure Plex and Jellyfin's `hardware-transcoding` limit streams from outside the owner's network to 20 Mbps.
+Write a summary as one to three short sentences, in plain words, for an owner who isn't technical. Keep it under 150 characters: the line sits in a narrow column beside the row's button. Give each thought a sentence of its own, with no semicolon. The first says what the action sets up. The next says when to run it again and what a second run keeps, or that a second run changes nothing. Read the script before writing it, since Pre-configure does different things in each app. A run from the row gets no sign-in (`ctx.signIn` is undefined there), so a setup that only acts on the sign-in the owner chose at install changes nothing from its row, and its summary says so (Audiobookshelf, Kavita, Open WebUI, SABnzbd). A summary also names a second thing the hook does when its owner would want to know, in a sentence of its own: Pre-configure Emby, Pre-configure Plex and Jellyfin's `hardware-transcoding` limit streams from outside the owner's network to 20 Mbps.
 
-Leave `description` as it is when you add a summary. The install still shows it as the step's label, and a box from before `summary` shows it on the row. The summary is read from the catalog's current script, so it reaches installed apps at the next sync and needs no new `script.version`. `bun run validate` refuses a hook that runs at an install or an upgrade and from its app's card with no summary, and a summary that isn't text. `bun test _lib/hook_summary.test.ts` holds each summary to one or two sentences that name no tab.
+Leave `description` as it is when you add a summary. The install still shows it as the step's label, and a box from before `summary` shows it on the row. The summary is read from the catalog's current script, so it reaches installed apps at the next sync and needs no new `script.version`. `bun run validate` refuses a hook that runs at an install or an upgrade and from its app's card with no summary, and a summary that isn't text. `bun test _lib/hook_summary.test.ts` holds each summary to three sentences and 150 characters that name no tab.
 
 ## Values on the Settings tab
 

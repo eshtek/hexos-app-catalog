@@ -150,7 +150,7 @@
       "id": "configure-plex",
       "title": "Pre-configure Plex",
       "description": "Setting up Plex server",
-      "summary": "Links Plex to your Plex account, adds a library for each media folder and limits streams from outside your network to 20 Mbps. Run it again to add a missing library.",
+      "summary": "Links Plex to your Plex account and adds a library for each media folder. Also limits streams from outside your network to 20 Mbps.",
       "events": [
         "onAfterInstall",
         "userAction"
