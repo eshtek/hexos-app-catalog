@@ -222,7 +222,7 @@ describe("OpenCloud's install questions", () => {
     for (const question of questions.filter((question) => question.key.startsWith("app_"))) {
       expect(question.type).toBe("boolean");
       expect(question.default).toBe(false);
-      expect(question.group).toBe("Web apps");
+      expect(question.group).toBe("OpenCloud / Web apps");
     }
   });
 

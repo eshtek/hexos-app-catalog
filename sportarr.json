@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.2.0",
-    "changeLog": "Shows what's on next, what's live and what's downloading on its dashboard card."
+    "version": "1.2.1",
+    "changeLog": "The dashboard card stays plain while nothing is on this week and nothing is downloading"
   },
   "sign_in": {
     "username": true

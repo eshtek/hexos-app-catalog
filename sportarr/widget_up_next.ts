@@ -8,7 +8,8 @@ import type { WidgetContext, WidgetFieldValue, WidgetListEntry, WidgetQueryResul
  * Sportarr's dashboard card. The main view shows the events that run now, each with a running
  * clock, then the next monitored events. While the slides have data, HexOS shows only the first
  * of them. One slide shows the download queue. One shows the library and how many events fall on
- * each day this week. The picture is the league's badge. Sportarr's API key comes from its
+ * each day this week. With nothing on this week and nothing downloading, the card stays plain.
+ * The picture is the league's badge. Sportarr's API key comes from its
  * settings file, through the app's mount, or through the Docker socket on a box that can't see
  * the mount, as Plex's card does. Read at Sportarr 4.1.11, the version TrueNAS pins.
  */
@@ -425,6 +426,15 @@ export async function run(ctx: WidgetContext, now: Date = new Date()): Promise<W
     ...running.map((event) => liveEntry(event, now) as WidgetListEntry),
     ...upNextEntries(events, now, tz),
   ].slice(0, ENTRIES_MAX);
+  const queueItems = Array.isArray(queue)
+    ? (queue as QueueItem[])
+    : Array.isArray((queue as { records?: unknown } | undefined)?.records)
+      ? ((queue as { records: QueueItem[] }).records)
+      : undefined;
+  const queued = typeof stats?.queued === "number" ? stats.queued : queueItems ? queueEntries(queueItems).length : undefined;
+  // HexOS opens the card for any field with content, so a week with nothing on and nothing
+  // downloading sends none and the card stays the plain one
+  if (entries.length === 0 && !queued && !(queueItems && queueEntries(queueItems).length)) return { fields: {} };
   if (entries.length === 0) {
     const later = await get(`/calendar?start=${iso(now.getTime() + WEEK)}&end=${iso(now.getTime() + 60 * DAY)}`);
     first = upcoming(Array.isArray(later) ? (later as SportarrEvent[]) : [], now)[0];
@@ -436,13 +446,7 @@ export async function run(ctx: WidgetContext, now: Date = new Date()): Promise<W
 
   const count = (n: number) => new Intl.NumberFormat("en-US").format(n);
   const fields: Record<string, WidgetFieldValue> = { events: { type: "list", entries } };
-  const queueItems = Array.isArray(queue)
-    ? (queue as QueueItem[])
-    : Array.isArray((queue as { records?: unknown } | undefined)?.records)
-      ? ((queue as { records: QueueItem[] }).records)
-      : undefined;
   if (queueItems) fields.queue = { type: "list", entries: queueEntries(queueItems).slice(0, 3) };
-  const queued = typeof stats?.queued === "number" ? stats.queued : queueItems ? queueEntries(queueItems).length : undefined;
   if (queued !== undefined) fields.queued = { type: "stat", label: "In queue", value: count(queued) };
   if (typeof stats?.downloaded === "number") fields.downloaded = { type: "stat", label: "Downloaded", value: count(stats.downloaded) };
   if (typeof stats?.wanted === "number") fields.wanted = { type: "stat", label: "Wanted", value: count(stats.wanted) };
