@@ -58,6 +58,8 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Nginx Proxy Manager](nginx-proxy-manager.json) | Gives your apps their own web addresses, with HTTPS |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
+| [OpenCloud](opencloud.json) | File sync and sharing, a folder per person |
+| [PairDrop](pairdrop.json) | Transfer files cross-clatform |
 | [PairDrop](pairdrop.json) | Transfer files cross-platform |
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
