@@ -86,6 +86,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Sure](sure.json) | Financial planning software |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
+| [Tailscale](tailscale.json) | Private access to the server from anywhere |
 | [Tautulli](tautulli.json) | Watch history and stats for Plex |
 | [UniFi Protect Backup](unifi-protect-backup.json) | Backs up UniFi Protect camera events |
 | [Trilium Notes](trilium-notes.json) | Notes and personal knowledge base |
