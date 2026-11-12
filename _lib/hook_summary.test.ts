@@ -7,7 +7,8 @@ import { hookSummaryProblems, needsSummary } from "./hook_summary";
 // An app's own actions (Pre-configure, Jellyfin's transcoding) have rows on its Customize tab. A
 // row shows the hook's summary while nothing runs, and without one it shows the description, which
 // for these is the label of an install step ("Setting up Radarr"). These hold that every such hook
-// says what it does, and what the validator refuses.
+// says what it does, and what the validator refuses. They also hold what a script tells its owner
+// to the same rule as a summary: no tab is named for one of these actions.
 
 type Hook = Record<string, any>;
 
@@ -90,6 +91,51 @@ describe("the catalog's hooks", () => {
     const summary = (script?.hooks as Hook[]).find((each) => each.id === `configure-${app}`)?.summary;
     expect(sentencesOf(summary)).toContain("Also limits streams from outside your network to 20 Mbps.");
   });
+});
+
+// A failed run's message is read in a deck that draws an app's own actions on Customize, and in an
+// older one that draws them on Connections. So a message names a tab only for a link, which both
+// draw on Connections: "connect Tautulli from Plex's Connections tab".
+describe("what a script tells its owner", () => {
+  const scriptLines = readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_") && !entry.name.startsWith(".") && entry.name !== "node_modules")
+    .flatMap((dir) =>
+      readdirSync(join(root, dir.name))
+        .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
+        .flatMap((file) =>
+          readFileSync(join(root, dir.name, file), "utf8")
+            .split("\n")
+            .map((text, index) => ({ at: `${dir.name}/${file}:${index + 1}`, text: text.trim() })),
+        ),
+    )
+    // What a script says to its owner, not what a comment says to its reader
+    .filter(({ text }) => !text.startsWith("*") && !text.startsWith("/*") && !text.startsWith("//"));
+  const name = "(\\$\\{[^}]+\\}|[A-Z][\\w-]*)";
+  const aLink = new RegExp(
+    `(connect ${name}|Run Connect to ${name}|can't add ${name} to it\\. Run this again) from ${name}'s Connections tab`,
+  );
+
+  test("reads every app's scripts", () => {
+    expect(scriptLines.length).toBeGreaterThan(1000);
+    expect(scriptLines.some(({ text }) => text.includes("Connections tab"))).toBe(true);
+  });
+
+  test("names the Connections tab only for a link to another app", () => {
+    const tabbed = scriptLines.filter(({ text }) => text.includes("Connections tab"));
+    expect(tabbed.filter(({ text }) => !aLink.test(text)).map(({ at }) => at)).toEqual([]);
+  });
+
+  test("never sends its owner to the Customize tab, which an older deck doesn't use for these", () => {
+    expect(scriptLines.filter(({ text }) => text.includes("Customize tab")).map(({ at }) => at)).toEqual([]);
+  });
+
+  test.each([
+    ["a setup action sent to a tab", "ctx.fail(\"Run Pre-configure Jellyfin from its Connections tab to choose one.\");", false],
+    ["a model chosen on a tab", "ctx.fail(\"Ollama has no model yet. Choose one on its Connections tab, then run this again.\");", false],
+    ["a setup action run again from a tab", "ctx.fail(\"Run this again from Profilarr's Connections tab.\");", false],
+    ["a link named after a setup action", "const message = \"Run Pre-configure Plex, then connect Tautulli from Plex's Connections tab.\";", true],
+    ["a link named by its title", "ctx.fail(`Run Connect to ${name} from Profilarr's Connections tab to send them again.`);", true],
+  ])("the rule reads %s rightly", (_name, line, allowed) => expect(aLink.test(line)).toBe(allowed));
 });
 
 describe("which hooks need a summary", () => {

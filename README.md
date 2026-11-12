@@ -207,7 +207,7 @@ Write every published port this way. A bare number is a port the protocol ties t
 
 ## A hook's row on the app's card
 
-An installed app's details pane has a row for each hook its owner can run. A hook that links another app has its row on the Connections tab: it says `"kind": "connect"`, or it names the other app in `conditions`. Every other hook is one of the app's own setup actions (Pre-configure Radarr, Ollama's Choose a model), and its row is on the Customize tab. A deck from before that move draws both kinds on Connections, so nothing a hook says should name a tab.
+An installed app's details pane has a row for each hook its owner can run. A hook that links another app has its row on the Connections tab: it says `"kind": "connect"`, or it names the other app in `conditions`. Every other hook is one of the app's own setup actions (Pre-configure Radarr, Ollama's Choose a model), and its row is on the Customize tab. A deck from before that move draws both kinds on Connections, so nothing a hook says about one of the app's own actions should name a tab: not its summary, and not a message its script fails with ("Open Jellyfin in HexOS and run Pre-configure Jellyfin."). A message about a link can name the Connections tab, where both decks draw it.
 
 A row reads three fields of its hook:
 
@@ -229,7 +229,7 @@ A row reads three fields of its hook:
 
 Write a summary as one to three short sentences, in plain words, for an owner who isn't technical. Keep it under 150 characters: the line sits in a narrow column beside the row's button. Give each thought a sentence of its own, with no semicolon. The first says what the action sets up. The next says when to run it again and what a second run keeps, or that a second run changes nothing. Read the script before writing it, since Pre-configure does different things in each app. A run from the row gets no sign-in (`ctx.signIn` is undefined there), so a setup that only acts on the sign-in the owner chose at install changes nothing from its row, and its summary says so (Audiobookshelf, Kavita, Open WebUI, SABnzbd). A summary also names a second thing the hook does when its owner would want to know, in a sentence of its own: Pre-configure Emby, Pre-configure Plex and Jellyfin's `hardware-transcoding` limit streams from outside the owner's network to 20 Mbps.
 
-Leave `description` as it is when you add a summary. The install still shows it as the step's label, and a box from before `summary` shows it on the row. The summary is read from the catalog's current script, so it reaches installed apps at the next sync and needs no new `script.version`. `bun run validate` refuses a hook that runs at an install or an upgrade and from its app's card with no summary, and a summary that isn't text. `bun test _lib/hook_summary.test.ts` holds each summary to three sentences and 150 characters that name no tab.
+Leave `description` as it is when you add a summary. The install still shows it as the step's label, and a box from before `summary` shows it on the row. The summary is read from the catalog's current script, so it reaches installed apps at the next sync and needs no new `script.version`. `bun run validate` refuses a hook that runs at an install or an upgrade and from its app's card with no summary, and a summary that isn't text. `bun test _lib/hook_summary.test.ts` holds each summary to three sentences and 150 characters that name no tab, and holds every script's messages to naming the Connections tab only for a link.
 
 ## Values on the Settings tab
 
