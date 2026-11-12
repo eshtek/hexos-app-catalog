@@ -4,11 +4,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HookContext } from "./hook_context";
-import { radarr, sonarr } from "../servarr/connect_media_server";
+import { lidarr, radarr, sonarr } from "../servarr/connect_media_server";
 
-// Jellyfin's, Emby's and Plex's links to Radarr and Sonarr, against a fake manager that keeps its
-// connections as the real ones do (ProviderControllerBase, SchemaBuilder, MediaBrowser and
-// PlexServer, read at Radarr 6.4.4 and Sonarr 5.0.0): a credential it holds reads as ********, an
+// Jellyfin's, Emby's and Plex's links to Radarr and Sonarr, and Plex's to Lidarr, against a fake
+// manager that keeps its connections as the real ones do (ProviderControllerBase, SchemaBuilder,
+// MediaBrowser and PlexServer, read at Radarr 6.4.4, Sonarr 5.0.0 and Lidarr 3.2.1.5196, whose API
+// is at /api/v1): a credential it holds reads as ********, an
 // entry sent with ******** keeps the one it holds, a name is unique whatever its case, and a
 // connection with an event on is tested before it is saved, where a refused credential is blamed
 // on its own field. The media servers are fakes too: each answers its public id without a sign-in,
@@ -27,7 +28,7 @@ const ADMIN = "administrator-token";
 const OWNER_PLEX_TOKEN = "plex-account-token";
 
 type ServerId = "jellyfin" | "emby" | "plex";
-type ManagerId = "radarr" | "sonarr";
+type ManagerId = "radarr" | "sonarr" | "lidarr";
 
 const SERVERS = {
   jellyfin: { name: "Jellyfin", port: 30013, kind: "MediaBrowser", secret: "apiKey", prefix: "" },
@@ -39,11 +40,21 @@ const COPIES: Record<string, { manager: ManagerId; port: number; key: string; di
   radarr: { manager: "radarr", port: 30025, key: "radarr-api-key", displayName: "Radarr", folder: "/mnt/tank/Movies" },
   "radarr-2": { manager: "radarr", port: 30125, key: "radarr-2-api-key", displayName: "Radarr 2", folder: "/mnt/tank/Movies/radarr-2" },
   sonarr: { manager: "sonarr", port: 30113, key: "sonarr-api-key", displayName: "Sonarr", folder: "/mnt/tank/Shows" },
+  lidarr: { manager: "lidarr", port: 30071, key: "lidarr-api-key", displayName: "Lidarr", folder: "/mnt/tank/Music" },
+  "lidarr-2": { manager: "lidarr", port: 30171, key: "lidarr-2-api-key", displayName: "Lidarr 2", folder: "/mnt/tank/Music/lidarr-2" },
 };
+
+/** What each manager's API is under, its library's path in both apps, and Plex's name for that kind of library. */
+const MANAGERS = {
+  radarr: { api: "/api/v3", library: "/movies", plex: "movie", plexName: "Movie", run: radarr },
+  sonarr: { api: "/api/v3", library: "/shows", plex: "show", plexName: "TV", run: sonarr },
+  lidarr: { api: "/api/v1", library: "/music", plex: "artist", plexName: "Music", run: lidarr },
+} as const;
 
 const EVENTS = {
   radarr: ["onDownload", "onUpgrade", "onRename", "onMovieDelete", "onMovieFileDelete", "onMovieFileDeleteForUpgrade"],
   sonarr: ["onDownload", "onUpgrade", "onImportComplete", "onRename", "onSeriesAdd", "onSeriesDelete", "onEpisodeFileDelete", "onEpisodeFileDeleteForUpgrade"],
+  lidarr: ["onReleaseImport", "onUpgrade", "onRename", "onArtistAdd", "onArtistDelete", "onAlbumDelete", "onTrackRetag"],
 };
 /** Events a connection has that say nothing about the library: never turned on. */
 const OTHER_EVENTS = ["onGrab", "onHealthIssue", "onHealthRestored", "onApplicationUpdate", "onManualInteractionRequired"];
@@ -125,8 +136,8 @@ function template(manager: ManagerId, kind: "MediaBrowser" | "PlexServer" | "Web
           { name: "apiKey", value: "" },
           { name: "notify", value: false },
           { name: "updateLibrary", value: true },
-          { name: "mapFrom", value: "" },
-          { name: "mapTo", value: "" },
+          // Lidarr's Emby / Jellyfin connection maps no path (MediaBrowserSettings.cs)
+          ...(manager === "lidarr" ? [] : [{ name: "mapFrom", value: "" }, { name: "mapTo", value: "" }]),
         ]
       : kind === "PlexServer"
         ? [
@@ -177,7 +188,7 @@ function fakes(serverId: ServerId, options: Options = {}) {
     kind: server.kind,
     id: `this-${serverId}`,
     takes: serverId === "plex" ? [OWNER_PLEX_TOKEN] : [ADMIN, ...keys.map((key) => key.AccessToken)],
-    libraries: options.libraries ?? ["movie", "show"],
+    libraries: options.libraries ?? ["movie", "show", "artist"],
   };
   const network: Record<string, MediaServer> = {
     ...options.others,
@@ -187,6 +198,7 @@ function fakes(serverId: ServerId, options: Options = {}) {
   let nextId = 1;
   let connections: Connection[] = structuredClone(options.connections ?? []).map((each) => ({ ...each, id: nextId++ }));
   const writes: string[] = [];
+  const requests: string[] = [];
   const tests: Connection[] = [];
   const serverRequests: Array<{ method: string; path: string; headers: Headers }> = [];
   const steps: Array<{ id: string; message?: string; skipped?: boolean }> = [];
@@ -218,9 +230,8 @@ function fakes(serverId: ServerId, options: Options = {}) {
     if (!reached.takes.includes(String(field(entry, secret)))) {
       return [{ propertyName: secret === "apiKey" ? "ApiKey" : "AuthToken", errorMessage: secret === "apiKey" ? "API Key is invalid" : "Authentication Token is invalid" }];
     }
-    const library = managerId === "radarr" ? "movie" : "show";
-    if (reached.kind === "PlexServer" && !reached.libraries?.includes(library)) {
-      return [{ propertyName: "Host", errorMessage: `At least one ${library === "movie" ? "Movie" : "TV"} library is required` }];
+    if (reached.kind === "PlexServer" && !reached.libraries?.includes(MANAGERS[managerId].plex)) {
+      return [{ propertyName: "Host", errorMessage: `At least one ${MANAGERS[managerId].plexName} library is required` }];
     }
     return undefined;
   };
@@ -232,7 +243,10 @@ function fakes(serverId: ServerId, options: Options = {}) {
     if (url.origin === managerUrl) {
       if (url.pathname === "/ping") return Response.json({ status: "OK" });
       if (headers.get("X-Api-Key") !== target.key) return new Response(null, { status: 401 });
-      const at = url.pathname.slice("/api/v3".length);
+      // Each manager answers under its own API version, and nothing under another's
+      if (!url.pathname.startsWith(`${MANAGERS[managerId].api}/`)) return new Response(null, { status: 404 });
+      requests.push(`${method} ${url.pathname}`);
+      const at = url.pathname.slice(MANAGERS[managerId].api.length);
       const body = init?.body ? (JSON.parse(String(init.body)) as Connection) : undefined;
       if (at === "/notification" && method === "GET") return Response.json(connections.map(masked));
       if (at === "/notification/schema") {
@@ -315,7 +329,7 @@ function fakes(serverId: ServerId, options: Options = {}) {
   const managerConfig = join(box, copy, "config");
   mkdirSync(managerConfig, { recursive: true });
   writeFileSync(join(managerConfig, "config.xml"), `<Config><ApiKey>${target.key}</ApiKey></Config>`);
-  const library = managerId === "radarr" ? "/movies" : "/shows";
+  const library = MANAGERS[managerId].library;
 
   const ctx = {
     resourceId: serverId,
@@ -329,6 +343,7 @@ function fakes(serverId: ServerId, options: Options = {}) {
         : [
             { containerPath: "/movies", hostPath: "/mnt/tank/Movies", localPath: join(root, "movies") },
             { containerPath: "/shows", hostPath: "/mnt/tank/Shows", localPath: join(root, "shows") },
+            { containerPath: "/music", hostPath: "/mnt/tank/Music", localPath: join(root, "music") },
           ]),
     ],
     linkedApp: (app: string) => (app === managerId ? { name: copy, displayName: target.displayName } : null),
@@ -367,11 +382,12 @@ function fakes(serverId: ServerId, options: Options = {}) {
 
   return {
     ctx,
-    run: () => (managerId === "radarr" ? radarr : sonarr)(ctx),
+    run: () => MANAGERS[managerId].run(ctx),
     connections: () => connections,
     start: structuredClone(connections),
     keys,
     writes,
+    requests,
     tests,
     serverRequests,
     steps,
@@ -746,4 +762,93 @@ test("a Plex with no library of the manager's kind fails the step with the manag
   const world = fakes("plex", { manager: "sonarr", libraries: ["movie"] });
   await expect(world.run()).rejects.toThrow("Sonarr couldn't connect to Plex | Reason: At least one TV library is required");
   expect(world.connections()).toEqual([]);
+});
+
+describe("Lidarr", () => {
+  const here = { host: BOX, port: SERVERS.plex.port };
+
+  test("a Lidarr with no connection gets one to Plex through its own API version, with the library events on and nothing else", async () => {
+    const world = fakes("plex", { manager: "lidarr" });
+    await world.run();
+    expect(world.connections()).toHaveLength(1);
+    const [made] = world.connections();
+    expect(made).toMatchObject({ name: "Plex", implementation: "PlexServer" });
+    expect(values(made)).toMatchObject({ ...here, useSsl: false, urlBase: "", authToken: OWNER_PLEX_TOKEN, updateLibrary: true, mapFrom: "", mapTo: "" });
+    expect(eventsOn(made).sort()).toEqual([...EVENTS.lidarr].sort());
+    expect(world.requests).toEqual(["GET /api/v1/notification", "GET /api/v1/notification/schema", "POST /api/v1/notification", "GET /api/v1/notification"]);
+    expect(world.tests).toHaveLength(1);
+    expect(world.steps).toEqual([
+      { id: "locate", message: undefined },
+      { id: "key", message: undefined },
+      { id: "connect", message: undefined },
+    ]);
+  });
+
+  test("a second run leaves the one connection, and writes nothing", async () => {
+    const first = fakes("plex", { manager: "lidarr" });
+    await first.run();
+    const second = fakes("plex", { manager: "lidarr", connections: first.connections() });
+    await second.run();
+    expect(second.writes).toEqual([]);
+    expect(second.connections()).toEqual(second.start);
+    expect(second.step("connect")).toEqual({ id: "connect", message: "Lidarr already tells Plex what it changes", skipped: true });
+  });
+
+  test("a connection the owner made is kept as it is, and no second one is added", async () => {
+    const own = connection("lidarr", "PlexServer", "Living room", { ...here, authToken: OWNER_PLEX_TOKEN }, { onRename: false, onGrab: true });
+    const world = fakes("plex", { manager: "lidarr", connections: [own] });
+    await world.run();
+    expect(world.writes).toEqual([]);
+    expect(world.connections()).toEqual(world.start);
+  });
+
+  test("a connection to another Plex server is left alone, and this server's is added beside it", async () => {
+    const theirs = connection("lidarr", "PlexServer", "Cabin", { host: ELSEWHERE, port: 32400, authToken: OWNER_PLEX_TOKEN });
+    const another = { kind: "PlexServer" as const, id: "the-cabin", takes: [OWNER_PLEX_TOKEN], libraries: ["artist"] };
+    const world = fakes("plex", { manager: "lidarr", connections: [theirs], others: { [`${ELSEWHERE}:32400`]: another } });
+    await world.run();
+    expect(world.connections()).toHaveLength(2);
+    expect(world.connections()[0]).toEqual(world.start[0]);
+    expect(values(world.connections()[1])).toMatchObject(here);
+  });
+
+  test("a later copy gets no connection to Plex, which would be told of folders it doesn't have", async () => {
+    const world = fakes("plex", { manager: "lidarr", copy: "lidarr-2" });
+    const error = await world.run().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Skipped);
+    expect((error as Error).message).toBe(
+      "Plex finds what Lidarr 2 adds when it next scans its library. Lidarr 2 can't tell Plex sooner, because the two see Lidarr 2's Music folder at different paths.",
+    );
+    expect(world.connections()).toEqual([]);
+    expect(world.requests).toEqual([]);
+  });
+
+  test("a Plex with no Music library fails the step with Lidarr's reason", async () => {
+    const world = fakes("plex", { manager: "lidarr", libraries: ["movie", "show"] });
+    await expect(world.run()).rejects.toThrow("Lidarr couldn't connect to Plex | Reason: At least one Music library is required");
+    expect(world.connections()).toEqual([]);
+  });
+
+  test("a Plex that doesn't mount Music has nothing to be told", async () => {
+    const world = fakes("plex", { manager: "lidarr", serverSeesLibrary: false });
+    const error = await world.run().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Skipped);
+    expect((error as Error).message).toBe("Plex can't see Lidarr's Music folder, so Lidarr has nothing to tell it about.");
+    expect(world.connections()).toEqual([]);
+  });
+
+  // Lidarr 3.2.1.5196 names no real folder to Jellyfin or Emby (MediaBrowserService.cs, line 38), so
+  // its connection there would be kept and update nothing
+  test.each(["jellyfin", "emby"] as const)("%s gets no connection from Lidarr, and neither app is asked for anything", async (serverId) => {
+    const world = fakes(serverId, { manager: "lidarr" });
+    const error = await world.run().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Skipped);
+    expect((error as Error).message).toBe(
+      `${SERVERS[serverId].name} finds what Lidarr adds when it next scans its library. Lidarr can't tell ${SERVERS[serverId].name} sooner yet.`,
+    );
+    expect(world.connections()).toEqual([]);
+    expect(world.requests).toEqual([]);
+    expect(world.serverRequests).toEqual([]);
+    expect(world.keys).toEqual([]);
+  });
 });

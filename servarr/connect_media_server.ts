@@ -5,20 +5,31 @@ import { readFileSync } from "node:fs";
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
 /**
- * Tells Jellyfin, Emby or Plex what Radarr and Sonarr change, as it happens: the hook each media
- * server declares per manager (connect-radarr, connect-sonarr). Without it a movie Radarr imports,
- * renames or removes shows in the media server only after the server's own scan finds it. The
+ * Tells Jellyfin, Emby or Plex what Radarr and Sonarr change, and Plex what Lidarr changes, as it
+ * happens: the hook each media server declares per manager (connect-radarr, connect-sonarr,
+ * connect-lidarr). Without it a movie Radarr imports, renames or removes shows in the media
+ * server only after the server's own scan finds it. The
  * manager gets its own connection to the server ("Emby / Jellyfin" or "Plex Media Server", under
  * Settings, Connect), added through the manager's schema, so a field it renames is still filled,
  * and saved with the manager's own test, so a server it can't reach is refused rather than kept.
- * Read at Radarr 6.4.4 and Sonarr 5.0.0 (MediaBrowser, PlexServer, ProviderControllerBase).
+ * Read at Radarr 6.4.4, Sonarr 5.0.0 and Lidarr 3.2.1.5196 (MediaBrowser, PlexServer,
+ * ProviderControllerBase).
+ *
+ * Lidarr has a link to Plex alone. Its Plex connection is Radarr's, over Lidarr's own API version
+ * (PlexServer.cs, PlexServerService.cs). Its Emby / Jellyfin connection passes its test at
+ * 3.2.1.5196, which sends the key in the Authorization header Jellyfin 12 takes
+ * (MediaBrowserProxy.cs, line 122). But it has no path mapping, and for a library update it sends
+ * the word "music" as the path that changed, for every folder the server has
+ * (MediaBrowserService.cs, line 38). Jellyfin 12.4 looks that path up, finds nothing at it and
+ * refreshes nothing (FileRefresher.cs, GetAffectedBaseItem). So a connection there would be kept
+ * and would never show an album sooner.
  *
  * The link is declared on the media server, since the server's own credential is in its settings:
  * Jellyfin and Emby make the manager an API key named after it, one per copy, and Plex has only its
  * owner's account token, the one the manager's own "Authenticate with Plex.tv" would hold. None of
  * them is ever put in a log, a step's words or a failure's details.
  *
- * Both apps mount a library at the same path (/movies, /shows), so the server finds what the
+ * Both apps mount a library at the same path (/movies, /shows, /music), so the server finds what the
  * manager names. A later copy keeps its library in a folder of the location, which the server sees
  * one folder down. Jellyfin's and Emby's connection maps the path, and is sent the mapped folder of
  * each title (MediaBrowserService.Update). Plex's can't: it uses the mapping only to pick which of
@@ -41,11 +52,13 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
 const MANAGERS = {
   radarr: {
     name: "Radarr",
+    api: "v3",
     library: { path: "/movies", name: "Movies" },
     events: ["onDownload", "onUpgrade", "onRename", "onMovieDelete", "onMovieFileDelete", "onMovieFileDeleteForUpgrade"],
   },
   sonarr: {
     name: "Sonarr",
+    api: "v3",
     library: { path: "/shows", name: "Shows" },
     events: [
       "onDownload",
@@ -57,6 +70,14 @@ const MANAGERS = {
       "onEpisodeFileDelete",
       "onEpisodeFileDeleteForUpgrade",
     ],
+  },
+  lidarr: {
+    name: "Lidarr",
+    api: "v1",
+    library: { path: "/music", name: "Music" },
+    events: ["onReleaseImport", "onUpgrade", "onRename", "onArtistAdd", "onArtistDelete", "onAlbumDelete", "onTrackRetag"],
+    /** The only connection of Lidarr's that updates a library: see the note at the top. */
+    only: "PlexServer",
   },
 } as const;
 
@@ -310,7 +331,7 @@ const SERVERS: Record<string, Server> = {
 // --- the manager -------------------------------------------------------------
 
 async function managerApi<T>(url: string, apiKey: string, path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${url}/api/v3${path}`, {
+  const response = await fetch(`${url}/api/${path}`, {
     ...init,
     headers: { "X-Api-Key": apiKey, "Content-Type": "application/json" },
     signal: AbortSignal.timeout(60_000),
@@ -384,6 +405,10 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
     { id: "connect", message: `Adding ${server.name} to ${manager.name}` },
   ]);
 
+  // A connection that would be kept and update nothing is worse than none
+  if ("only" in manager && manager.only !== server.implementation) {
+    stop(ctx, `${server.name} finds what ${manager.name} adds when it next scans its library. ${manager.name} can't tell ${server.name} sooner yet.`);
+  }
   if (!ctx.baseUrl) ctx.fail(`HexOS can't find ${server.name}'s port`);
   const here = new URL(ctx.baseUrl);
   const address: Record<string, unknown> = { host: here.hostname, port: Number(here.port), useSsl: false, urlBase: "" };
@@ -411,7 +436,7 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
   }
   await ctx.emitCheckpoint("locate");
 
-  const api = <T>(path: string, init?: RequestInit) => managerApi<T>(managerUrl, managerKey, path, init);
+  const api = <T>(path: string, init?: RequestInit) => managerApi<T>(managerUrl, managerKey, `${manager.api}${path}`, init);
   // No credential ever reaches a step's words or a failure's details
   let secret: string | undefined;
   const reasonOf = (error: unknown) => {
@@ -563,3 +588,4 @@ async function connect(ctx: HookContext, managerId: ManagerId) {
 
 export const radarr = (ctx: HookContext) => connect(ctx, "radarr");
 export const sonarr = (ctx: HookContext) => connect(ctx, "sonarr");
+export const lidarr = (ctx: HookContext) => connect(ctx, "lidarr");
