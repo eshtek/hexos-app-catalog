@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Hermes runs as an assistant on your own model, kept off your home network."
@@ -110,6 +109,7 @@
         }
       ],
       "rerun": "converge",
+      "rerunsOn": ["local-ai-model"],
       "script": "hermes-agent/connect_ollama.ts",
       "entrypoint": "run",
       "timeout": 300,

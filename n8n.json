@@ -4,6 +4,10 @@
     "version": "1.0.0",
     "changeLog": "Initial curation"
   },
+  "sign_in": {
+    "username": true,
+    "email": true
+  },
   "requirements": {
     "locations": [
       "ApplicationsPerformance"
@@ -67,5 +71,19 @@
       }
     }
   },
-  "internal": true
+  "hooks": [
+    {
+      "id": "configure-n8n",
+      "title": "Pre-configure n8n",
+      "description": "Setting up n8n's account",
+      "events": [
+        "onAfterInstall"
+      ],
+      "optional": true,
+      "script": "n8n/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    }
+  ]
 }

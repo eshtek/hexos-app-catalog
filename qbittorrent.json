@@ -5,7 +5,8 @@
     "changeLog": "A new sign-in reaches every copy of Radarr, Sonarr and Lidarr"
   },
   "sign_in": {
-    "username": true
+    "username": true,
+    "existing": true
   },
   "requirements": {
     "locations": [
