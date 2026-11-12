@@ -1,6 +1,5 @@
 {
   "version": 5,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial"
@@ -61,7 +60,7 @@
       "default_admin_username": "$QUESTION(default_admin_username)",
       "default_admin_password": "$QUESTION(default_admin_password)",
       "db_password": "$RANDOM_STRING(16)",
-      "secret_key": "$RANDOM_STRING(16)",
+      "secret_key": "$RANDOM_STRING(32)",
       "trust_proxy": true
     },
     "network": {
