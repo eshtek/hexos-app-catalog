@@ -14,6 +14,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
+| [Bindarr](bindarr.json) | Trading card collection manager ([notes](bindarr/README.md)) |
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
 | [Collabora](collabora.json) | Documents you edit together in Nextcloud |
