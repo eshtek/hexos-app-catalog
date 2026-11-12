@@ -107,7 +107,7 @@ test("every link to Lidarr or Sportarr is described in one or two short sentence
     for (const id of ["connect-lidarr", "connect-sportarr"]) {
       const description = hook(server, id)?.description;
       if (description === undefined) continue;
-      expect(description).not.toMatch(/[–—]/);
+      expect(description).not.toMatch(new RegExp(`[${String.fromCharCode(0x2013, 0x2014)}]`));
       const sentences = description.split(". ");
       expect(sentences.length).toBeLessThanOrEqual(2);
       for (const sentence of sentences) expect(sentence.length).toBeLessThanOrEqual(70);
