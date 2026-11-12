@@ -1,0 +1,425 @@
+{
+  "version": 6,
+  "internal": true,
+  "script": {
+    "version": "1.0.2",
+    "changeLog": "Connecting an office gives OpenCloud the office's certificate, so the editor opens without a second browser warning. The install's two screens are titled Settings and Web apps"
+  },
+  "sign_in": {
+    "username": true,
+    "adds_user": true
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "Documents"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GB",
+      "3GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30134
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/opencloud/config",
+      "owner": {
+        "user": "apps",
+        "group": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/opencloud/data",
+      "owner": {
+        "user": "apps",
+        "group": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/opencloud/radicale",
+      "owner": {
+        "user": "apps",
+        "group": "apps"
+      },
+      "snapshot": {
+        "id": "radicale"
+      }
+    },
+    {
+      "path": "$LOCATION(Documents)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(Documents)/opencloud",
+      "owner": {
+        "user": "apps",
+        "group": "apps"
+      },
+      "snapshot": {
+        "id": "files"
+      }
+    }
+  ],
+  "installation_questions": [
+    {
+      "question": "New documents are made as",
+      "description": "Sets what the New menu creates. Every format still opens and edits.",
+      "type": "select",
+      "key": "new_formats",
+      "required": true,
+      "default": "microsoft",
+      "options": [
+        {
+          "text": "Microsoft (docx, xlsx, pptx)",
+          "value": "microsoft"
+        },
+        {
+          "text": "OpenDocument (odt, ods, odp)",
+          "value": "open"
+        },
+        {
+          "text": "Both",
+          "value": "both"
+        }
+      ],
+      "group": "OpenCloud / Settings"
+    },
+    {
+      "question": "Search inside documents",
+      "description": "Also finds words inside files, not only their names. Uses about 1 GB more memory and keeps the disks busy while it reads your files, so it suits servers with 8 GB of memory or more.",
+      "type": "boolean",
+      "key": "search",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Settings"
+    },
+    {
+      "question": "Calendars and contacts",
+      "description": "Keeps calendars and contacts in OpenCloud, for any CalDAV or CardDAV app.",
+      "type": "boolean",
+      "key": "calendars",
+      "required": false,
+      "default": true,
+      "group": "OpenCloud / Settings"
+    },
+    {
+      "question": "Web address",
+      "description": "Leave this as it is unless you've set up OpenCloud for use outside your home. Then enter the full address people will use, including https:// and with no slash at the end, for example https://cloud.yourdomain.tld.",
+      "type": "text",
+      "key": "address",
+      "required": true,
+      "default": "https://$SERVER_LAN_IP:$PORT(30134)",
+      "group": "OpenCloud / Settings"
+    },
+    {
+      "question": "Draw.io",
+      "description": "Draw diagrams",
+      "type": "boolean",
+      "key": "app_drawio",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Excalidraw",
+      "description": "Sketch on a whiteboard",
+      "type": "boolean",
+      "key": "app_excalidraw",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Unzip",
+      "description": "Open zip files in your browser",
+      "type": "boolean",
+      "key": "app_unzip",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Importer",
+      "description": "Bring in files from other services",
+      "type": "boolean",
+      "key": "app_importer",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "External sites",
+      "description": "Add links to other websites",
+      "type": "boolean",
+      "key": "app_external_sites",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "JSON viewer",
+      "description": "Read JSON files",
+      "type": "boolean",
+      "key": "app_json_viewer",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Maps",
+      "description": "See GPX and other map files on a map",
+      "type": "boolean",
+      "key": "app_maps",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Cast",
+      "description": "Play files on a Cast device",
+      "type": "boolean",
+      "key": "app_cast",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Pastebin",
+      "description": "Share a quick piece of text",
+      "type": "boolean",
+      "key": "app_pastebin",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Progress bars",
+      "description": "Change how progress bars look",
+      "type": "boolean",
+      "key": "app_progress_bars",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Calculator",
+      "description": "A simple calculator",
+      "type": "boolean",
+      "key": "app_calculator",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Arcade",
+      "description": "A few small games",
+      "type": "boolean",
+      "key": "app_arcade",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "Apollon",
+      "description": "Draw UML diagrams",
+      "type": "boolean",
+      "key": "app_apollon",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    },
+    {
+      "question": "BPMN",
+      "description": "Draw business process diagrams",
+      "type": "boolean",
+      "key": "app_bpmn",
+      "required": false,
+      "default": false,
+      "group": "OpenCloud / Web apps"
+    }
+  ],
+  "app_values": {
+    "opencloud": {
+      "app_url": "$QUESTION(address)",
+      "insecure": true,
+      "jwt_secret": "$RANDOM_STRING(32)",
+      "full_text_search": {
+        "enabled": "$QUESTION(search)"
+      },
+      "radicale": {
+        "enabled": "$QUESTION(calendars)"
+      },
+      "yjs": {
+        "enabled": false
+      },
+      "collaboration": {
+        "enabled": false
+      },
+      "additional_envs": [
+        {
+          "name": "STORAGE_USERS_POSIX_ROOT",
+          "value": "/var/lib/opencloud-files"
+        },
+        {
+          "name": "STORAGE_USERS_POSIX_PERSONAL_SPACE_PATH_TEMPLATE",
+          "value": "users/{{.User.Username}}-{{ trunc 8 .User.Id.OpaqueId }}"
+        },
+        {
+          "name": "STORAGE_USERS_POSIX_GENERAL_SPACE_PATH_TEMPLATE",
+          "value": "projects/{{ regexReplaceAll \"[[:space:][:punct:][:cntrl:]]+\" (lower .SpaceName) \"-\" }}-{{ trunc 8 .SpaceId }}"
+        },
+        {
+          "name": "HEXOS_NEW_OPENDOCUMENT",
+          "value": "$IF($QUESTION(new_formats) != microsoft, T, F)"
+        },
+        {
+          "name": "HEXOS_NEW_MICROSOFT",
+          "value": "$IF($QUESTION(new_formats) != open, T, F)"
+        }
+      ],
+      "apps": {
+        "drawio": "$QUESTION(app_drawio)",
+        "excalidraw": "$QUESTION(app_excalidraw)",
+        "unzip": "$QUESTION(app_unzip)",
+        "importer": "$QUESTION(app_importer)",
+        "external_sites": "$QUESTION(app_external_sites)",
+        "json_viewer": "$QUESTION(app_json_viewer)",
+        "maps": "$QUESTION(app_maps)",
+        "cast": "$QUESTION(app_cast)",
+        "pastebin": "$QUESTION(app_pastebin)",
+        "progress_bars": "$QUESTION(app_progress_bars)",
+        "calculator": "$QUESTION(app_calculator)",
+        "arcade": "$QUESTION(app_arcade)",
+        "apollon": "$QUESTION(app_apollon)",
+        "bpmn": "$QUESTION(app_bpmn)"
+      }
+    },
+    "run_as": {
+      "user": 568,
+      "group": 568
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30134)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/opencloud/config)",
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/opencloud/data)",
+      "radicale_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/opencloud/radicale)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Documents)/opencloud, /var/lib/opencloud-files)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(25%, 4)",
+        "memory": "$MEMORY(15%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "seed-settings",
+      "title": "Prepare OpenCloud",
+      "description": "Sets up the New menu before OpenCloud's first start.",
+      "events": [
+        "onBeforeInstall"
+      ],
+      "optional": true,
+      "script": "opencloud/seed_settings.ts",
+      "entrypoint": "seedSettings",
+      "timeout": 60,
+      "retries": 0
+    },
+    {
+      "id": "configure-opencloud",
+      "title": "Pre-configure OpenCloud",
+      "description": "Makes your sign-in OpenCloud's administrator.",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "script": "opencloud/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-eurooffice-document-server",
+      "title": "Connect to Euro-Office",
+      "description": "Opens and edits documents in OpenCloud with Euro-Office.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "opencloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "opencloud/connect_office.ts",
+      "entrypoint": "eurooffice",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-onlyoffice-document-server",
+      "title": "Connect to ONLYOFFICE",
+      "description": "Opens and edits documents in OpenCloud with ONLYOFFICE.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "opencloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "opencloud/connect_office.ts",
+      "entrypoint": "onlyoffice",
+      "timeout": 600,
+      "retries": 0
+    }
+  ]
+}

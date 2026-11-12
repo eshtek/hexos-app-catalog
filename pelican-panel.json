@@ -13,8 +13,8 @@
     "sources": ["https://github.com/pelican-dev/panel"]
   },
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: the panel opens with the owner's account and a starter set of games; Pelican Wings runs the game servers"
+    "version": "1.0.1",
+    "changeLog": "Gives the panel its data folder before setting it up, so it can save its settings and database on a new folder"
   },
   "sign_in": {
     "username": true,

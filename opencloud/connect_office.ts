@@ -1,0 +1,195 @@
+// Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
+import { chmodSync, chownSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+
+import type { ContextMount, HookContext } from "../_lib/hook_context";
+
+/**
+ * Links OpenCloud to a web office on this server. OpenCloud takes the link only from its chart's
+ * values, so the link puts it there and updates the app, as Collabora's link to LanguageTool does. A
+ * script update writes the script's own values back, which running this again puts right.
+ *
+ * The office and OpenCloud must share the office's secret, and a hook can only read its own app's
+ * values, so this reads it from the office's container over the Docker socket HexOS already has
+ * (as jellyfin/hardware_transcoding.ts does). The secret is never written to a file of its own.
+ *
+ * Both apps serve https, since a browser won't show an http editor inside an https page. OpenCloud
+ * makes a certificate of its own and the office serves the box's, and the editor opens in a frame,
+ * where a browser offers no warning to accept. So the link gives OpenCloud the office's certificate:
+ * the one warning the owner accepts for OpenCloud then covers the editor (Chrome, Edge, Brave and
+ * Safari remember it for the address, Firefox for each port). OpenCloud reads its certificate from
+ * proxy/server.crt and server.key in its data folder at its start, and its own stay beside them as
+ * .hexos-bak. An OpenCloud at an outside address has a certificate of its owner's, which is left.
+ * Read at OpenCloud 9.0, Euro-Office 9.3 and ONLYOFFICE 10.0.
+ */
+
+const DOCKER_SOCKET = "/var/run/docker.sock";
+const NOTE_ENV = "HEXOS_TEXT_EDITOR_NEW_FILES";
+
+const insecure = { tls: { rejectUnauthorized: false } } as RequestInit;
+const docker = (path: string) => fetch(`http://docker${path}`, { unix: DOCKER_SOCKET, signal: AbortSignal.timeout(10_000) } as RequestInit);
+
+type Env = { name: string; value: string };
+type OpenCloudValues = { collaboration?: Record<string, unknown>; additional_envs?: Env[] };
+
+const APPS_UID = 568;
+
+/** The office's running container and its settings. The service name is the chart's. */
+async function officeContainer(appId: string, service: string): Promise<{ id: string; env: Map<string, string> } | undefined> {
+  const filters = encodeURIComponent(JSON.stringify({ label: [`com.docker.compose.project=ix-${appId}`, `com.docker.compose.service=${service}`] }));
+  const found = (await (await docker(`/containers/json?filters=${filters}`)).json()) as Array<{ Id: string }>;
+  if (!found[0]) return undefined;
+  const { Config } = (await (await docker(`/containers/${found[0].Id}/json`)).json()) as { Config?: { Env?: string[] } };
+  const env = new Map((Config?.Env ?? []).map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)] as const));
+  return { id: found[0].Id, env };
+}
+
+/** The file in a tar from Docker's archive endpoint: a 512-byte header, then its bytes. */
+export function untar(tar: Uint8Array): string {
+  const text = new TextDecoder();
+  for (let at = 0; tar[at]; ) {
+    const size = Number.parseInt(text.decode(tar.subarray(at + 124, at + 136)), 8);
+    const type = tar[at + 156];
+    if (type === 0 || type === 48) return text.decode(tar.subarray(at + 512, at + 512 + size)); // a regular file
+    at += 512 + Math.ceil(size / 512) * 512; // a pax header ahead of the file
+  }
+  return "";
+}
+
+async function readFromContainer(id: string, path: string): Promise<string> {
+  const response = await docker(`/containers/${id}/archive?path=${encodeURIComponent(path)}`);
+  return response.ok ? untar(new Uint8Array(await response.arrayBuffer())) : "";
+}
+
+/** The certificate and key the office serves, or undefined when they can't be read as PEM. */
+async function officeCertificate(office: { id: string; env: Map<string, string> }): Promise<{ cert: string; key: string } | undefined> {
+  const [cert, key] = await Promise.all([
+    readFromContainer(office.id, office.env.get("SSL_CERTIFICATE_PATH") || "/certs/tls.crt"),
+    readFromContainer(office.id, office.env.get("SSL_KEY_PATH") || "/certs/tls.key"),
+  ]).catch(() => ["", ""]);
+  return cert.includes("BEGIN CERTIFICATE") && /BEGIN [A-Z ]*PRIVATE KEY/.test(key) ? { cert, key } : undefined;
+}
+
+const read = (path: string) => {
+  try {
+    return readFileSync(path, "utf-8");
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Puts the certificate where OpenCloud reads its own, and says whether anything changed. OpenCloud's
+ * first pair is copied beside it once, and each file is replaced in one step.
+ */
+export function shareCertificate(data: ContextMount, shared: { cert: string; key: string }): boolean {
+  const folder = `${data.localPath}/proxy`;
+  const files = [
+    { path: `${folder}/server.crt`, text: shared.cert, mode: 0o644 },
+    { path: `${folder}/server.key`, text: shared.key, mode: 0o600 },
+  ];
+  if (files.every((file) => read(file.path) === file.text)) return false;
+  mkdirSync(folder, { recursive: true });
+  chownSync(folder, APPS_UID, APPS_UID);
+  for (const file of files) {
+    if (existsSync(file.path) && !existsSync(`${file.path}.hexos-bak`)) copyFileSync(file.path, `${file.path}.hexos-bak`);
+    const temporary = `${file.path}.hexos-tmp`;
+    writeFileSync(temporary, file.text, { mode: file.mode });
+    chmodSync(temporary, file.mode);
+    chownSync(temporary, APPS_UID, APPS_UID);
+    renameSync(temporary, file.path);
+  }
+  return true;
+}
+
+async function answers(url: string): Promise<boolean> {
+  try {
+    return (await fetch(url, { signal: AbortSignal.timeout(15_000), ...insecure })).ok;
+  } catch {
+    return false;
+  }
+}
+
+/** True for an address with a name, set up for use outside the home, which the link must not replace. */
+export function isOutsideAddress(address: unknown): boolean {
+  if (typeof address !== "string" || !URL.canParse(address)) return false;
+  return !/^[\d.]+$/.test(new URL(address).hostname);
+}
+
+async function connect(ctx: HookContext, appId: string, service: string, type: string, name: string): Promise<void> {
+  await ctx.registerCheckpoints([
+    { id: "locate", message: `Finding ${name}` },
+    { id: "certificate", message: `Giving OpenCloud ${name}'s certificate` },
+    { id: "update", message: "Updating OpenCloud to connect it" },
+    { id: "confirm", message: "Checking OpenCloud came back" },
+  ]);
+  const stop = (message: string): never => {
+    if (ctx.skip) ctx.skip(message);
+    return ctx.fail(message);
+  };
+
+  const address = await ctx.getInstalledAppUrl(appId);
+  if (!address) stop(`${name} isn't installed, or HexOS can't find its port`);
+  const url = address!.replace(/^http:/, "https:").replace(/\/+$/, "");
+  if (!(await answers(`${url}/hosting/discovery`))) ctx.fail(`${name} isn't answering at ${url} yet. Try again when it has finished starting.`);
+  const office = await officeContainer(appId, service).catch(() => undefined);
+  const secret = office?.env.get("JWT_SECRET");
+  if (!office || !secret) stop(`HexOS couldn't read ${name}'s secret from its container`);
+  await ctx.emitCheckpoint("locate");
+
+  if (typeof ctx.updateAppValues !== "function") ctx.fail("This server's HexOS needs an update before it can connect OpenCloud. Try again after it updates.");
+  const current = ((await ctx.getAppValues?.())?.opencloud ?? {}) as OpenCloudValues & { app_url?: unknown };
+  const data = ctx.mounts.find((m) => m.containerPath === "/var/lib/opencloud") ?? ctx.mounts.find((m) => m.hostPath.replace(/\/+$/, "").endsWith("/opencloud/data"));
+  let shared = false;
+  if (isOutsideAddress(current.app_url) || isOutsideAddress(current.collaboration?.url)) {
+    await ctx.skipCheckpoint("certificate", "OpenCloud has an outside address, so it keeps its own certificate");
+  } else {
+    const certificate = await officeCertificate(office!);
+    if (!certificate || !data) {
+      // The link still works. The owner opens the office's address once to accept its certificate
+      await ctx.skipCheckpoint("certificate", `HexOS couldn't read ${name}'s certificate. Open ${url} once and accept its warning.`);
+    } else {
+      try {
+        shared = shareCertificate(data, certificate);
+      } catch (error) {
+        ctx.fail("HexOS couldn't save the certificate in OpenCloud's folder. Run this again.", [
+          { label: "Reason", value: error instanceof Error ? error.message : String(error) },
+        ]);
+      }
+      if (shared) await ctx.emitCheckpoint("certificate");
+      else await ctx.skipCheckpoint("certificate", `OpenCloud already has ${name}'s certificate`);
+    }
+  }
+  const changed = await ctx.updateAppValues((values) => {
+    const opencloud = values.opencloud as OpenCloudValues;
+    const outside = isOutsideAddress(opencloud.collaboration?.url);
+    opencloud.collaboration = { ...opencloud.collaboration, enabled: true, proof_disable: true, type, jwt_secret: secret, ...(outside ? {} : { url, insecure: true }) };
+    // With an office linked, documents belong there: this hides the Text Editor's Note (see seed_settings.ts)
+    opencloud.additional_envs = [...(opencloud.additional_envs ?? []).filter((env) => env.name !== NOTE_ENV), { name: NOTE_ENV, value: "md" }];
+  });
+  if (!changed && !shared) {
+    await ctx.skipCheckpoint("update", `OpenCloud already uses this ${name}`);
+    await ctx.skipCheckpoint("confirm");
+    return;
+  }
+  if (changed) {
+    await ctx.emitCheckpoint("update");
+  } else {
+    // The settings were right already, so nothing restarted OpenCloud to read its new certificate
+    if (typeof ctx.restartApp !== "function") ctx.fail("This server's HexOS needs an update before OpenCloud can take the certificate. Try again after it updates.");
+    await ctx.restartApp();
+    await ctx.skipCheckpoint("update", `OpenCloud already uses this ${name}`);
+  }
+
+  const openCloud = `https://${ctx.host}:${ctx.port}`;
+  for (let attempt = 0; attempt < 40; attempt++) {
+    if (await answers(`${openCloud}/.well-known/openid-configuration`)) {
+      await ctx.emitCheckpoint("confirm");
+      return;
+    }
+    await ctx.sleep(5_000);
+  }
+  ctx.fail("OpenCloud didn't come back after connecting. Look at its logs on the app's card.");
+}
+
+export const eurooffice = (ctx: HookContext) => connect(ctx, "eurooffice-document-server", "eurooffice", "eurooffice", "Euro-Office");
+export const onlyoffice = (ctx: HookContext) => connect(ctx, "onlyoffice-document-server", "onlyoffice", "onlyoffice", "ONLYOFFICE");

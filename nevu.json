@@ -1,0 +1,69 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.1.0",
+    "changeLog": "Connect to Plex points Nevu at the Plex server on this box, wherever its port is"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30267]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {"path": "$LOCATION(ApplicationsPerformance)/nevu/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
+  ],
+  "app_values": {
+    "nevu": {
+      "plex_server": "http://$SERVER_LAN_IP:32400"
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/nevu/data)"
+    },
+  "network": {
+    "web_port": {
+      "bind_mode": "published",
+      "port_number": "$PORT(30267)"
+    }
+  },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(15%, 2048)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "connect-plex",
+      "title": "Connect to Plex",
+      "description": "Lets Nevu show what's on this Plex server.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "plex"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "plex"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nevu"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nevu/connect_plex.ts",
+      "entrypoint": "run",
+      "timeout": 120,
+      "retries": 0
+    }
+  ]
+}
