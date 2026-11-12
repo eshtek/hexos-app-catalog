@@ -13,8 +13,8 @@
     "sources": ["https://github.com/pterodactyl/wings"]
   },
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: joins the server's Pterodactyl Panel as its node, with game servers on ports 27100 to 27119"
+    "version": "1.0.1",
+    "changeLog": "Runs ghcr.io/pterodactyl/wings v1.13.5."
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -49,7 +49,7 @@
   "app_values": {
     "image": {
       "repository": "ghcr.io/pterodactyl/wings",
-      "tag": "v1.13.4@sha256:f3eb1fcca035ba94256d612e31315bf33db948693db1a9c4646ce398aefc2f1b",
+      "tag": "v1.13.5@sha256:6d0a513d1999e2d7930dde3fffb78fb80f38e0413452d28f64320c54f11be056",
       "pull_policy": "missing"
     },
     "restart_policy": "unless-stopped",
