@@ -285,4 +285,20 @@ describe("Collabora's link to LanguageTool", () => {
     await linkLanguageTool(ctx);
     expect(events).toEqual(["done:locate", "done:update", "done:confirm"]);
   });
+
+  test("Serve over https and the link to LanguageTool, run after each other, leave each other's settings alone", async () => {
+    respond({ "https://10.0.0.5:9980/hosting/discovery": () => new Response(""), "containers/json": () => Response.json([{ Ports: [{ PublicPort: 30134 }] }]) });
+    const values = store({ collabora: { extra_params: ["--o:ssl.enable=false"] }, network: {} });
+    const link = context({ port: 9980, getInstalledAppUrl: async () => "http://10.0.0.5:30022", ...values });
+    await useHttps(context({ port: 9980, ...values }).ctx);
+    await linkLanguageTool(link.ctx);
+    const settled = JSON.stringify(values.get());
+    const again = context({ port: 9980, ...values });
+    await useHttps(again.ctx);
+    expect(again.events).toEqual(["done:locate", "skip:update", "skip:confirm"]);
+    const relink = context({ port: 9980, getInstalledAppUrl: async () => "http://10.0.0.5:30022", ...values });
+    await linkLanguageTool(relink.ctx);
+    expect(relink.events).toEqual(["done:locate", "skip:update", "skip:confirm"]);
+    expect(JSON.stringify(values.get())).toBe(settled);
+  });
 });

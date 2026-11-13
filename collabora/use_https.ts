@@ -36,11 +36,18 @@ async function openCloudPort(): Promise<number | undefined> {
   return (await containers("opencloud")).flatMap((each) => each.Ports ?? []).find((entry) => entry.PublicPort)?.PublicPort;
 }
 
-/** Collabora's values with https on, on the server's default certificate. */
+const HTTPS_PARAMS = ["--o:ssl.termination=true", "--o:ssl.ssl_verification=false"];
+
+/**
+ * Collabora's values with https on, on the server's default certificate. Settings already right stay
+ * where they are, so a run after LanguageTool's link (which adds its own at the end) changes nothing.
+ */
 export function withHttps(values: Record<string, unknown>): void {
   const collabora = values.collabora as { extra_params?: string[] };
-  const params = (collabora.extra_params ?? []).filter((param) => !param.startsWith("--o:ssl.termination=") && !param.startsWith("--o:ssl.ssl_verification="));
-  collabora.extra_params = [...params, "--o:ssl.termination=true", "--o:ssl.ssl_verification=false"];
+  const params = (collabora.extra_params ?? []).filter(
+    (param) => HTTPS_PARAMS.includes(param) || (!param.startsWith("--o:ssl.termination=") && !param.startsWith("--o:ssl.ssl_verification=")),
+  );
+  collabora.extra_params = [...params, ...HTTPS_PARAMS.filter((param) => !params.includes(param))];
   (values.network as { certificate_id?: number }).certificate_id = 1;
 }
 

@@ -46,8 +46,9 @@ export async function run(ctx: HookContext) {
   const wanted = [`${PREFIX}enabled=true`, `${PREFIX}base_url=${url}/v2`, `${PREFIX}ssl_verification=false`];
   const changed = await ctx.updateAppValues((values) => {
     const collabora = values.collabora as { extra_params?: string[] };
-    const others = (collabora.extra_params ?? []).filter((param) => !param.startsWith(PREFIX));
-    collabora.extra_params = [...others, ...wanted];
+    // Settings already right stay where they are, so a run after Serve over https changes nothing
+    const kept = (collabora.extra_params ?? []).filter((param) => !param.startsWith(PREFIX) || wanted.includes(param));
+    collabora.extra_params = [...kept, ...wanted.filter((param) => !kept.includes(param))];
   });
   if (!changed) {
     await ctx.skipCheckpoint("update", "Collabora already uses this LanguageTool");
