@@ -2,7 +2,7 @@
   "version": 6,
   "script": {
     "version": "1.1.0",
-    "changeLog": "Collabora can edit documents inside OpenCloud too: with OpenCloud on the server it serves https. Beside Nextcloud alone nothing changes"
+    "changeLog": "Collabora can edit documents inside OpenCloud too. Beside Nextcloud alone nothing changes"
   },
   "requirements": {
     "locations": [],
