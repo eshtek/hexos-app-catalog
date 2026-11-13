@@ -2,8 +2,8 @@
   "version": 6,
   "internal": true,
   "script": {
-    "version": "1.0.2",
-    "changeLog": "Connecting an office gives OpenCloud the office's certificate, so the editor opens without a second browser warning. The install's two screens are titled Settings and Web apps"
+    "version": "1.0.3",
+    "changeLog": "OpenCloud can connect to Collabora too, which serves https once OpenCloud is on the server"
   },
   "sign_in": {
     "username": true,
@@ -364,6 +364,34 @@
       "script": "opencloud/configure.ts",
       "entrypoint": "configure",
       "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-collabora",
+      "title": "Connect to Collabora",
+      "description": "Opens and edits documents in OpenCloud with Collabora.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "collabora"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "collabora"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "opencloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "opencloud/connect_office.ts",
+      "entrypoint": "collabora",
+      "timeout": 600,
       "retries": 0
     },
     {
