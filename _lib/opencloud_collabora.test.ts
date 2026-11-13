@@ -8,7 +8,7 @@ import type { HookContext } from "./hook_context";
 mock.module("node:fs", () => ({ ...require("node:fs"), chownSync: () => {} }));
 const { collabora: linkOpenCloud } = await import("../opencloud/connect_office");
 const { collaboraAddress } = await import("../nextcloud/startup");
-const { run: useHttps, withHttps } = await import("../collabora/use_https");
+const { run: useHttps, withHttps } = await import("../collabora/configure");
 const { run: linkLanguageTool } = await import("../collabora/connect_languagetool");
 
 // Collabora beside OpenCloud. OpenCloud is https only and a browser blocks an http editor inside an
@@ -151,10 +151,10 @@ describe("Collabora's https", () => {
     expect(events).toEqual(["skip:locate", "skip:update", "skip:confirm"]);
   });
 
-  test("on another port than 9980 it can't serve https, and says so", async () => {
+  test("on another port than 9980 it can't serve https for OpenCloud, and says so", async () => {
     respond({ "containers/json": () => Response.json([{ Ports: [{ PublicPort: 30134 }] }]) });
     const values = store({ network: {}, collabora: {} });
-    await expect(useHttps(context({ port: 9981, ...values }).ctx)).rejects.toThrow("can only serve https on port 9980");
+    await expect(useHttps(context({ port: 9981, ...values }).ctx)).rejects.toThrow("OpenCloud can only use Collabora on port 9980");
     expect(values.get()).toEqual({ network: {}, collabora: {} });
   });
 
@@ -185,7 +185,7 @@ describe("OpenCloud's link to Collabora", () => {
   test("tells the owner what to press while Collabora is still on http", async () => {
     respond({});
     const { ctx } = context({ getInstalledAppUrl: async () => "http://10.0.0.5:9980", ...store({ opencloud: {} }) });
-    await expect(linkOpenCloud(ctx)).rejects.toThrow("Run Serve over https from Collabora's card");
+    await expect(linkOpenCloud(ctx)).rejects.toThrow("Open Collabora in HexOS and run Pre-configure Collabora");
   });
 
   test("sets Collabora's address with no secret, and gives OpenCloud the certificate nginx serves", async () => {
@@ -286,7 +286,7 @@ describe("Collabora's link to LanguageTool", () => {
     expect(events).toEqual(["done:locate", "done:update", "done:confirm"]);
   });
 
-  test("Serve over https and the link to LanguageTool, run after each other, leave each other's settings alone", async () => {
+  test("Pre-configure Collabora and the link to LanguageTool, run after each other, leave each other's settings alone", async () => {
     respond({ "https://10.0.0.5:9980/hosting/discovery": () => new Response(""), "containers/json": () => Response.json([{ Ports: [{ PublicPort: 30134 }] }]) });
     const values = store({ collabora: { extra_params: ["--o:ssl.enable=false"] }, network: {} });
     const link = context({ port: 9980, getInstalledAppUrl: async () => "http://10.0.0.5:30022", ...values });

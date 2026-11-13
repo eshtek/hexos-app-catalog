@@ -13,7 +13,7 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * (as jellyfin/hardware_transcoding.ts does). The secret is never written to a file of its own.
  *
  * Collabora has no secret: it allows the addresses in its aliasgroup1 instead, which its own
- * use-https hook sets when it sees OpenCloud (collabora/use_https.ts). Its certificate is served by
+ * Pre-configure Collabora sets when it sees OpenCloud (collabora/configure.ts). Its certificate is served by
  * the chart's nginx container rather than Collabora's own.
  *
  * Both apps serve https, since a browser won't show an http editor inside an https page. OpenCloud
@@ -150,7 +150,7 @@ async function connect(ctx: HookContext, link: Office): Promise<void> {
   const url = address!.replace(/^http:/, "https:").replace(/\/+$/, "");
   if (!(await answers(`${url}/hosting/discovery`))) {
     // Collabora serves https only once it has seen OpenCloud, which a Collabora from before OpenCloud hasn't
-    if (!link.secret) stop(`${name} isn't answering on https. Run Serve over https from ${name}'s card, then connect again.`);
+    if (!link.secret) stop(`${name} isn't set up for OpenCloud yet. Open ${name} in HexOS and run Pre-configure ${name}, then connect again.`);
     ctx.fail(`${name} isn't answering at ${url} yet. Try again when it has finished starting.`);
   }
   const office = await officeContainer(appId, service).catch(() => undefined);

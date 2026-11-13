@@ -197,7 +197,7 @@ interface Link {
 const insecure = { tls: { rejectUnauthorized: false } } as RequestInit;
 
 /**
- * Collabora serves https once OpenCloud is on this server too (collabora/use_https.ts), on the same
+ * Collabora serves https once OpenCloud is on this server too (collabora/configure.ts), on the same
  * port, so Nextcloud asks over https when Collabora answers there.
  */
 export async function collaboraAddress(known: string): Promise<string> {

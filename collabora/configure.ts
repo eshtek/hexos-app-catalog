@@ -65,7 +65,7 @@ export async function run(ctx: HookContext): Promise<void> {
     return;
   }
   if (ctx.port !== HTTPS_PORT) {
-    const message = `Collabora can only serve https on port ${HTTPS_PORT}, and it's on ${ctx.port}. It stays on http, so OpenCloud can't use it.`;
+    const message = `OpenCloud can only use Collabora on port ${HTTPS_PORT}, and this Collabora is on ${ctx.port}. Collabora stays as it is.`;
     if (ctx.skip) ctx.skip(message);
     ctx.fail(message);
   }

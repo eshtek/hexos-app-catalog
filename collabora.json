@@ -75,10 +75,10 @@
       "retries": 0
     },
     {
-      "id": "use-https",
-      "title": "Serve over https",
-      "description": "Switching Collabora to https for OpenCloud",
-      "summary": "Serves https on port 9980 so OpenCloud can use Collabora. Runs by itself when OpenCloud is on this server.",
+      "id": "configure-collabora",
+      "title": "Pre-configure Collabora",
+      "description": "Setting up Collabora",
+      "summary": "Sets Collabora up for OpenCloud when OpenCloud is on this server. Run it again after installing OpenCloud. It keeps your other settings.",
       "events": [
         "onAfterInstall",
         "onAfterUpgrade",
@@ -89,7 +89,7 @@
       "surfaces": [
         "card"
       ],
-      "script": "collabora/use_https.ts",
+      "script": "collabora/configure.ts",
       "entrypoint": "run",
       "timeout": 300,
       "retries": 0

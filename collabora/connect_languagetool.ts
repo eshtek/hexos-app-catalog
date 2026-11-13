@@ -8,7 +8,7 @@ import type { HookContext } from "../_lib/hook_context";
  * nothing unless LanguageTool has moved. A script update writes the script's own list back, which
  * this link's row on the Connections tab puts right. Read at Collabora 26.04.
  *
- * Beside OpenCloud, Collabora serves https (Serve over https), and ctx.waitForApp only asks over
+ * Beside OpenCloud, Collabora serves https (Pre-configure Collabora), and ctx.waitForApp only asks over
  * http, so the link waits for whichever of the two Collabora answers on.
  */
 
@@ -46,7 +46,7 @@ export async function run(ctx: HookContext) {
   const wanted = [`${PREFIX}enabled=true`, `${PREFIX}base_url=${url}/v2`, `${PREFIX}ssl_verification=false`];
   const changed = await ctx.updateAppValues((values) => {
     const collabora = values.collabora as { extra_params?: string[] };
-    // Settings already right stay where they are, so a run after Serve over https changes nothing
+    // Settings already right stay where they are, so a run after Pre-configure Collabora changes nothing
     const kept = (collabora.extra_params ?? []).filter((param) => !param.startsWith(PREFIX) || wanted.includes(param));
     collabora.extra_params = [...kept, ...wanted.filter((param) => !kept.includes(param))];
   });
