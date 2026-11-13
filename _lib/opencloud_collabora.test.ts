@@ -9,6 +9,7 @@ mock.module("node:fs", () => ({ ...require("node:fs"), chownSync: () => {} }));
 const { collabora: linkOpenCloud } = await import("../opencloud/connect_office");
 const { collaboraAddress } = await import("../nextcloud/startup");
 const { run: useHttps, withHttps } = await import("../collabora/use_https");
+const { run: linkLanguageTool } = await import("../collabora/connect_languagetool");
 
 // Collabora beside OpenCloud. OpenCloud is https only and a browser blocks an http editor inside an
 // https page, so Collabora serves https once OpenCloud is on the server. Collabora has no secret to
@@ -257,5 +258,31 @@ describe("running OpenCloud's link again", () => {
     const { ctx, events } = context({ getInstalledAppUrl: async () => "http://10.0.0.5:9980", ...values });
     await linkOpenCloud(ctx);
     expect(events).toEqual(["done:locate", "skip:certificate", "skip:update", "skip:confirm"]);
+  });
+});
+
+describe("Collabora's link to LanguageTool", () => {
+  test("waits for Collabora over https once it serves https, since ctx.waitForApp only asks over http", async () => {
+    const asked = respond({ "https://10.0.0.5:9980/hosting/discovery": () => new Response("") });
+    const values = store({ collabora: { extra_params: ["--o:ssl.termination=true", "--o:ssl.ssl_verification=false"] } });
+    const { ctx, events } = context({ port: 9980, getInstalledAppUrl: async () => "http://10.0.0.5:30022", ...values });
+    await linkLanguageTool(ctx);
+    expect(events).toEqual(["done:locate", "done:update", "done:confirm"]);
+    expect(asked.some((url) => url.startsWith("http://"))).toBe(false);
+    expect((values.get().collabora as { extra_params: string[] }).extra_params).toEqual([
+      "--o:ssl.termination=true",
+      "--o:ssl.ssl_verification=false",
+      "--o:languagetool.enabled=true",
+      "--o:languagetool.base_url=http://10.0.0.5:30022/v2",
+      "--o:languagetool.ssl_verification=false",
+    ]);
+  });
+
+  test("still waits over http beside Nextcloud alone", async () => {
+    respond({ "http://10.0.0.5:9980/hosting/discovery": () => new Response("") });
+    const values = store({ collabora: { extra_params: [] } });
+    const { ctx, events } = context({ port: 9980, getInstalledAppUrl: async () => "http://10.0.0.5:30022", ...values });
+    await linkLanguageTool(ctx);
+    expect(events).toEqual(["done:locate", "done:update", "done:confirm"]);
   });
 });
