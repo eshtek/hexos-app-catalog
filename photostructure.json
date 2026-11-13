@@ -190,7 +190,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30509
+        "port_number": "$PORT(30509)"
       }
     },
     "resources": {
