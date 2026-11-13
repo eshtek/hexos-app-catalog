@@ -1,0 +1,42 @@
+{
+  "version": 6,
+  "internal": true,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "FlareSolverr joins the Media library and connects to Prowlarr, for indexers behind Cloudflare."
+  },
+  "requirements": {
+    "locations": [],
+    "specifications": [
+      "2CORE",
+      "1GBRAM"
+    ],
+    "permissions": [],
+    "ports": [
+      30098
+    ]
+  },
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30098)"
+      }
+    },
+    "storage": {
+      "data": {
+        "type": "ix_volume",
+        "ix_volume_config": {
+          "acl_enable": false,
+          "dataset_name": "data"
+        }
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  }
+}

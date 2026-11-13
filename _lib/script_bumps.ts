@@ -9,8 +9,13 @@
 // Run: bun _lib/script_bumps.ts <base ref>     (CI passes origin/<the pull request's base>)
 
 import { readdirSync, readFileSync } from "node:fs";
+import { asFirstCopy, instanceChangeProblems } from "./instances";
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+// A $PORT pin keeps whatever port an installed app is on, so it changes nothing a server runs.
+const PLACED_PORT = /"\$PORT\((\d+)\)"/g;
+const QUOTED_NUMBER = /"(\d+)"/g;
 
 const canonical = (value: unknown): string =>
   JSON.stringify(value, (_key, v) =>
@@ -20,15 +25,37 @@ const canonical = (value: unknown): string =>
 /**
  * What a server runs from a script: everything but the catalog card (metadata), the version block
  * itself, `internal`, which only says which catalog lists the app, and `requirements.game_port`,
- * which the deck reads from the catalog's current script to show the port players join on.
+ * which the deck reads from the catalog's current script to show the port players join on. Neither
+ * does `requirements.instances` change a server that has the app, or `$INSTANCE`, which reads as the
+ * folder it names on every app installed so far, or `$PORT`. A hook's `rerunsOn` is read from the
+ * catalog's current script too (the box's link list), so it reaches installed apps at the next sync,
+ * and so is `requirements.reserved_ports`, the ports HexOS holds for an installed app. So are
+ * `requirements.gpu` and `requirements.gpu_hook`: one card is only given to a new install, and an
+ * installed app's card changes only when its owner picks another. A hook's `summary` is the line
+ * its row shows while nothing runs, read from the catalog's current script as well.
  */
 export function runPart(script: Record<string, unknown>): string {
   const { metadata: _metadata, script: _block, internal: _internal, ...runs } = script;
+  if (Array.isArray(runs.hooks)) {
+    runs.hooks = runs.hooks.map((hook) => {
+      if (!isObject(hook)) return hook;
+      const { rerunsOn: _rerunsOn, summary: _summary, ...rest } = hook;
+      return rest;
+    });
+  }
   if (isObject(runs.requirements)) {
-    const { game_port: _gamePort, ...requirements } = runs.requirements;
+    const {
+      game_port: _gamePort,
+      instances: _instances,
+      shared_folders: _shared,
+      reserved_ports: _reserved,
+      gpu: _gpu,
+      gpu_hook: _gpuHook,
+      ...requirements
+    } = runs.requirements;
     runs.requirements = requirements;
   }
-  return canonical(runs);
+  return asFirstCopy(canonical(runs)).replace(PLACED_PORT, "$1").replace(QUOTED_NUMBER, "$1");
 }
 
 const versionOf = (script: Record<string, unknown>): string | undefined =>
@@ -78,7 +105,7 @@ function mountedFolders(script: Record<string, unknown>): string[] {
     const volume = isObject(entry.ix_volume_config) ? entry.ix_volume_config.dataset_name : undefined;
     if (typeof volume === "string") folders.push(`ix volume ${volume}`);
   }
-  return folders;
+  return folders.map(asFirstCopy);
 }
 
 /**
@@ -92,8 +119,8 @@ export function droppedFolders(base: Record<string, unknown>, head: Record<strin
 
 /** Why a custom app's head script can't ship to the servers that have its base, one reason a line. */
 export function updateProblems(base: Record<string, unknown>, head: Record<string, unknown>): string[] {
-  if (head.custom !== true) return [];
-  const problems: string[] = [];
+  const problems = instanceChangeProblems(base, head);
+  if (head.custom !== true) return problems;
   const bump = bumpProblem(base, head);
   if (bump) problems.push(bump);
   for (const key of unanswerableQuestions(base, head)) {

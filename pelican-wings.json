@@ -1,0 +1,114 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": false,
+  "metadata": {
+    "name": "Pelican Wings",
+    "description": "The part of Pelican that runs your game servers. Each server you create in Pelican Panel runs here in its own container, with its files in this app's folder.",
+    "icon": "pelican/icon.svg",
+    "version": "1.0.0-rc.1",
+    "categories": ["games"],
+    "keywords": ["pelican", "wings", "game server", "dedicated server", "minecraft", "multiplayer"],
+    "homepage": "https://pelican.dev/",
+    "sources": ["https://github.com/pelican-dev/wings"]
+  },
+  "script": {
+    "version": "1.0.1",
+    "changeLog": "Runs ghcr.io/pelican/wings v1.0.0-rc.2."
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "4GBRAM", "20GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30181, 30182],
+    "reserved_ports": [{ "start": 27200, "end": 27219 }]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pelican-wings/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/pelican-wings/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "servers"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "ghcr.io/pelican/wings",
+      "tag": "v1.0.0-rc.2@sha256:45a970378805c1fb9ba25c8f933c25f2339e5a7a87d9925721b89459abe66c7b",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "tty": true,
+    "envs": [
+      { "name": "WINGS_UID", "value": "568" },
+      { "name": "WINGS_GID", "value": "568" },
+      { "name": "WINGS_USERNAME", "value": "apps" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": "$PORT(30181)", "container_port": 8080, "protocol": "tcp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(30182)", "container_port": 2022, "protocol": "tcp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/var/run/docker.sock",
+        "host_path_config": {
+          "path": "/var/run/docker.sock"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/etc/pelican",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/pelican-wings/config"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "$LOCATION(ApplicationsPerformance)/pelican-wings/data",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/pelican-wings/data"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": false
+    }
+  },
+  "hooks": [
+    {
+      "id": "join-panel",
+      "title": "Join Pelican Panel",
+      "description": "Adding this server to Pelican Panel",
+      "events": ["onBeforeInstall"],
+      "script": "pelican/setup.ts",
+      "entrypoint": "joinPanel",
+      "timeout": 600
+    },
+    {
+      "id": "panel-sftp-port",
+      "title": "Tell Pelican Panel the file transfer port",
+      "description": "Setting the file transfer port",
+      "events": ["onAfterInstall"],
+      "script": "pelican/setup.ts",
+      "entrypoint": "sftpPort",
+      "timeout": 120
+    }
+  ]
+}

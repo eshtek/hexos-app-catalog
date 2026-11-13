@@ -1,11 +1,12 @@
 {
   "version": 6,
   "script": {
-    "version": "1.3.0",
-    "changeLog": "Uses the sign-in you choose, still opening without it on your home network, and keeps downloads in progress apart from finished ones"
+    "version": "1.4.0",
+    "changeLog": "A new sign-in reaches every copy of Radarr, Sonarr and Lidarr"
   },
   "sign_in": {
-    "username": true
+    "username": true,
+    "existing": true
   },
   "requirements": {
     "locations": [
@@ -50,7 +51,11 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30024
+        "port_number": "$PORT(30024)"
+      },
+      "bt_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(51413)"
       }
     },
     "storage": {
@@ -77,6 +82,7 @@
       "id": "configure-qbittorrent",
       "title": "Pre-configure qBittorrent",
       "description": "Gives qBittorrent the sign-in you chose and a folder for downloads in progress",
+      "summary": "Sets up qBittorrent's sign-in and a separate folder for downloads in progress. Run it again to turn that folder back on. It keeps your sign-in.",
       "events": [
         "onAfterInstall",
         "userAction"

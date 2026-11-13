@@ -17,7 +17,7 @@
       "type": "text",
       "key": "domain",
       "required": true,
-      "default": "https://$SERVER_LAN_IP:30032"
+      "default": "https://$SERVER_LAN_IP:$PORT(30032)"
     },
     {
       "question": "Set a password for the admin panel",
@@ -66,7 +66,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": "30032"
+        "port_number": "$PORT(30032)"
       },
       "certificate_id": 1,
       "domain": "$QUESTION(domain)",

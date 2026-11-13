@@ -8,9 +8,10 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * install or collection, and keeps downloads in progress apart from finished ones, both in Deluge's
  * own folder of the Downloads location, where Radarr, Sonarr and Lidarr see them at the same path.
  * A Deluge HexOS just installed has its password from seed-webui, so this checks it; one the owner
- * already had, which a collection brings in, gets it here through the page's own settings. With no
- * password chosen (a run from the app's card) the password stays as it is. Read at Deluge 2.2.0
- * (ui/web/json_api.py, ui/web/auth.py), the version TrueNAS pins.
+ * already had, which a collection brings in, keeps its own: HexOS signs in with the password the
+ * owner gave for it (`ctx.existingSignIns`) and changes nothing of it. With no password chosen (a run
+ * from the app's card) the password stays as it is. Read at Deluge 2.2.0 (ui/web/json_api.py,
+ * ui/web/auth.py), the version TrueNAS pins.
  */
 
 /** Deluge's web password before anyone sets one. */
@@ -72,6 +73,25 @@ async function ask(ctx: HookContext, inputs: HookInputDeclaration[], prompt: { t
 
 /** Signs the session in with the first password the page takes, and says which it was. */
 async function signIn(ctx: HookContext, session: Session, configDir: string): Promise<string | undefined> {
+  // A Deluge the owner already had: the password they gave, tried once in the run, and no guesses
+  if (ctx.keptApps?.includes(ctx.resourceId)) {
+    const own = await ctx.tryExistingSignIn?.(
+      ctx.resourceId,
+      async ({ password }) => ((await delugeApi<boolean>(session, "auth.login", [password])) ? password : undefined),
+      {
+        title: "Sign in to Deluge",
+        description: "Deluge refused the password you gave. Enter it again so HexOS can use it.",
+        username: false,
+        app: "Deluge",
+      },
+    );
+    if (own === "refused") {
+      const message = "Deluge refused the password you gave, so HexOS left Deluge as it is. Open Deluge in HexOS and run Pre-configure Deluge to set it up.";
+      if (ctx.skip) ctx.skip(message);
+      ctx.fail(message);
+    }
+    return own;
+  }
   const tried = new Set<string>();
   for (const password of [ctx.signIn?.password, savedPassword(configDir), STOCK_PASSWORD]) {
     if (!password || tried.has(password)) continue;
@@ -90,7 +110,7 @@ async function signIn(ctx: HookContext, session: Session, configDir: string): Pr
   const given = typeof answers?.password === "string" ? answers.password : "";
   if (!given) return undefined;
   if (await delugeApi<boolean>(session, "auth.login", [given])) return given;
-  ctx.fail("Deluge didn't accept that password. Run Pre-configure Deluge from its Connections tab to try again.");
+  ctx.fail("Deluge didn't accept that password. Open Deluge in HexOS and run Pre-configure Deluge to try again.");
 }
 
 export async function configure(ctx: HookContext) {
@@ -114,7 +134,8 @@ export async function configure(ctx: HookContext) {
     await ctx.skipCheckpoint("folders", "HexOS couldn't open Deluge's settings, so they stay as they are");
     return;
   }
-  const wanted = ctx.signIn?.password;
+  // One the owner already had keeps its password
+  const wanted = ctx.keptApps?.includes(ctx.resourceId) ? undefined : ctx.signIn?.password;
   if (!wanted) {
     await ctx.skipCheckpoint("signIn", "Deluge keeps the password it has");
   } else if (current === wanted) {

@@ -1,8 +1,11 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation"
+    "version": "1.2.1",
+    "changeLog": "The dashboard card stays plain while nothing is on this week and nothing is downloading"
+  },
+  "sign_in": {
+    "username": true
   },
   "requirements": {
     "locations": ["ApplicationsPerformance", "Downloads", "Media"],
@@ -26,6 +29,15 @@
       "path": "$LOCATION(Downloads)/qbittorrent"
     },
     {
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
       "path": "$LOCATION(Media)/sports"
     },
     {
@@ -37,14 +49,15 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 1867
+        "port_number": "$PORT(1867)"
       }
     },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/sportarr/config)",
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
-        "$MOUNTED_HOST_PATH($LOCATION(Media)/sports, /media/sports)"
+        "$MOUNTED_HOST_PATH($LOCATION(Media)/sports, /media/sports)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)"
       ]
     },
     "resources": {
@@ -53,5 +66,200 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "configure-sportarr",
+      "title": "Pre-configure Sportarr",
+      "description": "Setting up Sportarr",
+      "summary": "Sets up Sportarr's sign-in and sports folder. Run it again if Sportarr has no library folder. It keeps your other settings.",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "sportarr/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-qbittorrent",
+      "title": "Connect to qBittorrent",
+      "description": "Sends what Sportarr grabs to qBittorrent.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "qbittorrent"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "qbittorrent",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-deluge",
+      "title": "Connect to Deluge",
+      "description": "Sends what Sportarr grabs to Deluge.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "deluge"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "deluge",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-sabnzbd",
+      "title": "Connect to SABnzbd",
+      "description": "Sends what Sportarr grabs to SABnzbd.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sabnzbd"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "sabnzbd",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-nzbget",
+      "title": "Connect to NZBGet",
+      "description": "Sends what Sportarr grabs to NZBGet.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nzbget"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "sportarr/connect_download_client.ts",
+      "entrypoint": "nzbget",
+      "timeout": 900,
+      "retries": 0
+    }
+  ],
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "up-next",
+      "title": "Up next",
+      "description": "What's on next, what's live and what's downloading.",
+      "refresh": 30,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        }
+      ],
+      "background": {
+        "field": "events"
+      },
+      "slots": [
+        {
+          "type": "list",
+          "field": "events",
+          "rows": 1
+        }
+      ],
+      "slides": [
+        {
+          "title": "Downloading",
+          "slots": [
+            {
+              "type": "stat",
+              "field": "queued"
+            },
+            {
+              "type": "list",
+              "field": "queue",
+              "rows": 3
+            }
+          ]
+        },
+        {
+          "title": "Library",
+          "slots": [
+            {
+              "type": "stat",
+              "field": "downloaded"
+            },
+            {
+              "type": "stat",
+              "field": "wanted"
+            },
+            {
+              "type": "chart",
+              "field": "week"
+            }
+          ]
+        }
+      ],
+      "script": "sportarr/widget_up_next.ts",
+      "entrypoint": "run",
+      "timeout": 10
+    }
+  ]
 }

@@ -76,7 +76,60 @@ async function tautulliView(base: string, apiKey: string): Promise<{ machineId?:
   };
 }
 
+/**
+ * The Plex server that answers at an address now, by its machine identifier, or undefined when nothing
+ * does. Plex answers `/identity` without a sign-in.
+ */
+async function identityAt(ip: string, port: number, useSsl: boolean): Promise<string | undefined> {
+  // Only the server's public identifier is read, so a certificate made for another name (a Plex
+  // reached by its IP over TLS) doesn't count as no answer; nothing is sent
+  const init = { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10_000), tls: { rejectUnauthorized: false } };
+  const response = await fetch(`${useSsl ? "https" : "http"}://${ip}:${port}/identity`, init as RequestInit).catch(() => undefined);
+  if (!response?.ok) return undefined;
+  const body = (await response.json().catch(() => undefined)) as { MediaContainer?: { machineIdentifier?: string } } | undefined;
+  return body?.MediaContainer?.machineIdentifier || undefined;
+}
+
+/**
+ * Whether the owner wants Tautulli moved off a server that no longer answers. Nothing proves that
+ * server is gone for good (it may be another computer that's switched off), so the owner decides.
+ * False when they say no, skip the question, or the box can't ask.
+ */
+async function ownerSwitches(ctx: HookContext, watched: string): Promise<boolean> {
+  if (typeof ctx.askForInputs !== "function") return false;
+  const answers = await ctx
+    .askForInputs(
+      [
+        {
+          type: "question",
+          id: "switch",
+          question: {
+            question: "Switch Tautulli to this Plex server",
+            description: "Tautulli keeps the history it has, and adds this server's plays to it.",
+            type: "boolean",
+            key: "switch",
+            required: true,
+          },
+        },
+      ],
+      { title: "Switch Tautulli's Plex server", description: `Tautulli watches ${watched}, which isn't answering.` },
+    )
+    .catch((error: unknown) => {
+      if (error instanceof Error && error.name === "HookInputsUnanswered") return undefined;
+      throw error;
+    });
+  return answers?.switch === true;
+}
+
+/**
+ * How long a run may take before it must stop to say what it found: the hook's timeout in plex.json
+ * (300 seconds) less time for the last check and its message. The platform stops that timeout while
+ * the owner is asked something, so the time spent asking is added back.
+ */
+const RUN_BUDGET_MS = 275_000;
+
 export async function run(ctx: HookContext) {
+  let deadline = Date.now() + RUN_BUDGET_MS;
   await ctx.registerCheckpoints([
     { id: "locate", message: "Finding Tautulli" },
     { id: "credentials", message: "Reading Plex and Tautulli settings" },
@@ -115,6 +168,41 @@ export async function run(ctx: HookContext) {
     await ctx.skipCheckpoint("configure", "Tautulli already watches this Plex server");
     await ctx.emitCheckpoint("verify");
     return;
+  }
+
+  // Tautulli keeps one Plex server, and its history doesn't say which server a play came from, so a
+  // second server's plays would mix into the first's. It's left alone while its server still answers
+  // as another server. It moves to this one when it has no server yet, when its server is this one at
+  // an address that no longer reaches it (the box's address or Plex's port changed), when its address
+  // now answers as this server or is this box with nothing answering there (Plex was reinstalled,
+  // which gives it a new identifier), or when its server doesn't answer at all and the owner says so.
+  const watched = {
+    id: ini.get("pms_identifier") || undefined,
+    ip: ini.get("pms_ip") || undefined,
+    port: Number(ini.get("pms_port")) || 32400,
+    ssl: ini.get("pms_ssl") === "1",
+    name: ini.get("pms_name") || undefined,
+  };
+  if (watched.id && watched.id !== plex.machineId) {
+    // Asked both ways: the address Tautulli's settings name, and the server Tautulli itself reaches
+    const probed = watched.ip ? await identityAt(watched.ip, watched.port, watched.ssl) : undefined;
+    const answering = [probed, before.machineId].filter((id): id is string => !!id);
+    const address = `${watched.ip}:${watched.port}`;
+    // Switching servers is the owner's to do in Tautulli, so trying again can't help
+    const message =
+      `Tautulli already watches another Plex server${watched.name ? `, ${watched.name}` : ""}. ` +
+      "Change it in Tautulli's own settings, then run Connect to Tautulli from Plex.";
+    const context = [{ label: "Tautulli watches", value: watched.name ? `${watched.name} at ${address}` : address }];
+    let moves = answering.length > 0 ? answering.every((id) => id === plex.machineId) : watched.ip === ctx.host;
+    if (!moves && answering.length === 0) {
+      const asking = Date.now();
+      moves = await ownerSwitches(ctx, context[0].value);
+      deadline += Date.now() - asking;
+    }
+    if (!moves) {
+      if (ctx.skip) ctx.skip(message, context);
+      ctx.fail(message, context);
+    }
   }
 
   // The settings page is guarded by a CSRF token, which a caller holding the API key skips by
@@ -186,6 +274,8 @@ export async function run(ctx: HookContext) {
   for (let attempt = 0; attempt < 30; attempt++) {
     after = await tautulliView(base, apiKey).catch(() => ({ connected: false }));
     if (after.machineId === plex.machineId && after.connected) break;
+    // Another look takes the wait and up to 5 seconds more; without time for it, say what Tautulli sees
+    if (Date.now() + 8000 > deadline) break;
     await ctx.sleep(3000);
   }
   const tokenSaved = readTautulliIni(tautulli)?.get("pms_token") === plex.token;

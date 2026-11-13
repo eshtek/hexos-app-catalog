@@ -55,8 +55,8 @@ async function harvestPlexToken(ctx: WidgetContext): Promise<string | null> {
   return xml.match(/PlexOnlineToken="([^"]+)"/)?.[1] ?? null;
 }
 
-/** The platform's limit on a widget's data URI. */
-const IMAGE_LIMIT = 60_000;
+/** The limit on a widget's data URI on a box too old to send its own. One over it fails the whole result. */
+const OLD_IMAGE_LIMIT = 60_000;
 
 /**
  * The crops to try in turn until one fits: near twice the card's size for a sharp picture, then
@@ -106,7 +106,12 @@ function rememberArtwork(key: string, image: string): void {
   if (artworkCache.size > ARTWORK_CACHE_SIZE && oldest !== undefined) artworkCache.delete(oldest);
 }
 
-export async function fetchArtwork(base: string, token: string, session: PlexSession): Promise<string | undefined> {
+export async function fetchArtwork(
+  base: string,
+  token: string,
+  session: PlexSession,
+  limit = OLD_IMAGE_LIMIT,
+): Promise<string | undefined> {
   const path = session.art || session.grandparentArt || session.grandparentThumb || session.thumb;
   if (!path) return undefined;
   const key = `${base}${path}`;
@@ -116,7 +121,7 @@ export async function fetchArtwork(base: string, token: string, session: PlexSes
     for (const crop of ARTWORK_CROPS) {
       const image = await transcodeImage(base, token, path, crop);
       if (!image) return undefined;
-      if (image.length > IMAGE_LIMIT) continue;
+      if (image.length > limit) continue;
       rememberArtwork(key, image);
       return image;
     }
@@ -144,6 +149,8 @@ interface PlexSession {
   // direct play. Session.bandwidth is the reserved stream bandwidth in kbps.
   Session?: { bandwidth?: number };
   TranscodeSession?: { videoDecision?: string; audioDecision?: string };
+  /** The item's versions, the one playing marked selected; bitrate in kbps. */
+  Media?: { bitrate?: number; selected?: boolean; Part?: { decision?: string }[] }[];
 }
 
 /** SxxExx when both indices are known. */
@@ -180,6 +187,28 @@ function bandwidthLabel(kbps: number | undefined): string | undefined {
   return n >= 1000 ? `${(n / 1000).toFixed(1)} Mbps` : `${Math.round(n)} kbps`;
 }
 
+/** Whether Plex re-encodes any of the stream, by its transcoder's decisions or the part's own. */
+function reencoded(session: PlexSession, version: NonNullable<PlexSession["Media"]>[number]): boolean {
+  const transcoder = session.TranscodeSession;
+  if (transcoder?.videoDecision === "transcode" || transcoder?.audioDecision === "transcode") return true;
+  return (version.Part ?? []).some((part) => part.decision === "transcode");
+}
+
+/**
+ * The stream's bitrate: the bandwidth Plex reserves for it, else the bitrate of the version that
+ * plays, when Plex sends that file as it is. A direct play on the home network can come with no
+ * bandwidth, or 0. With several versions and none marked as playing, or anything re-encoded, the
+ * file's bitrate may not be what's sent, so there's no figure.
+ */
+function streamBitrate(session: PlexSession): string | undefined {
+  const reserved = bandwidthLabel(session.Session?.bandwidth);
+  if (reserved) return reserved;
+  const versions = session.Media ?? [];
+  const version = versions.find((media) => media.selected) ?? (versions.length === 1 ? versions[0] : undefined);
+  if (!version || reencoded(session, version)) return undefined;
+  return bandwidthLabel(version.bitrate);
+}
+
 /**
  * The lines that take turns under the stream: who is watching where, then how
  * the picture is served and at what bitrate. Either is left out when Plex says
@@ -187,7 +216,7 @@ function bandwidthLabel(kbps: number | undefined): string | undefined {
  */
 function sessionLines(session: PlexSession): string[] {
   const who = [session.User?.title, session.Player?.product || session.Player?.title].filter(Boolean).join(" · ");
-  const how = [videoMethod(session), bandwidthLabel(session.Session?.bandwidth)].filter(Boolean).join(" · ");
+  const how = [videoMethod(session), streamBitrate(session)].filter(Boolean).join(" · ");
   return [who, how].filter(Boolean);
 }
 
@@ -244,7 +273,7 @@ export async function run(ctx: WidgetContext): Promise<WidgetQueryResult> {
   const total = active.length;
   const sessions = active.slice(0, 5);
 
-  const artwork = await Promise.all(sessions.map((session) => fetchArtwork(base, token, session)));
+  const artwork = await Promise.all(sessions.map((session) => fetchArtwork(base, token, session, ctx.imageLimit)));
 
   return {
     fields: {

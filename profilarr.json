@@ -1,11 +1,12 @@
 {
   "version": 6,
   "script": {
-    "version": "1.1.0",
-    "changeLog": "Uses the sign-in you choose. A Profilarr you already have gets that password when you add it to a collection"
+    "version": "1.2.0",
+    "changeLog": "Profilarr links to each copy of Radarr and Sonarr, by the name you gave it"
   },
   "sign_in": {
-    "username": true
+    "username": true,
+    "existing": true
   },
   "requirements": {
     "locations": [
@@ -37,7 +38,7 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30223
+        "port_number": "$PORT(30223)"
       }
     },
     "storage": {
@@ -49,6 +50,7 @@
       "id": "configure-profilarr",
       "title": "Pre-configure Profilarr",
       "description": "Setting up Profilarr",
+      "summary": "Sets up Profilarr's sign-in and quality profiles that skip releases not in English. A second run changes nothing once Profilarr has your sign-in.",
       "events": [
         "onAfterInstall",
         "userAction"
@@ -86,6 +88,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "profilarr/profilarr_hook.ts",
       "entrypoint": "radarr",
       "timeout": 900,
@@ -114,6 +117,7 @@
         }
       ],
       "rerun": "converge",
+      "copies": "each",
       "script": "profilarr/profilarr_hook.ts",
       "entrypoint": "sonarr",
       "timeout": 900,

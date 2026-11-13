@@ -1,0 +1,591 @@
+import { Database } from "bun:sqlite";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { encodingSettings, type Gpu, parseVainfo, run, testEncode } from "../jellyfin/hardware_transcoding";
+import type { HookContext } from "./hook_context";
+
+// HexOS gives Jellyfin the GPU, and this turns it on. A wrong setting makes every transcode fail with
+// a fatal player error, so these hold what gets saved, and when nothing does.
+
+const NODE = "/dev/dri/renderD128";
+const GATEWAY = "172.16.5.1";
+const SERVER_PATH = "/System/Configuration";
+const NETWORK_PATH = "/System/Configuration/network";
+const profiles = (...rows: string[]) => rows.map((row) => `      ${row.replace(" ", "   :\t")}`).join("\n");
+
+/** What a Celeron N5105 reports: low-power encoders only, and no AV1. */
+const JASPER_LAKE = `libva info: VA-API version 1.24.0
+vainfo: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.3.5 (1b5e662)
+vainfo: Supported profile and entrypoints
+${profiles(
+  "VAProfileMPEG2Main VAEntrypointVLD",
+  "VAProfileH264High VAEntrypointVLD",
+  "VAProfileH264High VAEntrypointEncSliceLP",
+  "VAProfileVC1Advanced VAEntrypointVLD",
+  "VAProfileVP8Version0_3 VAEntrypointVLD",
+  "VAProfileHEVCMain VAEntrypointVLD",
+  "VAProfileHEVCMain VAEntrypointEncSliceLP",
+  "VAProfileHEVCMain10 VAEntrypointVLD",
+  "VAProfileVP9Profile0 VAEntrypointVLD",
+  "VAProfileVP9Profile2 VAEntrypointVLD",
+)}`;
+const TIGER_LAKE = `vainfo: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.3.5
+${profiles(
+  "VAProfileH264High VAEntrypointVLD",
+  "VAProfileH264High VAEntrypointEncSlice",
+  "VAProfileH264High VAEntrypointEncSliceLP",
+  "VAProfileHEVCMain VAEntrypointVLD",
+  "VAProfileHEVCMain VAEntrypointEncSlice",
+  "VAProfileAV1Profile0 VAEntrypointVLD",
+)}`;
+const SKYLAKE = `vainfo: Driver version: Intel iHD driver for Intel(R) Gen Graphics - 26.3.5
+${profiles("VAProfileH264High VAEntrypointVLD", "VAProfileH264High VAEntrypointEncSlice", "VAProfileHEVCMain VAEntrypointVLD")}`;
+const RADEON = `vainfo: Driver version: Mesa Gallium driver 25.1 for AMD Radeon Graphics (radeonsi, renoir)
+${profiles("VAProfileH264High VAEntrypointVLD", "VAProfileH264High VAEntrypointEncSlice", "VAProfileHEVCMain10 VAEntrypointVLD")}`;
+
+const gpu = (output: string) => parseVainfo(output, NODE) as Gpu;
+
+describe("the settings for a GPU", () => {
+  test("a Celeron N5105 gets VA-API, its low-power encoders, and only the decoders it reports", () => {
+    expect(encodingSettings(gpu(JASPER_LAKE))).toEqual({
+      HardwareAccelerationType: "vaapi",
+      VaapiDevice: NODE,
+      QsvDevice: NODE,
+      EnableHardwareEncoding: true,
+      EnableIntelLowPowerH264HwEncoder: true,
+      EnableIntelLowPowerHevcHwEncoder: true,
+      HardwareDecodingCodecs: ["h264", "hevc", "mpeg2video", "vc1", "vp8", "vp9"],
+      EnableDecodingColorDepth10Hevc: true,
+      EnableDecodingColorDepth10Vp9: true,
+      EnableTonemapping: true,
+    });
+  });
+
+  test("a GPU that decodes AV1 gets it, and stays on Quick Sync", () => {
+    const settings = encodingSettings(gpu(TIGER_LAKE));
+    expect(settings.HardwareDecodingCodecs).toEqual(["h264", "hevc", "av1"]);
+    expect(settings.HardwareAccelerationType).toBe("qsv");
+  });
+
+  test("a chip with regular encoders doesn't get the low-power ones", () => {
+    const settings = encodingSettings(gpu(TIGER_LAKE));
+    expect(settings.EnableIntelLowPowerH264HwEncoder).toBe(false);
+    expect(settings.EnableIntelLowPowerHevcHwEncoder).toBe(false);
+  });
+
+  test("an older Intel chip goes through VA-API, where Quick Sync is leaving Linux", () => {
+    expect(encodingSettings(gpu(SKYLAKE)).HardwareAccelerationType).toBe("vaapi");
+  });
+
+  test("a 10-bit decoder the GPU doesn't report stays off", () => {
+    const settings = encodingSettings(gpu(SKYLAKE));
+    expect(settings.EnableDecodingColorDepth10Hevc).toBe(false);
+    expect(settings.EnableDecodingColorDepth10Vp9).toBe(false);
+  });
+
+  test("an AMD GPU goes through VA-API, with no Intel low-power encoder", () => {
+    const settings = encodingSettings(gpu(RADEON));
+    expect(settings.HardwareAccelerationType).toBe("vaapi");
+    expect(settings.EnableIntelLowPowerH264HwEncoder).toBe(false);
+  });
+
+  test("an AMD GPU that decodes AV1 gets the decoder, and still no Quick Sync, which is Intel's", () => {
+    const settings = encodingSettings(gpu(`${RADEON}\n${profiles("VAProfileAV1Profile0 VAEntrypointVLD")}`));
+    expect(settings.HardwareAccelerationType).toBe("vaapi");
+    expect(settings.HardwareDecodingCodecs).toContain("av1");
+  });
+
+  test("an NVIDIA card gets NVENC, and the two decoders every card it can run on has", () => {
+    const settings = encodingSettings({ kind: "nvidia" });
+    expect(settings.HardwareAccelerationType).toBe("nvenc");
+    expect(settings.HardwareDecodingCodecs).toEqual(["h264", "hevc"]);
+  });
+
+  test("an unknown driver is no GPU to set up", () => {
+    expect(parseVainfo("vainfo: Driver version: Something Else 1.0", NODE)).toBeNull();
+    expect(parseVainfo("", NODE)).toBeNull();
+  });
+});
+
+describe("the test encode", () => {
+  test("a low-power-only chip tests its low-power encoder at a set bitrate, what failed without HuC", () => {
+    const args = testEncode(gpu(JASPER_LAKE)).join(" ");
+    expect(args).toContain("-c:v h264_vaapi -low_power 1 -rc_mode VBR -b:v 8M");
+    expect(args).toContain(`vaapi=va:${NODE}`);
+  });
+
+  test("a Quick Sync chip tests Quick Sync, with no low-power flag it doesn't need", () => {
+    const args = testEncode(gpu(TIGER_LAKE)).join(" ");
+    expect(args).toContain("-c:v h264_qsv");
+    expect(args).not.toContain("-low_power");
+  });
+
+  test("an AMD GPU tests VA-API with no low-power flag, and an NVIDIA card tests NVENC", () => {
+    expect(testEncode(gpu(RADEON)).join(" ")).toContain("-c:v h264_vaapi -rc_mode VBR");
+    expect(testEncode(gpu(RADEON))).not.toContain("-low_power");
+    expect(testEncode({ kind: "nvidia" }).join(" ")).toContain("-c:v h264_nvenc");
+  });
+});
+
+describe("the hook", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  interface World {
+    current?: Record<string, unknown>;
+    nvidia?: boolean;
+    nodes?: string;
+    vainfo?: string;
+    encodes?: boolean;
+    saveStatus?: number;
+    restartNeeded?: boolean;
+    prepare?: "absent";
+    token?: boolean;
+    server?: Record<string, unknown>;
+    network?: Record<string, unknown>;
+    gateway?: string | null;
+    /** What `ctx.videoCard()` answers. Absent on a box from before it. */
+    card?: { pciSlot: string | null; vendor?: "NVIDIA" | "INTEL" | "AMD"; picked: boolean } | null;
+    /** Each render node with the PCI device behind it, as the hook reads them for a card. */
+    devices?: string;
+    /** vainfo's answer per node, for a server with two cards. */
+    vainfoByNode?: Record<string, string>;
+    /** What started the hook. A run from the app's card is "action". */
+    event?: string;
+  }
+
+  async function hook(world: World) {
+    const dir = mkdtempSync(join(tmpdir(), "hexos-jellyfin-"));
+    mkdirSync(join(dir, "data"));
+    const db = new Database(join(dir, "data/jellyfin.db"));
+    db.run("CREATE TABLE ApiKeys (AccessToken TEXT, DateCreated TEXT)");
+    if (world.token !== false) db.run("INSERT INTO ApiKeys VALUES ('key', '2026-01-01')");
+    db.close();
+
+    const saved: Array<Record<string, unknown>> = [];
+    const posted: Record<string, Record<string, unknown>> = {};
+    const calls: string[] = [];
+    const commands: string[][] = [];
+    const logs: string[] = [];
+    const prepared: unknown[] = [];
+    let lastExec: { ok: boolean; output: string } = { ok: false, output: "" };
+
+    const answerExec = (cmd: string[]) => {
+      if (cmd[0] === "nvidia-smi") return { ok: world.nvidia === true, output: "" };
+      if (cmd[0] === "sh" && cmd[2]?.includes("readlink")) return { ok: world.devices !== undefined, output: world.devices ?? "" };
+      if (cmd[0] === "sh") return { ok: world.nodes !== "", output: world.nodes ?? `${NODE}\r\n` };
+      if (cmd[0]?.endsWith("vainfo")) {
+        const output = world.vainfoByNode?.[cmd.at(-1) ?? ""] ?? world.vainfo;
+        return { ok: output !== undefined, output: output ?? "" };
+      }
+      return { ok: world.encodes !== false, output: "" };
+    };
+
+    globalThis.fetch = (async (input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("http://docker")) {
+        const path = new URL(url).pathname;
+        if (path.endsWith("/exec")) {
+          const { Cmd } = JSON.parse(String(init?.body)) as { Cmd: string[] };
+          commands.push(Cmd);
+          lastExec = answerExec(Cmd);
+          expect(path).toBe("/containers/ix-jellyfin-jellyfin-1/exec");
+          return Response.json({ Id: "run" });
+        }
+        if (path.endsWith("/start")) return new Response(lastExec.output);
+        if (path.endsWith("/containers/ix-jellyfin-jellyfin-1/json")) {
+          const gateway = world.gateway === undefined ? GATEWAY : world.gateway;
+          return Response.json({ NetworkSettings: { Networks: gateway ? { ix: { Gateway: gateway } } : {} } });
+        }
+        return Response.json({ ExitCode: lastExec.ok ? 0 : 1 });
+      }
+      expect(new Headers(init?.headers).get("Authorization")).toBe('MediaBrowser Token="key"');
+      const path = new URL(url).pathname;
+      if (init?.method === "POST") {
+        calls.push(`POST ${path}`);
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posted[path] = body;
+        if (path.endsWith("/encoding")) {
+          saved.push(body);
+          return new Response(null, { status: world.saveStatus ?? 204 });
+        }
+        return new Response(null, { status: 204 });
+      }
+      if (path.endsWith("/network")) return Response.json(world.network ?? { KnownProxies: [], EnableIPv6: false });
+      if (path.endsWith("/encoding")) return Response.json(world.current ?? { HardwareAccelerationType: "none", TonemappingPeak: 100 });
+      return Response.json(world.server ?? { RemoteClientBitrateLimit: 0, ServerName: "Mine" });
+    }) as typeof fetch;
+
+    const ctx = {
+      resourceId: "jellyfin",
+      event: world.event ?? "action",
+      baseUrl: "http://app",
+      mounts: [{ hostPath: "/mnt/pool/jellyfin/config", containerPath: "/config", localPath: dir }],
+      log: (message: string) => logs.push(message),
+      waitForApp: async () => {
+        calls.push("wait");
+        return new Response();
+      },
+      sleep: async () => {},
+      ...(world.card === undefined ? {} : { videoCard: async () => world.card }),
+      ...(world.prepare === "absent"
+        ? {}
+        : {
+            prepareHardwareVideo: async (options: unknown) => {
+              prepared.push(options);
+              return { restartNeeded: world.restartNeeded === true };
+            },
+          }),
+    } as unknown as HookContext;
+
+    let failure: unknown;
+    await run(ctx).catch((error: unknown) => {
+      failure = error;
+    });
+    return { saved, posted, calls, commands, logs, prepared, failure };
+  }
+
+  test("a GPU that passes is saved over Jellyfin's other settings", async () => {
+    const { saved, failure } = await hook({ vainfo: JASPER_LAKE });
+    expect(failure).toBeUndefined();
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ HardwareAccelerationType: "vaapi", TonemappingPeak: 100 });
+  });
+
+  test.each(["qsv", "vaapi", "nvenc", "amf"])("an owner's own %s is left alone, and the GPU isn't touched", async (type) => {
+    const { saved, commands } = await hook({ current: { HardwareAccelerationType: type }, vainfo: JASPER_LAKE });
+    expect(saved).toEqual([]);
+    expect(commands).toEqual([]);
+  });
+
+  test("a failed test encode saves nothing, because a setting that fails stops every transcode", async () => {
+    const { saved, logs } = await hook({ vainfo: JASPER_LAKE, encodes: false });
+    expect(saved).toEqual([]);
+    expect(logs.join(" ")).toContain("stays on software transcoding");
+  });
+
+  test("a failed test asks the platform to ready the firmware, and to run this again after", async () => {
+    const { saved, prepared, logs } = await hook({ vainfo: JASPER_LAKE, encodes: false, restartNeeded: true });
+    expect(saved).toEqual([]);
+    expect(prepared).toEqual([{ rerunHook: "hardware-transcoding" }]);
+    expect(logs.join(" ")).toContain("needs a server restart");
+  });
+
+  test("a passing test doesn't touch the firmware", async () => {
+    expect((await hook({ vainfo: JASPER_LAKE })).prepared).toEqual([]);
+  });
+
+  test("a box whose image predates the firmware step stays on software, and doesn't fail", async () => {
+    const { saved, failure } = await hook({ vainfo: JASPER_LAKE, encodes: false, prepare: "absent" });
+    expect(saved).toEqual([]);
+    expect(failure).toBeUndefined();
+  });
+
+  test("no GPU saves nothing and runs no encode", async () => {
+    const { saved, commands } = await hook({ nodes: "" });
+    expect(saved).toEqual([]);
+    expect(commands.some((cmd) => cmd[0]?.endsWith("ffmpeg"))).toBe(false);
+  });
+
+  test("a GPU vainfo can't read saves nothing", async () => {
+    expect((await hook({ vainfo: undefined })).saved).toEqual([]);
+  });
+
+  test("an NVIDIA card is found first, and tested", async () => {
+    const { saved, commands } = await hook({ nvidia: true });
+    expect(saved[0]).toMatchObject({ HardwareAccelerationType: "nvenc" });
+    expect(commands.at(-1)?.join(" ")).toContain("h264_nvenc");
+  });
+
+  test("the next render node is tried when the first isn't a GPU it can read", async () => {
+    const { commands, saved } = await hook({ nodes: `${NODE}\r\n/dev/dri/renderD129\r\n`, vainfo: JASPER_LAKE });
+    expect(commands.filter((cmd) => cmd[0]?.endsWith("vainfo"))).toHaveLength(1);
+    expect(saved).toHaveLength(1);
+  });
+
+  describe("the card HexOS gave Jellyfin", () => {
+    const ARC_NODE = "/dev/dri/renderD129";
+    const ARC = "0000:03:00.0";
+    const IGPU = "0000:00:02.0";
+    const TWO_CARDS = {
+      nodes: `${NODE}\r\n${ARC_NODE}\r\n`,
+      devices: `${NODE} /sys/devices/pci0000:00/${IGPU}\r\n${ARC_NODE} /sys/devices/pci0000:00/0000:00:01.0/${ARC}\r\n`,
+      vainfoByNode: { [NODE]: SKYLAKE, [ARC_NODE]: TIGER_LAKE },
+    };
+    const vainfoNodes = (commands: string[][]) => commands.filter((cmd) => cmd[0]?.endsWith("vainfo")).map((cmd) => cmd.at(-1));
+
+    test("of two Intel cards, the one HexOS gave is set up, not the first render node", async () => {
+      const { saved, commands } = await hook({ ...TWO_CARDS, card: { pciSlot: ARC, vendor: "INTEL", picked: false } });
+      expect(vainfoNodes(commands)).toEqual([ARC_NODE]);
+      expect(saved[0]).toMatchObject({ HardwareAccelerationType: "qsv", QsvDevice: ARC_NODE, VaapiDevice: ARC_NODE });
+    });
+
+    test("an Intel card is set up without asking for an NVIDIA one", async () => {
+      const { saved, commands } = await hook({ ...TWO_CARDS, nvidia: true, card: { pciSlot: IGPU, vendor: "INTEL", picked: false } });
+      expect(commands.some((cmd) => cmd[0] === "nvidia-smi")).toBe(false);
+      expect(saved[0]).toMatchObject({ HardwareAccelerationType: "vaapi", VaapiDevice: NODE });
+    });
+
+    test("an NVIDIA card is set up without reading the render nodes", async () => {
+      const { saved, commands } = await hook({ nvidia: true, card: { pciSlot: "0000:01:00.0", vendor: "NVIDIA", picked: false } });
+      expect(saved[0]).toMatchObject({ HardwareAccelerationType: "nvenc" });
+      expect(commands.some((cmd) => cmd[0] === "sh")).toBe(false);
+    });
+
+    test("an Intel card whose render node can't be told gets the first node that answers, and never NVENC", async () => {
+      const { saved } = await hook({ vainfo: JASPER_LAKE, nvidia: true, card: { pciSlot: IGPU, vendor: "INTEL", picked: false } });
+      expect(saved[0]).toMatchObject({ HardwareAccelerationType: "vaapi", VaapiDevice: NODE });
+    });
+
+    test.each([undefined, null])("a box that names no card (%p) looks for one as before", async (card) => {
+      const { saved } = await hook({ nvidia: true, card });
+      expect(saved[0]).toMatchObject({ HardwareAccelerationType: "nvenc" });
+    });
+
+    test("an install's card never changes an acceleration that is already set", async () => {
+      const { saved, commands } = await hook({
+        ...TWO_CARDS,
+        current: { HardwareAccelerationType: "nvenc" },
+        card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+      });
+      expect(saved).toEqual([]);
+      expect(commands).toEqual([]);
+    });
+
+    describe("on a reinstall that finds Jellyfin's old settings", () => {
+      const install = { event: "onAfterInstall" };
+
+      test("NVENC is replaced when the new install was given an Intel card, since it would fail every transcode", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          ...install,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved[0]).toMatchObject({ HardwareAccelerationType: "qsv", QsvDevice: ARC_NODE });
+      });
+
+      test("Quick Sync is replaced when the new install was given an NVIDIA card", async () => {
+        const { saved } = await hook({
+          ...install,
+          nvidia: true,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: NODE },
+          card: { pciSlot: "0000:01:00.0", vendor: "NVIDIA", picked: false },
+        });
+        expect(saved[0]).toMatchObject({ HardwareAccelerationType: "nvenc" });
+      });
+
+      test("NVENC goes back to software when the Intel card the new install was given fails its test encode", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          ...install,
+          encodes: false,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none" }]);
+      });
+
+      test("an acceleration the card can run is left alone, device and all", async () => {
+        const { saved, commands } = await hook({
+          ...TWO_CARDS,
+          ...install,
+          current: { HardwareAccelerationType: "vaapi", VaapiDevice: NODE },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved).toEqual([]);
+        expect(commands).toEqual([]);
+      });
+
+      test("nothing is replaced on a box that names no card", async () => {
+        const { saved } = await hook({ ...install, nvidia: true, current: { HardwareAccelerationType: "qsv" }, card: null });
+        expect(saved).toEqual([]);
+      });
+
+      test("nothing is replaced on a run from the app's card, where only the owner's pick counts", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: { pciSlot: ARC, vendor: "INTEL", picked: false },
+        });
+        expect(saved).toEqual([]);
+      });
+    });
+
+    describe("picked by the owner in HexOS", () => {
+      const picked = (pciSlot: string | null, vendor?: "NVIDIA" | "INTEL") => ({ pciSlot, ...(vendor ? { vendor } : {}), picked: true });
+
+      test("Jellyfin moves from NVENC to the Intel card, with that card's own decoders", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          current: { HardwareAccelerationType: "nvenc", HardwareDecodingCodecs: ["h264", "hevc"], TonemappingPeak: 100 },
+          card: picked(ARC, "INTEL"),
+        });
+        expect(saved).toHaveLength(1);
+        expect(saved[0]).toMatchObject({
+          HardwareAccelerationType: "qsv",
+          QsvDevice: ARC_NODE,
+          HardwareDecodingCodecs: ["h264", "hevc", "av1"],
+          TonemappingPeak: 100,
+        });
+      });
+
+      test("Jellyfin moves from Quick Sync to the NVIDIA card", async () => {
+        const { saved } = await hook({
+          nvidia: true,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: NODE },
+          card: picked("0000:01:00.0", "NVIDIA"),
+        });
+        expect(saved[0]).toMatchObject({ HardwareAccelerationType: "nvenc" });
+      });
+
+      test("Jellyfin moves to the other Intel card", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: ARC_NODE, VaapiDevice: ARC_NODE },
+          card: picked(IGPU, "INTEL"),
+        });
+        expect(saved[0]).toMatchObject({ HardwareAccelerationType: "vaapi", VaapiDevice: NODE, HardwareDecodingCodecs: ["h264", "hevc"] });
+      });
+
+      test("a Jellyfin already on that card is left as it is, with no test encode", async () => {
+        const { saved, commands } = await hook({
+          ...TWO_CARDS,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: ARC_NODE, HardwareDecodingCodecs: ["h264"] },
+          card: picked(ARC, "INTEL"),
+        });
+        expect(saved).toEqual([]);
+        expect(commands.some((cmd) => cmd[0]?.endsWith("ffmpeg"))).toBe(false);
+      });
+
+      test("a card of another kind that fails its test encode puts Jellyfin on software, since its old card is gone from it", async () => {
+        const { saved, logs } = await hook({
+          ...TWO_CARDS,
+          encodes: false,
+          current: { HardwareAccelerationType: "nvenc", TonemappingPeak: 100 },
+          card: picked(ARC, "INTEL"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none", TonemappingPeak: 100 }]);
+        expect(logs.join(" ")).toContain("on software transcoding until");
+      });
+
+      test("an Intel card vainfo can't read puts a Jellyfin on NVENC on software", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          vainfoByNode: {},
+          current: { HardwareAccelerationType: "nvenc" },
+          card: picked(ARC, "INTEL"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none" }]);
+      });
+
+      test("an NVIDIA card whose driver doesn't answer puts a Jellyfin on Quick Sync on software", async () => {
+        const { saved, commands } = await hook({
+          nvidia: false,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: NODE },
+          card: picked("0000:01:00.0", "NVIDIA"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none", QsvDevice: NODE }]);
+        expect(commands.some((cmd) => cmd[0]?.endsWith("ffmpeg"))).toBe(false);
+      });
+
+      test("a chip that needs a restart for its firmware leaves Jellyfin on software until then, and runs again after", async () => {
+        const { saved, prepared, logs } = await hook({
+          vainfo: JASPER_LAKE,
+          encodes: false,
+          restartNeeded: true,
+          current: { HardwareAccelerationType: "nvenc" },
+          card: picked(IGPU, "INTEL"),
+        });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none" }]);
+        expect(prepared).toEqual([{ rerunHook: "hardware-transcoding" }]);
+        expect(logs.join(" ")).toContain("needs a server restart");
+      });
+
+      test("another card of the same kind that fails its test encode leaves Jellyfin's settings as they were, since it still has its old card", async () => {
+        const { saved, logs } = await hook({
+          ...TWO_CARDS,
+          encodes: false,
+          current: { HardwareAccelerationType: "qsv", QsvDevice: ARC_NODE, VaapiDevice: ARC_NODE },
+          card: picked(IGPU, "INTEL"),
+        });
+        expect(saved).toEqual([]);
+        expect(logs.join(" ")).toContain("left as they were");
+      });
+
+      test("another card of the same kind that can't be read leaves Jellyfin's settings as they were", async () => {
+        const { saved } = await hook({
+          ...TWO_CARDS,
+          vainfoByNode: {},
+          current: { HardwareAccelerationType: "vaapi", VaapiDevice: ARC_NODE },
+          card: picked(IGPU, "INTEL"),
+        });
+        expect(saved).toEqual([]);
+      });
+
+      test("no card puts Jellyfin back on software, since its old setting would fail every transcode", async () => {
+        const { saved, commands } = await hook({ current: { HardwareAccelerationType: "nvenc", TonemappingPeak: 100 }, card: picked(null) });
+        expect(saved).toEqual([{ HardwareAccelerationType: "none", TonemappingPeak: 100 }]);
+        expect(commands).toEqual([]);
+      });
+
+      test("no card on a Jellyfin already on software saves nothing", async () => {
+        expect((await hook({ card: picked(null) })).saved).toEqual([]);
+      });
+    });
+  });
+
+  test("with no key to change settings with, it stays on software and doesn't fail", async () => {
+    const { saved, commands, failure } = await hook({ token: false, vainfo: JASPER_LAKE });
+    expect(saved).toEqual([]);
+    expect(commands).toEqual([]);
+    expect(failure).toBeUndefined();
+  });
+
+  describe("remote streams", () => {
+    test("a stream from outside is limited to 20 Mbps, and Jellyfin's other settings stay", async () => {
+      const { posted } = await hook({ vainfo: JASPER_LAKE });
+      expect(posted[SERVER_PATH]).toEqual({ RemoteClientBitrateLimit: 20_000_000, ServerName: "Mine" });
+    });
+
+    test("an owner's own limit stays", async () => {
+      const { posted } = await hook({ vainfo: JASPER_LAKE, server: { RemoteClientBitrateLimit: 8_000_000 } });
+      expect(posted[SERVER_PATH]).toBeUndefined();
+    });
+
+    test("the limit is set with no GPU to use, and when the owner chose their own acceleration", async () => {
+      expect((await hook({ nodes: "" })).posted[SERVER_PATH]).toBeDefined();
+      expect((await hook({ current: { HardwareAccelerationType: "qsv" } })).posted[SERVER_PATH]).toBeDefined();
+    });
+
+    test("Docker's gateway is trusted to name the client, or remote access would count as local", async () => {
+      const { posted } = await hook({ vainfo: JASPER_LAKE, network: { KnownProxies: ["10.1.1.1"], EnableIPv6: false } });
+      expect(posted[NETWORK_PATH]).toEqual({ KnownProxies: ["10.1.1.1", GATEWAY], EnableIPv6: false });
+    });
+
+    test("Jellyfin restarts after that, last, and the hook waits for it to come back", async () => {
+      const { calls } = await hook({ vainfo: JASPER_LAKE });
+      expect(calls.slice(-3)).toEqual([`POST ${NETWORK_PATH}`, "POST /System/Restart", "wait"]);
+    });
+
+    test("run again, nothing restarts Jellyfin", async () => {
+      const { calls, posted } = await hook({ vainfo: JASPER_LAKE, network: { KnownProxies: [GATEWAY] } });
+      expect(calls).not.toContain("POST /System/Restart");
+      expect(posted[NETWORK_PATH]).toBeUndefined();
+    });
+
+    test("with no gateway to trust, nothing restarts Jellyfin", async () => {
+      const { calls } = await hook({ vainfo: JASPER_LAKE, gateway: null });
+      expect(calls).not.toContain("POST /System/Restart");
+    });
+  });
+
+  test("a save Jellyfin refuses fails the step, so the owner can see it", async () => {
+    const { failure } = await hook({ vainfo: JASPER_LAKE, saveStatus: 500 });
+    expect(String(failure)).toContain("refused the hardware settings");
+  });
+});

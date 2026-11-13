@@ -4,7 +4,7 @@ import { chownSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/hook_context";
 
 /**
- * Sets Radarr, Sonarr, Lidarr and Prowlarr up as HexOS ships them. Fresh, Radarr, Lidarr and
+ * Sets Radarr, Sonarr, Lidarr, Chaptarr and Prowlarr up as HexOS ships them. Fresh, Radarr, Lidarr and
  * Prowlarr open on a screen that makes the owner choose a sign-in, and Sonarr on a sign-in page
  * whose password is only in its log. So HexOS gives each the sign-in the owner chose for the
  * install (`ctx.signIn`) and lets the home network in without it: seed-sign-in writes it into
@@ -12,16 +12,103 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * an app that has another (an app the owner already had, which a collection brings in), and adds
  * the library HexOS mounts as the app's root folder. With no sign-in from the owner (a deck from
  * before they chose one) the app gets admin/admin, kept beside its settings so a later check knows
- * it's HexOS's. Read at Radarr 6.4.4, Sonarr 5.0.0, Lidarr 3.1.6 and Prowlarr 2.6.5, the versions
- * TrueNAS pins.
+ * it's HexOS's. Read at Radarr 6.4.4, Sonarr 5.0.0, Lidarr 3.1.6, Chaptarr 0.9.965 and Prowlarr
+ * 2.6.5, the versions TrueNAS pins.
+ *
+ * Radarr and Sonarr start with renaming off, so an import keeps its release's file name and only
+ * the folder is named by the app. configure-<app> turns renaming on once, with names that carry the
+ * movie's or show's id, on an app that is still as it started: renaming off, its own name formats,
+ * nothing in its library, and not one the owner already had. What the owner sets is theirs, and so
+ * is what they change afterwards, which a note in hexos/naming.json keeps true.
+ *
+ * Two more notes in hexos/ say where the app came from, for the links that take out the profiles a
+ * manager starts with (profilarr/profilarr_hook.ts, seerr/connect_arr.ts). A run only knows which
+ * apps the owner already had while a collection installs (`ctx.keptApps`), and a link run from a
+ * card later doesn't. So seed-sign-in leaves fresh.json when it finds no settings and the app is
+ * new, and configure-<app> leaves kept.json on an app a collection brought in as the owner's own.
+ * Those links remove nothing from a manager without the first, or with the second.
  */
 
-const APPS: Record<string, { name: string; api: string; library?: { path: string; name: string } }> = {
-  radarr: { name: "Radarr", api: "v3", library: { path: "/movies", name: "Movies" } },
-  sonarr: { name: "Sonarr", api: "v3", library: { path: "/shows", name: "Shows" } },
-  lidarr: { name: "Lidarr", api: "v1", library: { path: "/music", name: "Music" } },
+interface Library {
+  path: string;
+  name: string;
+  /** Chaptarr keeps ebooks and audiobooks in folders of their own, each with its own profiles. */
+  format?: "ebook" | "audiobook";
+}
+
+interface Naming {
+  /** The app's switch for renaming what it imports. */
+  rename: string;
+  /** Where the app lists what its library holds, and what it calls them. */
+  holds: { path: string; name: string };
+  /** Each name format: the one the app starts with (NamingConfig.Default) and the one HexOS gives it. */
+  formats: Record<string, { stock: string; hexos: string }>;
+}
+
+/**
+ * The folder names carry the id Jellyfin reads ([tmdbid-...], [tvdbid-...]), so a title shared by
+ * two movies or shows is matched to the right one. Emby and Plex match those folders by title and
+ * year. The file names follow the TRaSH guides' shape.
+ */
+const RADARR_NAMING: Naming = {
+  rename: "renameMovies",
+  holds: { path: "/movie", name: "movies" },
+  formats: {
+    movieFolderFormat: {
+      stock: "{Movie Title} ({Release Year})",
+      hexos: "{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]",
+    },
+    standardMovieFormat: {
+      stock: "{Movie Title} ({Release Year}) {Quality Full}",
+      hexos:
+        "{Movie CleanTitle} {(Release Year)} [tmdbid-{TmdbId}] - {Edition Tags }{[Custom Formats]}{[Quality Full]}{[MediaInfo 3D]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[Mediainfo VideoCodec]}{-Release Group}",
+    },
+  },
+};
+
+const SONARR_NAMING: Naming = {
+  rename: "renameEpisodes",
+  holds: { path: "/series", name: "shows" },
+  formats: {
+    seriesFolderFormat: { stock: "{Series Title}", hexos: "{Series TitleYear} [tvdbid-{TvdbId}]" },
+    seasonFolderFormat: { stock: "Season {season}", hexos: "Season {season:00}" },
+    standardEpisodeFormat: {
+      stock: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}",
+      hexos: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}",
+    },
+    dailyEpisodeFormat: {
+      stock: "{Series Title} - {Air-Date} - {Episode Title} {Quality Full}",
+      hexos: "{Series Title} - {Air-Date} - {Episode Title} - {Quality Full}",
+    },
+    animeEpisodeFormat: {
+      stock: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} {Quality Full}",
+      hexos: "{Series Title} - S{season:00}E{episode:00} - {Episode Title} - {Quality Full}",
+    },
+  },
+};
+
+const APPS: Record<string, { name: string; api: string; libraries?: Library[]; noAllowedHosts?: boolean; naming?: Naming }> = {
+  radarr: { name: "Radarr", api: "v3", libraries: [{ path: "/movies", name: "Movies" }], naming: RADARR_NAMING },
+  sonarr: { name: "Sonarr", api: "v3", libraries: [{ path: "/shows", name: "Shows" }], naming: SONARR_NAMING },
+  lidarr: { name: "Lidarr", api: "v1", libraries: [{ path: "/music", name: "Music" }] },
+  chaptarr: {
+    name: "Chaptarr",
+    api: "v1",
+    // Chaptarr takes "Disabled for Local Addresses" without a list, and keeps none in its file
+    noAllowedHosts: true,
+    libraries: [
+      { path: "/books", name: "Books", format: "ebook" },
+      { path: "/audiobooks", name: "Audiobooks", format: "audiobook" },
+    ],
+  },
   prowlarr: { name: "Prowlarr", api: "v1" },
 };
+
+/** Chaptarr's folderType, and the profile each format starts with (the UI's own numbers at 0.9.965). */
+const CHAPTARR_FORMATS = {
+  ebook: { folderType: 2, quality: "E-Book", metadata: "Ebook Default" },
+  audiobook: { folderType: 1, quality: "Audiobook", metadata: "Audiobook Default" },
+} as const;
 
 /** The user the TrueNAS charts run these apps as. */
 const APPS_UID = 568;
@@ -48,7 +135,7 @@ interface Api {
 }
 
 function configMount(mounts: ContextMount[], appId: string): ContextMount | undefined {
-  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => m.hostPath.endsWith(`/${appId}/config`));
+  return mounts.find((m) => m.containerPath === "/config") ?? mounts.find((m) => new RegExp(`/${appId}(-\\d+)?/config$`).test(m.hostPath));
 }
 
 function readText(path: string): string | undefined {
@@ -84,10 +171,17 @@ function keepDefault(config: ContextMount): SignIn {
 /** Once the app has the owner's sign-in, the default kept beside it no longer says anything true. */
 const forgetDefault = (config: ContextMount) => rmSync(signInPath(config), { force: true });
 
+/** A note of HexOS's own beside the app's settings, with when it was left. */
+function leaveNote(config: ContextMount, name: "fresh" | "kept") {
+  mkdirSync(`${config.localPath}/hexos`, { recursive: true, mode: 0o700 });
+  writeFileSync(`${config.localPath}/hexos/${name}.json`, JSON.stringify({ at: new Date().toISOString() }), { mode: 0o600 });
+}
+
 function appOf(ctx: HookContext) {
-  const app = APPS[ctx.resourceId];
+  const catalogId = ctx.catalogAppId ?? ctx.resourceId;
+  const app = APPS[catalogId];
   if (!app) ctx.fail(`HexOS can't set up ${ctx.resourceId} this way`);
-  const config = configMount(ctx.mounts, ctx.resourceId);
+  const config = configMount(ctx.mounts, catalogId);
   if (!config) ctx.fail(`HexOS couldn't find ${app.name}'s settings folder`);
   return { app, config };
 }
@@ -127,6 +221,8 @@ export async function seed(ctx: HookContext) {
     await ctx.skipCheckpoint("signIn", `${app.name} keeps its settings from before`);
     return;
   }
+  // No settings yet, so the app is new: the only proof a later run has that nothing in it is the owner's
+  leaveNote(config, "fresh");
 
   let signIn: SignIn;
   if (ctx.signIn) {
@@ -221,7 +317,7 @@ async function signsIn(base: string, signIn: SignIn): Promise<boolean> {
   const response = await fetch(`${base}/login?returnUrl=%2F`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ username: signIn.username, password: signIn.password, rememberMe: "on" }),
+    body: new URLSearchParams({ username: signIn.username, password: signIn.password }),
     redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   }).catch(() => undefined);
@@ -250,7 +346,7 @@ async function setSignIn(
   const required = kept && host.authenticationRequired ? host.authenticationRequired : "disabledForLocalAddresses";
   const allowedHosts = host.allowedHosts ?? "";
   const standIn =
-    required === "disabledForLocalAddresses" && allowedHosts.trim() === "" ? new URL(api.base).hostname : undefined;
+    !app.noAllowedHosts && required === "disabledForLocalAddresses" && allowedHosts.trim() === "" ? new URL(api.base).hostname : undefined;
   try {
     await call(api, "/config/host", {
       method: "PUT",
@@ -321,7 +417,13 @@ async function ensureSignIn(ctx: HookContext, app: (typeof APPS)[string], config
     }
     // The apps keep usernames in lower case
     const named = (host.authenticationMethod === "forms" || host.authenticationMethod === "basic") && host.username === wanted.username.toLowerCase();
-    if (named && (await signsIn(ctx.baseUrl, wanted))) {
+    // Just started, an app can turn down the sign-in it was seeded with for a moment
+    let takes = false;
+    for (let attempt = 0; named && attempt < 5 && !takes; attempt++) {
+      takes = await signsIn(ctx.baseUrl, wanted);
+      if (!takes && attempt < 4) await ctx.sleep(2_000);
+    }
+    if (named && takes) {
       forgetDefault(config);
       await signedInAtHome();
       await ctx.skipCheckpoint("signIn", `${app.name} already uses the sign-in you chose`);
@@ -373,22 +475,47 @@ async function ensureSignIn(ctx: HookContext, app: (typeof APPS)[string], config
 
 const trimmed = (path: string) => path.replace(/\/+$/, "");
 
-/** The library HexOS mounts, as the app's root folder, when it has none. */
-async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: Api) {
-  const library = app.library;
-  if (!library) return;
-  const folders = () => call<Array<{ path: string }>>(api, "/rootfolder");
-  if ((await folders()).length > 0) {
-    await ctx.skipCheckpoint("library", `${app.name} already has a library folder`);
+/** Chaptarr's body for a folder: its fields carry the format's name, so each format is its own form. */
+async function chaptarrFolder(ctx: HookContext, api: Api, library: Library, format: "ebook" | "audiobook") {
+  const wanted = CHAPTARR_FORMATS[format];
+  const pick = (profiles: Array<{ id: number; name: string }>, name: string) =>
+    profiles.find((profile) => profile.name === name) ?? profiles.find((profile) => profile.name !== "None");
+  const quality = pick(await call(api, "/qualityprofile"), wanted.quality);
+  const metadata = pick(await call(api, "/metadataprofile"), wanted.metadata);
+  if (!quality || !metadata) ctx.fail(`Chaptarr has no profiles to give your ${library.name} folder yet. Try again in a minute.`);
+  return {
+    name: library.name,
+    folderType: wanted.folderType,
+    defaultTags: [],
+    isCalibreLibrary: false,
+    [`${format}Monitored`]: true,
+    [`${format}MonitorExistingMode`]: "all",
+    [`${format}MonitorNewItems`]: "all",
+    [`${format}QualityProfileId`]: quality.id,
+    [`${format}MetadataProfileId`]: metadata.id,
+    [`${format}Tags`]: [],
+  };
+}
+
+/** A library HexOS mounts, as a root folder of the app, when the app has none of its kind. */
+async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: Api, library: Library, checkpoint: string) {
+  const folders = () => call<Array<{ path: string; folderType?: number }>>(api, "/rootfolder");
+  const present = await folders();
+  const haveOne = library.format
+    ? present.some((entry) => entry.folderType === CHAPTARR_FORMATS[library.format as "ebook"].folderType || entry.folderType === 0)
+    : present.length > 0;
+  if (haveOne) {
+    await ctx.skipCheckpoint(checkpoint, `${app.name} already has a ${library.name} folder`);
     return;
   }
   if (ctx.mounts.length > 0 && !ctx.mounts.some((m) => m.containerPath === library.path)) {
-    await ctx.skipCheckpoint("library", `HexOS didn't give ${app.name} a ${library.name} folder, so it has none to add`);
+    await ctx.skipCheckpoint(checkpoint, `HexOS didn't give ${app.name} a ${library.name} folder, so it has none to add`);
     return;
   }
 
   const folder: Record<string, unknown> = { path: library.path };
-  if (ctx.resourceId === "lidarr") {
+  if (library.format) Object.assign(folder, await chaptarrFolder(ctx, api, library, library.format));
+  if ((ctx.catalogAppId ?? ctx.resourceId) === "lidarr") {
     // Lidarr's Standard profiles when it has them: its form starts on "Any", which takes any bitrate
     // and never upgrades it. Never the empty "None" metadata profile.
     const pick = (profiles: Array<{ id: number; name: string }>) =>
@@ -419,7 +546,70 @@ async function ensureLibrary(ctx: HookContext, app: (typeof APPS)[string], api: 
   if (!(await folders()).some((entry) => trimmed(entry.path) === library.path)) {
     ctx.fail(`${app.name} saved your ${library.name} folder, but HexOS couldn't find it there`);
   }
-  await ctx.emitCheckpoint("library");
+  await ctx.emitCheckpoint(checkpoint);
+}
+
+const namingPath = (config: ContextMount) => `${config.localPath}/hexos/naming.json`;
+
+/**
+ * Renaming on, with HexOS's name formats, once. Only an app still as it started is changed: one the
+ * owner already had, one whose naming they set, and one with anything in its library keep what they
+ * have, since new names there would sit beside the old ones. The app's whole naming goes back with
+ * the change, so the settings HexOS doesn't set stay as they are.
+ */
+async function ensureNaming(ctx: HookContext, app: (typeof APPS)[string], config: ContextMount, api: Api) {
+  const naming = app.naming;
+  if (!naming) return;
+  const keeps = (why = `${app.name} keeps the naming it has`) => ctx.skipCheckpoint("naming", why);
+  if (ctx.keptApps?.includes(ctx.resourceId)) return keeps();
+  // Set once: naming the owner puts back to how the app started is still the owner's choice
+  if (existsSync(namingPath(config))) return keeps(`${app.name}'s naming was set up before`);
+
+  const read = () => call<Record<string, unknown> & { id: number }>(api, "/config/naming");
+  const matches = (settings: Record<string, unknown>, rename: boolean, which: "stock" | "hexos") =>
+    settings[naming.rename] === rename && Object.entries(naming.formats).every(([field, format]) => settings[field] === format[which]);
+  const wanted = {
+    [naming.rename]: true,
+    ...Object.fromEntries(Object.entries(naming.formats).map(([field, format]) => [field, format.hexos])),
+  };
+  const note = () => {
+    mkdirSync(`${config.localPath}/hexos`, { recursive: true, mode: 0o700 });
+    writeFileSync(namingPath(config), JSON.stringify(wanted));
+  };
+  let current: Awaited<ReturnType<typeof read>>;
+  let held: unknown;
+  try {
+    current = await read();
+    // A run that set the naming and stopped before its note: without one, naming the owner later
+    // puts back to how the app started would be changed again
+    if (matches(current, true, "hexos")) {
+      note();
+      return keeps(`${app.name}'s naming was set up before`);
+    }
+    if (!matches(current, false, "stock")) return keeps();
+    held = await call<unknown>(api, naming.holds.path);
+  } catch (error) {
+    ctx.fail(`HexOS couldn't read ${app.name}'s naming`, [{ label: "Reason", value: reason(error) }]);
+  }
+  // Only an empty list says the library is empty
+  if (!Array.isArray(held) || held.length > 0) {
+    return keeps(`${app.name} already has ${naming.holds.name}, so it keeps the naming they have`);
+  }
+
+  let sent = false;
+  let after: Awaited<ReturnType<typeof read>>;
+  try {
+    await call(api, `/config/naming/${current.id}`, { method: "PUT", body: JSON.stringify({ ...current, ...wanted }) });
+    sent = true;
+    after = await read();
+  } catch (error) {
+    ctx.fail(sent ? `HexOS couldn't check the naming it gave ${app.name}. Run this again.` : `${app.name} didn't take its naming`, [
+      { label: "Reason", value: reason(error) },
+    ]);
+  }
+  if (!matches(after, true, "hexos")) ctx.fail(`${app.name} saved its naming, but HexOS couldn't find it there. Run this again.`);
+  note();
+  await ctx.emitCheckpoint("naming");
 }
 
 export async function configure(ctx: HookContext) {
@@ -427,10 +617,19 @@ export async function configure(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "start", message: `Waiting for ${app.name} to start` },
     { id: "signIn", message: `Checking ${app.name}'s sign-in` },
-    ...(app.library ? [{ id: "library", message: `Adding your ${app.library.name} folder to ${app.name}` }] : []),
+    ...(app.libraries ?? []).map((library, index) => ({
+      id: `library-${index}`,
+      message: `Adding your ${library.name} folder to ${app.name}`,
+    })),
+    ...(app.naming ? [{ id: "naming", message: `Turning on renaming in ${app.name}` }] : []),
   ]);
+  // Noted before anything else, so a run that stops early still leaves it
+  if (ctx.keptApps?.includes(ctx.resourceId)) leaveNote(config, "kept");
   const api = await reach(ctx, app, config);
   await ctx.emitCheckpoint("start");
   await ensureSignIn(ctx, app, config, api);
-  await ensureLibrary(ctx, app, api);
+  for (const [index, library] of (app.libraries ?? []).entries()) {
+    await ensureLibrary(ctx, app, api, library, `library-${index}`);
+  }
+  await ensureNaming(ctx, app, config, api);
 }

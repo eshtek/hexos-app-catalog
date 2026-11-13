@@ -1,13 +1,23 @@
 {
   "version": 6,
   "script": {
-    "version": "1.3.0",
-    "changeLog": "Uses the sign-in you choose, still opening without it on your home network. A Radarr you already have gets that sign-in too when you add it to a collection"
+    "version": "1.4.1",
+    "changeLog": "Makes a folder in Downloads for each download client as it installs, so Radarr sees what a client you add later downloads"
   },
   "sign_in": {
     "username": true
   },
   "requirements": {
+    "instances": "many",
+    "shared_folders": [
+      "$LOCATION(Downloads)/qbittorrent",
+      "$LOCATION(Downloads)/deluge",
+      "$LOCATION(Downloads)/sabnzbd",
+      "$LOCATION(Downloads)/nzbget"
+    ],
+    "copy_libraries": [
+      "Movies"
+    ],
     "locations": [
       "ApplicationsPerformance",
       "ApplicationsCapacity",
@@ -44,7 +54,16 @@
       "path": "$LOCATION(Downloads)/qbittorrent"
     },
     {
-      "path": "$LOCATION(ApplicationsPerformance)/radarr/config",
+      "path": "$LOCATION(Downloads)/deluge"
+    },
+    {
+      "path": "$LOCATION(Downloads)/sabnzbd"
+    },
+    {
+      "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(radarr)/config",
       "snapshot": {
         "id": "config"
       }
@@ -54,11 +73,11 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30025
+        "port_number": "$PORT(30025)"
       }
     },
     "storage": {
-      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/radarr/config)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/$INSTANCE(radarr)/config)",
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
         "$MOUNTED_HOST_PATH($LOCATION(Movies), /movies)",
@@ -76,7 +95,7 @@
     {
       "id": "seed-sign-in",
       "title": "Set Radarr's sign-in",
-      "description": "Sets Radarr's sign-in, so it opens without one on your home network",
+      "description": "Creating admin account",
       "events": [
         "onBeforeInstall"
       ],
@@ -89,6 +108,7 @@
       "id": "configure-radarr",
       "title": "Pre-configure Radarr",
       "description": "Setting up Radarr",
+      "summary": "Sets up Radarr's sign-in, Movies folder and file renaming. Run it again if Radarr has no Movies folder. It keeps your other settings.",
       "events": [
         "onAfterInstall",
         "userAction"
@@ -184,7 +204,7 @@
       "rerun": "converge",
       "script": "servarr/connect_download_client.ts",
       "entrypoint": "sabnzbd",
-      "timeout": 120,
+      "timeout": 900,
       "retries": 0
     },
     {
@@ -212,7 +232,7 @@
       "rerun": "converge",
       "script": "servarr/connect_download_client.ts",
       "entrypoint": "nzbget",
-      "timeout": 120,
+      "timeout": 900,
       "retries": 0
     }
   ]

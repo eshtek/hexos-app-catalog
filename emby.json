@@ -6,7 +6,9 @@
   },
   "sign_in": {
     "username": true,
-    "adds_user": true
+    "adds_user": true,
+    "email": true,
+    "existing": true
   },
   "requirements": {
     "locations": [
@@ -29,7 +31,8 @@
     "ports": [
       9096,
       8920
-    ]
+    ],
+    "gpu": "one"
   },
   "ensure_directories_exists": [
     {
@@ -90,11 +93,11 @@
     "network": {
       "http_port": {
         "bind_mode": "published",
-        "port_number": 9096
+        "port_number": "$PORT(9096)"
       },
       "https_port": {
         "bind_mode": "published",
-        "port_number": 8920
+        "port_number": "$PORT(8920)"
       }
     },
     "resources": {
@@ -121,6 +124,7 @@
       "entrypoint": "afterInstall",
       "timeout": 900,
       "description": "Setting up Emby",
+      "summary": "Finishes Emby's first setup and adds a library for each media folder. Also limits streams from outside your network to 20 Mbps.",
       "optional": true,
       "retries": 0,
       "userOptional": {
@@ -161,6 +165,126 @@
       "script": "emby/connect_seerr.ts",
       "entrypoint": "run",
       "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-sportarr",
+      "title": "Connect to Sportarr",
+      "description": "Adds a Sports library to Emby for what Sportarr fetches. What Sportarr adds or renames shows in it right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sportarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "emby"
+        }
+      ],
+      "rerun": "converge",
+      "script": "emby/add_library.ts",
+      "entrypoint": "sportarr",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-chaptarr",
+      "title": "Connect to Chaptarr",
+      "description": "Adds Books and Audiobooks libraries to Emby for what Chaptarr fetches.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "chaptarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "emby"
+        }
+      ],
+      "rerun": "converge",
+      "script": "emby/add_library.ts",
+      "entrypoint": "chaptarr",
+      "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Shows what Radarr adds, renames or removes in Emby right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "emby"
+        }
+      ],
+      "requiresHooks": [
+        "configure-emby"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "radarr",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Shows what Sonarr adds, renames or removes in Emby right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "emby"
+        }
+      ],
+      "requiresHooks": [
+        "configure-emby"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "sonarr",
+      "timeout": 300,
       "retries": 0
     }
   ],

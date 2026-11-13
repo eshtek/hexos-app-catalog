@@ -8,9 +8,25 @@ afterEach(() => {
   globalThis.fetch = realFetch;
 });
 
+/** This Jellyfin server's id, at jf.test:8096. A reinstall gives the same address a new one. */
+const THIS_SERVER = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+
+class Skipped extends Error {}
+
 interface Options {
   state?: number | null;
   existingHost?: string;
+  /** The Jellyfin server id Jellystat saved (`settings.ServerID`), null as a first setup leaves it. */
+  serverId?: string | null;
+  /** Jellystat's libraries, each with the id of the server it was synced from. */
+  libraries?: Array<{ ServerId: string; archived?: boolean }>;
+  librariesStatus?: number;
+  /** Other Jellyfin servers, by "host:port"; this one always answers at jf.test:8096. */
+  servers?: Record<string, { Id: string; ServerName?: string }>;
+  /** The answers before any the run is given; a card run has none. */
+  inputs?: Record<string, unknown>;
+  /** What the owner answers when asked, by input id, "skip" to skip, or "none" for a box that can't ask. */
+  owner?: Record<string, unknown> | "skip" | "none";
   statSetupStatus?: number;
   statConfigStatus?: number;
   password?: string;
@@ -42,7 +58,21 @@ interface Call {
 function apis(options: Options = {}) {
   const calls: Call[] = [];
   const checkpoints: string[] = [];
+  const questions: Array<{ title?: string; description?: string }> = [];
   let statHost = options.existingHost ?? "";
+  let statServerId = options.serverId ?? null;
+  const servers: Record<string, { Id: string; ServerName?: string }> = {
+    "jf.test:8096": { Id: THIS_SERVER, ServerName: "Test library" },
+    ...options.servers,
+  };
+  /** The server that answers at a Jellyfin address, as Jellystat and HexOS reach it. */
+  const serverAt = (address: string) => {
+    try {
+      return servers[new URL(address).host];
+    } catch {
+      return undefined;
+    }
+  };
   let keyExists = options.keyExists ?? false;
   let initialized = options.initialized ?? false;
   let publicReads = 0;
@@ -59,9 +89,12 @@ function apis(options: Options = {}) {
       headers: new Headers(init?.headers),
     };
     calls.push(call);
-    if (url.hostname === "jf.test") {
+    if (url.host === "jf.test:8096") {
       if (url.pathname === "/Users/AuthenticateByName")
         return json({ AccessToken: "jf-session", User: { Policy: { IsAdministrator: options.admin ?? true } } });
+      // As Jellyfin 12 does with EnableLegacyAuthorization off: a token counts only in Authorization
+      if (url.pathname === "/Auth/Keys" && call.headers.get("Authorization") !== 'MediaBrowser Token="jf-session"')
+        return json({}, 401);
       if (url.pathname === "/Auth/Keys" && call.method === "GET")
         return json({ Items: keyExists ? [{ AppName: "Jellystat", AccessToken: "jf-api-key" }] : [] });
       if (url.pathname === "/Auth/Keys" && call.method === "POST") {
@@ -70,7 +103,9 @@ function apis(options: Options = {}) {
       }
       if (url.pathname === "/System/Info/Public")
         return json(
-          options.wizard === null ? {} : { StartupWizardCompleted: options.wizard ?? true, ServerName: "Test library" },
+          options.wizard === null
+            ? {}
+            : { Id: THIS_SERVER, StartupWizardCompleted: options.wizard ?? true, ServerName: "Test library" },
         );
     }
     if (url.hostname === "stats.test") {
@@ -80,12 +115,30 @@ function apis(options: Options = {}) {
         return options.state === 2 ? json({}, 403) : json({ token: "stat-session" });
       if (url.pathname === "/auth/login")
         return options.statLoginFails ? json({}, 401) : json({ token: "stat-session" });
-      if (url.pathname === "/api/getconfig") return json({ JF_HOST: statHost }, options.statConfigStatus ?? 200);
+      // Jellystat leaves its API key out of what it shows
+      if (url.pathname === "/api/getconfig")
+        return json(
+          { JF_HOST: statHost, APP_USER: "owner", settings: { ServerID: statServerId }, REQUIRE_LOGIN: true, IS_JELLYFIN: true },
+          options.statConfigStatus ?? 200,
+        );
+      if (url.pathname === "/api/getLibraries")
+        return json(
+          (options.libraries ?? []).map((library, index) => ({ Id: `library-${index}`, Name: `Library ${index}`, archived: false, ...library })),
+          options.librariesStatus ?? 200,
+        );
       if (url.pathname === "/api/setconfig") {
+        // Jellystat checks the key at the address before it keeps either (validateSettings), and only
+        // this server made the key
+        if (serverAt(String(body.JF_HOST))?.Id !== THIS_SERVER || body.JF_API_KEY !== "jf-api-key")
+          return json({ isValid: false, errorMessage: "401 Unauthorized" }, 401);
+        // It saves the id of the server its old settings reach (systemInfo runs before it rereads
+        // them), and none on its first setup
+        statServerId = statHost ? (serverAt(statHost)?.Id ?? null) : null;
         statHost = String(body.JF_HOST);
         return json({});
       }
     }
+    if (servers[url.host] && url.pathname === "/System/Info/Public") return json(servers[url.host]);
     if (url.hostname === "seer.test") {
       if (url.pathname === "/api/v1/settings/public") {
         publicReads += 1;
@@ -123,16 +176,39 @@ function apis(options: Options = {}) {
       }
     }
     if (url.hostname === "fladder.test" && url.pathname === "/") return new Response("Fladder");
+    // Another Jellyfin address that nothing answers at
+    if (!["jf.test", "stats.test", "seer.test", "fladder.test"].includes(url.hostname)) throw new TypeError("fetch failed");
     throw new Error(`Unexpected request: ${call.method} ${url.hostname}${url.pathname}`);
   }) as typeof fetch;
-  const inputs = { admin_username: "owner", admin_password: options.password ?? "password" };
+  const inputs: Record<string, unknown> = options.inputs ?? { admin_username: "owner", admin_password: options.password ?? "password" };
+  const unanswered = () => Object.assign(new Error("unanswered"), { name: "HookInputsUnanswered" });
+  const owner = options.owner;
   const ctx = {
     baseUrl: "http://jf.test:8096",
     host: "jf.test",
     port: 8096,
+    inputs,
     getInstalledAppUrl: async (id: string) =>
       ({ jellystat: "http://stats.test", seerr: "http://seer.test", fladder: "http://fladder.test" })[id] ?? null,
-    getInput: (id: keyof typeof inputs) => inputs[id],
+    // As the platform's does: an answer the run wasn't given throws
+    getInput: (id: string) => {
+      if (inputs[id] === undefined) throw new Error(`Missing required input: ${id}`);
+      return inputs[id];
+    },
+    ...(owner === "none"
+      ? {}
+      : {
+          askForInputs: async (declared: Array<{ id: string }>, prompt?: { title?: string; description?: string }) => {
+            questions.push(prompt ?? {});
+            if (owner === undefined || owner === "skip") throw unanswered();
+            const answers: Record<string, unknown> = {};
+            for (const { id } of declared) {
+              if (owner[id] === undefined) throw unanswered();
+              answers[id] = owner[id];
+            }
+            return answers;
+          },
+        }),
     registerCheckpoints: async () => {},
     emitCheckpoint: async (id: string) => {
       checkpoints.push(id);
@@ -141,8 +217,11 @@ function apis(options: Options = {}) {
     fail: (message: string) => {
       throw new Error(message);
     },
+    skip: (message: string) => {
+      throw new Skipped(message);
+    },
   } as unknown as HookContext;
-  return { ctx, calls, checkpoints };
+  return { ctx, calls, checkpoints, questions, jellystat: () => ({ host: statHost, serverId: statServerId }) };
 }
 
 // Independent Keccak-512 vectors, including UTF-8 and the 72-byte sponge boundary.
@@ -197,15 +276,117 @@ test("Jellystat refuses an unknown account state before creating an account", as
   expect(calls.some((c) => c.path === "/auth/createuser" || c.path === "/api/setconfig")).toBe(false);
 });
 
-test("Jellystat preserves an existing binding to another Jellyfin server", async () => {
-  const { ctx, calls } = apis({ state: 2, existingHost: "http://another.test:8096" });
-  await expect(connectJellystat(ctx)).rejects.toThrow();
+test("Jellystat preserves an existing binding to another Jellyfin server that still answers, without asking", async () => {
+  const servers = { "another.test:8096": { Id: "friends-server", ServerName: "Friend's Jellyfin" } };
+  const { ctx, calls, questions } = apis({ state: 2, existingHost: "http://another.test:8096", servers, owner: { switch: true } });
+  const refused = await connectJellystat(ctx).catch((error: unknown) => error);
+  expect(refused).toBeInstanceOf(Skipped);
+  expect((refused as Error).message).toMatch(/another Jellyfin server/);
   expect(calls.some((c) => c.path === "/api/setconfig")).toBe(false);
+  expect(questions).toHaveLength(0);
+});
+
+test("Jellystat moved to another server in its own settings is left alone while that server answers, though its saved id names this one", async () => {
+  // Jellystat saves the id its old settings reach, so after a move in its own settings it still names this server
+  const servers = { "another.test:8096": { Id: "friends-server" } };
+  const libraries = [{ ServerId: THIS_SERVER }];
+  const { ctx, calls } = apis({ state: 2, existingHost: "http://another.test:8096", serverId: THIS_SERVER, libraries, servers });
+  await expect(connectJellystat(ctx)).rejects.toThrow(/another Jellyfin server/);
+  expect(calls.some((c) => c.path === "/api/setconfig")).toBe(false);
+});
+
+const setconfig = (calls: Call[]) => calls.find((c) => c.path === "/api/setconfig")?.body;
+
+for (const [label, existingHost] of [
+  ["the box's address changed", "http://10.0.0.30:8096"],
+  ["Jellyfin's port changed", "http://jf.test:8097"],
+] as const) {
+  const named: Array<[string, Options]> = [
+    ["its saved id", { serverId: THIS_SERVER }],
+    ["its libraries, before it has saved an id", { serverId: null, libraries: [{ ServerId: THIS_SERVER }] }],
+    [
+      "its saved id and libraries, beside an archived one from an older server",
+      { serverId: THIS_SERVER, libraries: [{ ServerId: THIS_SERVER }, { ServerId: "old-server", archived: true }] },
+    ],
+  ];
+  for (const [records, saved] of named) {
+    test(`Jellystat at an address that answers nothing moves to this server without asking when ${records} names it (${label})`, async () => {
+      const { ctx, calls, questions, checkpoints, jellystat } = apis({ state: 2, existingHost, keyExists: true, ...saved });
+      await connectJellystat(ctx);
+      expect(setconfig(calls)).toEqual({ JF_HOST: ctx.baseUrl, JF_API_KEY: "jf-api-key" });
+      expect(jellystat().host).toBe(ctx.baseUrl);
+      expect(questions).toHaveLength(0);
+      expect(checkpoints.at(-1)).toBe("verify");
+    });
+  }
+}
+
+test("Jellystat on a reinstalled Jellyfin at the same address gets a key from the new server", async () => {
+  const { ctx, calls } = apis({ state: 2, existingHost: "http://jf.test:8096", serverId: "old-server", keyExists: false });
+  await connectJellystat(ctx);
+  expect(calls.some((c) => c.path === "/Auth/Keys" && c.method === "POST")).toBe(true);
+  expect(setconfig(calls)).toEqual({ JF_HOST: ctx.baseUrl, JF_API_KEY: "jf-api-key" });
+});
+
+test("Jellystat at an address the owner wrote that now answers as this server, reinstalled, keeps that address", async () => {
+  const servers = { "jellyfin.home.test:8096": { Id: THIS_SERVER } };
+  const libraries = [{ ServerId: "old-server" }];
+  const existingHost = "http://jellyfin.home.test:8096";
+  const { ctx, calls, questions } = apis({ state: 2, existingHost, serverId: "old-server", libraries, servers });
+  await connectJellystat(ctx);
+  expect(setconfig(calls)).toEqual({ JF_HOST: existingHost, JF_API_KEY: "jf-api-key" });
+  expect(questions).toHaveLength(0);
+});
+
+const unproven: Array<[string, Options]> = [
+  ["its records name another server", { serverId: "old-server" }],
+  ["it has no records", {}],
+  ["its saved id names this server and a library another", { serverId: THIS_SERVER, libraries: [{ ServerId: THIS_SERVER }, { ServerId: "old-server" }] }],
+  ["its libraries can't be read", { serverId: THIS_SERVER, librariesStatus: 503 }],
+];
+for (const [label, saved] of unproven) {
+  test(`Jellystat whose server doesn't answer and ${label} asks the owner, and moves when they say so`, async () => {
+    const { ctx, calls, questions } = apis({ state: 2, existingHost: "http://10.0.0.30:8096", owner: { switch: true }, ...saved });
+    await connectJellystat(ctx);
+    expect(questions.map((q) => q.description)).toEqual(["Jellystat uses http://10.0.0.30:8096, which isn't answering."]);
+    expect(setconfig(calls)).toEqual({ JF_HOST: ctx.baseUrl, JF_API_KEY: "jf-api-key" });
+  });
+}
+
+for (const owner of [{ switch: false }, "skip", "none"] as const) {
+  test(`Jellystat whose other server doesn't answer stays as it is when the owner doesn't move it (${JSON.stringify(owner)})`, async () => {
+    const { ctx, calls, jellystat } = apis({ state: 2, existingHost: "http://10.0.0.30:8096", serverId: "old-server", owner });
+    await expect(connectJellystat(ctx)).rejects.toThrow(/another Jellyfin server/);
+    expect(setconfig(calls)).toBeUndefined();
+    expect(calls.some((c) => c.path === "/Auth/Keys" && c.method === "POST")).toBe(false);
+    expect(jellystat()).toEqual({ host: "http://10.0.0.30:8096", serverId: "old-server" });
+  });
+}
+
+test("Connect to Jellystat from the card, with no sign-in and no inputs, asks for Jellyfin's administrator and connects", async () => {
+  const { ctx, calls, questions, checkpoints } = apis({ inputs: {}, owner: { username: "owner", password: "password" } });
+  await connectJellystat(ctx);
+  expect(questions.map((q) => q.title)).toEqual(["Sign in to Jellyfin"]);
+  expect(calls.find((c) => c.path === "/Users/AuthenticateByName")?.body).toMatchObject({ Username: "owner", Pw: "password" });
+  expect(setconfig(calls)).toEqual({ JF_HOST: ctx.baseUrl, JF_API_KEY: "jf-api-key" });
+  expect(checkpoints.at(-1)).toBe("verify");
+});
+
+test("Connect to Jellystat from the card steps aside when nobody gives Jellyfin's administrator", async () => {
+  const { ctx, calls } = apis({ inputs: {}, owner: "skip" });
+  await expect(connectJellystat(ctx)).rejects.toThrow(Skipped);
+  expect(calls.some((c) => c.host === "jf.test" || c.path === "/api/setconfig")).toBe(false);
 });
 
 test("Jellystat refuses a configured account whose server cannot be verified", async () => {
   const { ctx, calls } = apis({ state: 2 });
   await expect(connectJellystat(ctx)).rejects.toThrow(/existing Jellyfin server/);
+  expect(calls.some((c) => c.path === "/api/setconfig")).toBe(false);
+});
+
+test("Jellystat isn't moved while this Jellyfin doesn't say which server it is", async () => {
+  const { ctx, calls } = apis({ state: 2, existingHost: "http://10.0.0.30:8096", serverId: THIS_SERVER, wizard: null, owner: { switch: true } });
+  await expect(connectJellystat(ctx)).rejects.toThrow("Jellyfin didn't answer");
   expect(calls.some((c) => c.path === "/api/setconfig")).toBe(false);
 });
 
@@ -223,6 +404,35 @@ test("Jellystat takes the run's sign-in over inherited answers", async () => {
   await connectJellystat(ctx);
   expect(calls.find((c) => c.path === "/Users/AuthenticateByName")?.body).toMatchObject({ Username: "chosen", Pw: "chosen-password" });
   expect(calls.find((c) => c.path === "/auth/createuser")?.body.username).toBe("chosen");
+});
+
+// A Jellyfin the owner already had keeps its own administrator (Aaron, 2026-11-08), which the run's
+// new sign-in never became; it is tried once in the whole run
+function keptJellyfin(ctx: HookContext, refusedBefore = false) {
+  Object.assign(ctx, {
+    resourceId: "jellyfin",
+    signIn: { username: "chosen", password: "chosen-password" },
+    keptApps: ["jellyfin"],
+    ...(refusedBefore ? { refusedSignIns: ["jellyfin"] } : { existingSignIns: { jellyfin: { username: "jellyadmin", password: "their-own" } } }),
+    tryExistingSignIn: async <T,>(_name: string, signsIn: (account: { username: string; password: string }) => Promise<T | undefined>) =>
+      refusedBefore ? "refused" : ((await signsIn({ username: "jellyadmin", password: "their-own" })) ?? "refused"),
+  });
+}
+
+test("Jellystat takes a kept Jellyfin's own administrator over the run's sign-in", async () => {
+  const { ctx, calls } = apis();
+  keptJellyfin(ctx);
+  await connectJellystat(ctx);
+  const logins = calls.filter((c) => c.path === "/Users/AuthenticateByName").map((c) => c.body);
+  expect(logins[0]).toMatchObject({ Username: "jellyadmin", Pw: "their-own" });
+  expect(logins.some((body) => body.Pw === "chosen-password")).toBe(false);
+});
+
+test("Jellystat stops without trying an account an earlier hook of the run found refused", async () => {
+  const { ctx, calls } = apis();
+  keptJellyfin(ctx, true);
+  await expect(connectJellystat(ctx)).rejects.toThrow("Jellyfin refused the admin account you gave");
+  expect(calls.some((c) => c.path === "/Users/AuthenticateByName")).toBe(false);
 });
 
 test("Jellystat reuses its named API key", async () => {

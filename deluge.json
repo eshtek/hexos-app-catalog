@@ -5,7 +5,8 @@
     "changeLog": "Uses the password you choose, and keeps downloads in progress apart from finished ones"
   },
   "sign_in": {
-    "username": false
+    "username": false,
+    "existing": true
   },
   "requirements": {
     "locations": [
@@ -50,7 +51,11 @@
     "network": {
       "web_port": {
         "bind_mode": "published",
-        "port_number": 30038
+        "port_number": "$PORT(30038)"
+      },
+      "torrent_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30039)"
       }
     },
     "storage": {
@@ -78,6 +83,7 @@
       "id": "configure-deluge",
       "title": "Pre-configure Deluge",
       "description": "Gives Deluge the password you chose and its download folders",
+      "summary": "Sets Deluge's password and keeps downloads in progress apart from finished ones. A second run changes nothing once Deluge has your password.",
       "events": [
         "onAfterInstall",
         "userAction"

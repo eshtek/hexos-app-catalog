@@ -11,7 +11,9 @@ import type { ContextMount, HookContext, HookInputDeclaration } from "../_lib/ho
  * has (or, when a user by that name exists, that user gets the password and is made one), through
  * an administrator's key from Jellyfin's own database, read-only, or the sign-in of an
  * administrator the owner gives. Its server name and libraries stay as they are. Run from the card
- * with no sign-in chosen, it asks for one.
+ * with no sign-in chosen, it asks for one. A collection that brings in a Jellyfin the owner already
+ * had hands it no sign-in to add but the administrator account the owner gave (`ctx.existingSignIns`),
+ * which it signs in with and changes in no way.
  */
 
 const DEVICE_ID = "hexos-jellyfin-setup";
@@ -27,6 +29,8 @@ const WIDGET_KEY_NAME = "HexOS";
 const AUTO_RETRIES = 5;
 const AUTO_RETRY_DELAY_MS = 5000;
 const LIBRARY_PACE_MS = 5000;
+/** How many looks a requested library gets to appear, about a minute's worth. */
+const LIBRARY_APPEAR_ATTEMPTS = 12;
 const READINESS_ATTEMPTS = 20;
 const READINESS_INTERVAL_MS = 5000;
 const SUBSYSTEM_ATTEMPTS = 8;
@@ -57,12 +61,19 @@ export async function afterInstall(ctx: HookContext) {
   await waitForWizard(ctx);
   await ctx.emitCheckpoint("jellyfinReady");
 
+  const kept = ctx.keptApps?.includes(ctx.resourceId) === true;
   let token: string;
   if (await isWizardComplete(ctx)) {
-    token = await administrator(ctx);
-    await ctx.emitCheckpoint("wizardComplete", ctx.signIn ? "Your sign-in is an administrator" : "Already configured", 30);
+    token = kept ? await asOwnAdministrator(ctx) : await administrator(ctx);
+    await ctx.emitCheckpoint(
+      "wizardComplete",
+      kept ? "Signed in with your administrator" : ctx.signIn ? "Your sign-in is an administrator" : "Already configured",
+      30,
+    );
   } else {
-    const account = ctx.signIn ?? (await chooseSignIn(ctx));
+    // One the owner had but never finished setting up gets the account they gave, as its first
+    const given = kept && !ctx.refusedSignIns?.includes(ctx.resourceId) ? ctx.existingSignIns?.[ctx.resourceId] : undefined;
+    const account = ctx.signIn ?? (given?.username ? given : undefined) ?? (await chooseSignIn(ctx));
     await runWizard(ctx, account.username, account.password);
     token = await authenticate(ctx, account.username, account.password);
     await setServerName(ctx, token, SERVER_NAME);
@@ -91,6 +102,48 @@ function answered(answers: Record<string, unknown> | undefined): SignIn | undefi
   return username && password ? { username, password } : undefined;
 }
 
+/**
+ * A token of the owner's own administrator on a Jellyfin they already had, tried once in the run (see
+ * `ctx.tryExistingSignIn`), or the step stops and says so, having changed nothing. With no account
+ * given, it asks for one as from the card.
+ */
+async function asOwnAdministrator(ctx: HookContext): Promise<string> {
+  const token = await ctx.tryExistingSignIn?.(ctx.resourceId, (account) => administratorToken(ctx, account), {
+    title: "Sign in to Jellyfin",
+    description: "Jellyfin refused the admin account you gave. Enter an administrator's username and password so HexOS can use it.",
+    username: true,
+    app: "Jellyfin",
+  });
+  if (token === "refused") {
+    stop(ctx, "Jellyfin refused the admin account you gave, or it isn't an administrator, so HexOS left Jellyfin as it is. Open Jellyfin in HexOS and run Pre-configure Jellyfin with an administrator's sign-in.");
+  }
+  return token ?? (await administrator(ctx));
+}
+
+/** An administrator's session for this account: undefined when Jellyfin refuses it, or it isn't an administrator. */
+async function administratorToken(ctx: HookContext, account: SignIn): Promise<string | undefined> {
+  const resp = await fetch(`${ctx.baseUrl}/Users/AuthenticateByName`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": CLIENT_HEADER },
+    body: JSON.stringify({ Username: account.username, Pw: account.password }),
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => undefined);
+  if (!resp) ctx.fail("Jellyfin didn't answer. Try again once it's running.");
+  if (resp.status === 401 || resp.status === 403) {
+    await resp.body?.cancel();
+    return undefined;
+  }
+  if (!resp.ok) ctx.fail(`Jellyfin didn't answer its sign-in (${resp.status}). Try again once it's running.`);
+  const data = await resp.json() as { AccessToken?: string; User?: { Policy?: { IsAdministrator?: boolean } } };
+  return data.AccessToken && data.User?.Policy?.IsAdministrator === true ? data.AccessToken : undefined;
+}
+
+/** Ends a step whose app refused the account the owner gave: trying again can't help. */
+function stop(ctx: HookContext, message: string): never {
+  if (ctx.skip) ctx.skip(message);
+  ctx.fail(message);
+}
+
 /** A fresh Jellyfin's administrator, from the owner, when no sign-in came with the install. */
 async function chooseSignIn(ctx: HookContext): Promise<SignIn> {
   const chosen = answered(
@@ -99,7 +152,7 @@ async function chooseSignIn(ctx: HookContext): Promise<SignIn> {
       description: "Jellyfin makes this its administrator. You'll sign in to Jellyfin with it.",
     }),
   );
-  if (!chosen) ctx.fail("Jellyfin needs a sign-in to finish its setup. Run Pre-configure Jellyfin from its Connections tab to choose one.");
+  if (!chosen) ctx.fail("Jellyfin needs a sign-in to finish its setup. Open Jellyfin in HexOS and run Pre-configure Jellyfin to choose one.");
   return chosen;
 }
 
@@ -188,11 +241,11 @@ async function administrator(ctx: HookContext): Promise<string> {
     const given = answered(
       await ask(ctx, signInQuestions, {
         title: "Sign in to Jellyfin",
-        description: `Enter the sign-in of a Jellyfin administrator, so HexOS can add ${wanted.username} as one.`,
+        description: "Enter the sign-in of a Jellyfin administrator, so HexOS can add the account you chose as one.",
       }),
     );
     const signedIn = given && (await signInAs(ctx, given));
-    if (!signedIn?.admin) ctx.fail(`HexOS needs a Jellyfin administrator's sign-in to add ${wanted.username}. Run this again with one.`);
+    if (!signedIn?.admin) ctx.fail("HexOS needs a Jellyfin administrator's sign-in to add the account you chose. Run this again with one.");
     acting = signedIn.token;
   }
 
@@ -208,8 +261,8 @@ async function administrator(ctx: HookContext): Promise<string> {
     await jellyfin(ctx, acting, `/Users/${user.Id}/Policy`, { body: { ...user.Policy, IsAdministrator: true, IsDisabled: false } });
   }
   const now = await signInAs(ctx, wanted);
-  if (!now?.admin) ctx.fail(`Jellyfin didn't make ${wanted.username} an administrator. Run this again.`);
-  ctx.log(`${wanted.username} is a Jellyfin administrator`);
+  if (!now?.admin) ctx.fail("Jellyfin didn't make the account you chose an administrator. Run this again.");
+  ctx.log("The account you chose is a Jellyfin administrator");
   return now.token;
 }
 
@@ -411,6 +464,23 @@ async function getExistingLibraryPaths(ctx: HookContext, token: string): Promise
   }
 }
 
+/** Whether a requested library has appeared: a server busy with its first scan can take a while to list it. */
+async function libraryAppears(ctx: HookContext, token: string, path: string): Promise<boolean> {
+  for (let i = 0; i < LIBRARY_APPEAR_ATTEMPTS; i++) {
+    await ctx.sleep(i === 0 ? 2000 : AUTO_RETRY_DELAY_MS);
+    if ((await getExistingLibraryPaths(ctx, token))?.has(path)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether the app was given the folder a library reads. HexOS leaves a folder's mount out of the
+ * app when its owner turned that location off, and Jellyfin refuses a library at a path it can't see.
+ * Mounts that couldn't be read prove nothing, so every library is asked for then.
+ */
+const hasFolder = (ctx: HookContext, path: string): boolean =>
+  ctx.mounts.length === 0 || ctx.mounts.some((mount) => mount.containerPath === path);
+
 async function createLibraries(ctx: HookContext, token: string): Promise<void> {
   await waitForLibrarySubsystem(ctx, token);
   await ctx.sleep(LIBRARY_PACE_MS);
@@ -433,6 +503,12 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
       continue;
     }
 
+    if (!hasFolder(ctx, lib.path)) {
+      ctx.log(`No ${lib.path} folder in the app, so no library is made for it: ${lib.name}`);
+      await ctx.skipCheckpoint(lib.checkpointId, `HexOS didn't give Jellyfin a ${lib.name} folder, so it has no library to make`);
+      continue;
+    }
+
     let created = false;
     let lastStatus = "";
     let lastBody = "";
@@ -445,6 +521,23 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
             ? `Creating library: ${lib.name}...`
             : `Creating library: ${lib.name}... (retry ${attempt}/${AUTO_RETRIES})`,
         );
+
+        // Jellyfin makes a library for every request, numbering the name (Movies2, Movies3), and a
+        // request that seemed to fail may have worked. So one goes out only when the server says
+        // this library isn't there.
+        const current = await getExistingLibraryPaths(ctx, token);
+        if (current?.has(lib.path)) {
+          ctx.log(`Library is there: ${lib.name}`);
+          created = true;
+          break;
+        }
+        if (current === null) {
+          lastStatus = "Could not read the server's libraries";
+          lastBody = "";
+          ctx.log(`${lib.name}: ${lastStatus}`);
+          await ctx.sleep(AUTO_RETRY_DELAY_MS);
+          continue;
+        }
 
         try {
           const params = new URLSearchParams({
@@ -466,9 +559,7 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
           });
 
           if (resp.ok) {
-            await ctx.sleep(2000);
-            const verified = await getExistingLibraryPaths(ctx, token);
-            if (verified?.has(lib.path)) {
+            if (await libraryAppears(ctx, token, lib.path)) {
               ctx.log(`Created library: ${lib.name}`);
               created = true;
               break;
@@ -483,6 +574,10 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
           lastStatus = "Network error";
           lastBody = String(e);
           ctx.log(`${lib.name}: ${e}`);
+          if (await libraryAppears(ctx, token, lib.path)) {
+            created = true;
+            break;
+          }
         }
 
         await ctx.sleep(AUTO_RETRY_DELAY_MS);

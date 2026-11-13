@@ -1,5 +1,8 @@
 import type { HookContext, PlexOAuthResult } from "../_lib/hook_context";
 
+/** The most a stream outside the owner's network gets. */
+const REMOTE_BITRATE_LIMIT_KBPS = 20_000;
+
 export async function afterInstall(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "plexReady", message: "Starting Plex server" },
@@ -33,6 +36,9 @@ export async function afterInstall(ctx: HookContext) {
   await ctx.emitCheckpoint("prefsSet");
 
   await createLibraries(authToken, ctx);
+
+  // Plex uses the GPU by itself on Plex Pass, so this only readies the firmware for the next restart
+  await ctx.prepareHardwareVideo?.().catch((error: unknown) => ctx.log(`GPU firmware not set up: ${error}`));
 }
 
 function getServerName(ctx: HookContext): string {
@@ -98,11 +104,12 @@ async function claimServer(authToken: string, ctx: HookContext) {
   ctx.log("Fallback claim applied.");
 }
 
-async function setPreferences(authToken: string, ctx: HookContext, serverName: string | undefined) {
+export async function setPreferences(authToken: string, ctx: HookContext, serverName: string | undefined) {
   const prefs: Record<string, string | number> = {
     AcceptedEULA: 1,
     PublishServerOnPlexOnlineKey: 1,
-    ...(serverName ? { FriendlyName: serverName } : {}),
+    // Only for a server just claimed: a rerun leaves an owner's name and limit as they are
+    ...(serverName ? { FriendlyName: serverName, WanPerStreamMaxUploadRate: REMOTE_BITRATE_LIMIT_KBPS } : {}),
     // Plex scans only by hand until these are on, so what Radarr and Sonarr download would never appear
     FSEventLibraryUpdatesEnabled: 1,
     FSEventLibraryPartialScanEnabled: 1,
@@ -159,6 +166,14 @@ const AUTO_RETRIES = 5;
 const AUTO_RETRY_DELAY_MS = 5000;
 const LIBRARY_PACE_MS = 5000;
 
+/**
+ * Whether the app was given the folder a library reads. HexOS leaves a folder's mount out of the
+ * app when its owner turned that location off, and Plex refuses a library at a path it can't see.
+ * Mounts that couldn't be read prove nothing, so every library is asked for then.
+ */
+const hasFolder = (ctx: HookContext, path: string): boolean =>
+  ctx.mounts.length === 0 || ctx.mounts.some((mount) => mount.containerPath === path);
+
 async function createLibraries(authToken: string, ctx: HookContext) {
   await waitForLibrarySubsystem(authToken, ctx);
   await ctx.sleep(LIBRARY_PACE_MS);
@@ -172,6 +187,12 @@ async function createLibraries(authToken: string, ctx: HookContext) {
       ctx.log(`Library already exists: ${lib.name}`);
       await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — already exists`);
       if (i < LIBRARIES.length - 1) await ctx.sleep(LIBRARY_PACE_MS);
+      continue;
+    }
+
+    if (!hasFolder(ctx, lib.location)) {
+      ctx.log(`No ${lib.location} folder in the app, so no library is made for it: ${lib.name}`);
+      await ctx.skipCheckpoint(lib.checkpointId, `HexOS didn't give Plex a ${lib.name} folder, so it has no library to make`);
       continue;
     }
 
