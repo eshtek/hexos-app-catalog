@@ -65,7 +65,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Planka](planka.json) | A Kanban tool for those who want their work visible and organized |
 | [Pelican Panel](pelican-panel.json) | Game server panel; its game servers run in Pelican Wings |
 | [Pelican Wings](pelican-wings.json) | Runs Pelican's game servers, on ports 27200 to 27219 |
-| [PhotoStructure](photostructure.json) | Photo and video library organizer; draws the file browser's thumbnails through its preview route |
+| [PhotoStructure](photostructure.json) | Photo and video library organizer |
 | [Plex](plex.json) | Media server with Plex Pass support |
 | [Portracker](portracker.json) | Docker port tracking dashboard |
 | [Profilarr](profilarr.json) | Quality profiles for Radarr & Sonarr |
@@ -247,28 +247,6 @@ Something the app makes rather than the owner answers, such as Valheim's join co
 ```json
 "settings": [{ "field": "code" }]
 ```
-
-## A page of the app for a file
-
-An app whose web UI has a page for a file can offer it in the file browser's right-click menu. In a version 6 script, declare a `links` list beside the hooks (no schema key of its own): each entry has an `id` (lowercase letters, digits, hyphens and underscores, not one of the app's hook ids), a `title` the menu shows, an optional `description`, `"kind": "file.link"`, `"surfaces": ["fileBrowser"]`, a `target` of `{ "type": "files", "accepts": [".jpg", ".heic"] }` with the extensions dot-prefixed, and a `url`: a path on the app starting with `/` and carrying `{hostPath}`, which HexOS replaces with the file's URL-encoded path on the server. The deck opens the app's address at that path in a new tab; nothing runs on the server. The item shows for one file at a time, under a folder the app has mounted, while the app runs, and the owner can turn it off in Settings â†’ File browser. An optional `mounts` list of container roots keeps the item to the folders mounted there (PhotoStructure names `/ps/originals`, the folder it imports), and elsewhere the item is simply absent.
-
-```json
-"links": [{
-  "id": "open",
-  "title": "Open in PhotoStructure",
-  "kind": "file.link",
-  "surfaces": ["fileBrowser"],
-  "target": { "type": "files", "accepts": [".jpg", ".heic", ".mp4"] },
-  "mounts": ["/ps/originals"],
-  "url": "/open?path={hostPath}"
-}]
-```
-
-An install question may carry `"link": { "url": "https://...", "label": "Read the agreement" }`, a web page the question's info popover opens in a new tab, for a licence or a notice the description refers to.
-
-An app that links back to the deck (a "show in file browser" of its own) takes `$DECK_FOLDER_URL(<Location>)`: the page of that location's Folder on the server's own deck, `https://<server>/folders/<name>/files`, the name being the Folder's share name whatever the owner called it, with the path inside the Folder when the location sits inside one; a location that is an existing directory outside every Folder has no page, so its address is the deck's Folders list. It takes the same location names as `$LOCATION`. PhotoStructure's `PS_FILE_BROWSER_URLS` maps each location it mounts to its `$DECK_FOLDER_URL`.
-
-An app that mounts folders it should browse but never import or change (PhotoStructure's no-import root) lists them as ordinary additional storage; a previews declaration's `mounts` may then be a list, one entry per container root the app serves.
 
 ## A settings file outside the app's folders
 
