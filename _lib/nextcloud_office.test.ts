@@ -39,8 +39,11 @@ function nextcloud() {
 async function start(base: string, occExit = 0): Promise<string[]> {
   const bin = `${base}/bin`;
   mkdirSync(bin, { recursive: true });
-  writeFileSync(`${bin}/php`, `#!/bin/sh\nshift\necho "$*" >> "${base}/occ.log"\nexit ${occExit}\n`);
+  // php -r is the script's wait for Nextcloud's web server, which is up here; sleep returns at once
+  writeFileSync(`${bin}/php`, `#!/bin/sh\n[ "$1" = "-r" ] && exit 0\nshift\necho "$*" >> "${base}/occ.log"\nexit ${occExit}\n`);
   chmodSync(`${bin}/php`, 0o755);
+  writeFileSync(`${bin}/sleep`, "#!/bin/sh\nexit 0\n");
+  chmodSync(`${bin}/sleep`, 0o755);
   writeFileSync(`${base}/run.sh`, readFileSync(`${base}/hexos-start.sh`, "utf-8").replaceAll(START_FOLDER, base));
   const run = Bun.spawn(["sh", `${base}/run.sh`, "--work"], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, stdout: "ignore", stderr: "ignore" });
   await run.exited;
@@ -71,6 +74,7 @@ const office = () =>
     "containers/json": () => Response.json([{ Id: "office" }]),
     "containers/office/json": () => Response.json({ Config: { Env: ["JWT_SECRET=shared-secret"] } }),
     "status.php": () => Response.json({ installed: true, maintenance: false }),
+    "/healthcheck": () => new Response("true"),
   });
 
 describe("Nextcloud's links to Euro-Office and ONLYOFFICE", () => {
@@ -90,6 +94,32 @@ describe("Nextcloud's links to Euro-Office and ONLYOFFICE", () => {
     expect(log.at(-1)).toBe(`${app}:documentserver --check`);
     expect(existsSync(`${state}/${app}.secret`)).toBe(false);
     expect(readFileSync(`${state}/${app}.applied`, "utf-8")).not.toContain("shared-secret");
+  });
+
+  test("the check is tried again while the office can't fetch from Nextcloud yet", async () => {
+    const { base, state } = nextcloud();
+    writeFileSync(`${state}/eurooffice.wanted`, "url=https://10.0.0.5:30461\nstorage=http://10.0.0.5:30027\nsecret=abc\n");
+    writeFileSync(`${state}/eurooffice.secret`, "shared-secret");
+    const bin = `${base}/bin`;
+    mkdirSync(bin, { recursive: true });
+    // The first two checks fail, as when Nextcloud's web server isn't serving yet
+    const php = [
+      "#!/bin/sh",
+      '[ "$1" = "-r" ] && exit 0',
+      "shift",
+      `echo "$*" >> "${base}/occ.log"`,
+      `case "$*" in *--check) n=$(cat "${base}/n" 2>/dev/null || echo 0); echo $((n + 1)) > "${base}/n"; [ "$n" -ge 2 ] ;; esac`,
+      "",
+    ].join("\n");
+    writeFileSync(`${bin}/php`, php);
+    chmodSync(`${bin}/php`, 0o755);
+    writeFileSync(`${bin}/sleep`, "#!/bin/sh\nexit 0\n");
+    chmodSync(`${bin}/sleep`, 0o755);
+    writeFileSync(`${base}/run.sh`, readFileSync(`${base}/hexos-start.sh`, "utf-8").replaceAll(START_FOLDER, base));
+    await Bun.spawn(["sh", `${base}/run.sh`, "--work"], { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, stdout: "ignore", stderr: "ignore" }).exited;
+    expect(occ(base).filter((line) => line.endsWith("--check"))).toHaveLength(3);
+    expect(existsSync(`${state}/eurooffice.applied`)).toBe(true);
+    expect(existsSync(`${state}/eurooffice.secret`)).toBe(false);
   });
 
   test("when occ fails, the secret waits for the next start and nothing counts as applied", async () => {
@@ -118,9 +148,34 @@ describe("Nextcloud's links to Euro-Office and ONLYOFFICE", () => {
       "containers/json": () => Response.json([{ Id: "office" }]),
       "containers/office/json": () => Response.json({ Config: { Env: ["JWT_SECRET=another-secret"] } }),
       "status.php": () => Response.json({ installed: true, maintenance: false }),
+      "/healthcheck": () => new Response("true"),
     });
     await eurooffice(context(mount, base, "http://10.0.0.5:30461"));
     expect(occ(base)).toContain("config:app:set eurooffice jwt_secret --value=another-secret");
+  });
+
+  test("an office still starting is waited for, and one that never answers stops the link before Nextcloud restarts", async () => {
+    const { base, mount } = nextcloud();
+    let checks = 0;
+    respond({
+      "containers/json": () => Response.json([{ Id: "office" }]),
+      "containers/office/json": () => Response.json({ Config: { Env: ["JWT_SECRET=shared-secret"] } }),
+      "status.php": () => Response.json({ installed: true, maintenance: false }),
+      "/healthcheck": () => (++checks < 3 ? new Response("", { status: 502 }) : new Response("true")),
+    });
+    await eurooffice(context(mount, base, "http://10.0.0.5:30461"));
+    expect(checks).toBe(3);
+    expect(occ(base).at(-1)).toBe("eurooffice:documentserver --check");
+
+    const other = nextcloud();
+    respond({
+      "containers/json": () => Response.json([{ Id: "office" }]),
+      "containers/office/json": () => Response.json({ Config: { Env: ["JWT_SECRET=shared-secret"] } }),
+      "/healthcheck": () => new Response("", { status: 502 }),
+    });
+    await expect(onlyoffice(context(other.mount, other.base, "http://10.0.0.5:30136"))).rejects.toThrow("ONLYOFFICE hasn't finished starting");
+    expect(existsSync(`${other.state}/onlyoffice.wanted`)).toBe(false);
+    expect(occ(other.base)).toEqual([]);
   });
 
   test("with no secret to read, nothing is written and the link says why", async () => {

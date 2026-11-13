@@ -68,8 +68,26 @@ apply_office() {
     occ_try config:app:set "$2" DocumentServerUrl --value="$url/" &&
     occ_try config:app:set "$2" StorageUrl --value="$storage/" &&
     occ_try config:app:set "$2" jwt_secret --value="$(cat "$secret_file")" &&
-    occ_try "$2:documentserver" --check &&
+    check_office "$2" &&
     rm -f "$secret_file"
+}
+
+# occ's check has the office fetch a file from Nextcloud, whose web server starts beside this script.
+# So the check waits for it, and gives the office a few tries.
+nextcloud_up() { php -r 'exit(@file_get_contents("http://localhost/status.php") === false ? 1 : 0);'; }
+check_office() {
+  tries=0
+  until nextcloud_up; do
+    tries=$((tries + 1))
+    [ $tries -ge 60 ] && break
+    sleep 5
+  done
+  tries=0
+  until occ_try "$1:documentserver" --check; do
+    tries=$((tries + 1))
+    [ $tries -ge 6 ] && return 1
+    sleep 20
+  done
 }
 
 apply_drawio() {
@@ -215,12 +233,20 @@ interface Link {
   secret?: () => Promise<string | undefined>;
   /** Whether the office needs Nextcloud's own address, for its requests back. */
   storage?: boolean;
+  /** Whether the app answers yet: Nextcloud's check runs once, at its start. */
+  ready?: (url: string) => Promise<boolean>;
 }
 
 const insecure = { tls: { rejectUnauthorized: false } } as RequestInit;
 
 /** Euro-Office and ONLYOFFICE serve https only, on the server's default certificate. */
 export const officeAddress = async (known: string) => known.replace(/^http:/, "https:").replace(/\/+$/, "");
+
+/** An office is ready once its health check says true. Euro-Office takes minutes after an install. */
+export async function officeReady(url: string): Promise<boolean> {
+  const response = await fetch(`${url}/healthcheck`, { signal: AbortSignal.timeout(10_000), ...insecure }).catch(() => undefined);
+  return (await response?.text().catch(() => ""))?.trim() === "true";
+}
 
 /**
  * The office's JWT_SECRET, read from its running container over the Docker socket, as OpenCloud's
@@ -260,6 +286,14 @@ async function connect(ctx: HookContext, link: Link) {
   const url = link.address ? await link.address(known!) : known;
   const secret = link.secret ? await link.secret().catch(() => undefined) : undefined;
   if (link.secret && !secret) ctx.fail(`HexOS couldn't read ${link.name}'s secret from its container`);
+  if (link.ready) {
+    let ready = await link.ready(url);
+    for (let attempt = 0; attempt < 60 && !ready; attempt++) {
+      await ctx.sleep(5_000);
+      ready = await link.ready(url);
+    }
+    if (!ready) ctx.fail(`${link.name} hasn't finished starting. Try again once it's running.`);
+  }
   await ctx.emitCheckpoint("locate");
 
   writeStartScript(mount);
@@ -296,9 +330,9 @@ async function connect(ctx: HookContext, link: Link) {
 
 export const collabora = (ctx: HookContext) => connect(ctx, { appId: "collabora", name: "Collabora", file: "collabora", address: collaboraAddress });
 export const eurooffice = (ctx: HookContext) =>
-  connect(ctx, { appId: "eurooffice-document-server", name: "Euro-Office", file: "eurooffice", address: officeAddress, storage: true, secret: () => officeSecret("eurooffice-document-server", "eurooffice") });
+  connect(ctx, { appId: "eurooffice-document-server", name: "Euro-Office", file: "eurooffice", address: officeAddress, storage: true, ready: officeReady, secret: () => officeSecret("eurooffice-document-server", "eurooffice") });
 export const onlyoffice = (ctx: HookContext) =>
-  connect(ctx, { appId: "onlyoffice-document-server", name: "ONLYOFFICE", file: "onlyoffice", address: officeAddress, storage: true, secret: () => officeSecret("onlyoffice-document-server", "onlyoffice") });
+  connect(ctx, { appId: "onlyoffice-document-server", name: "ONLYOFFICE", file: "onlyoffice", address: officeAddress, storage: true, ready: officeReady, secret: () => officeSecret("onlyoffice-document-server", "onlyoffice") });
 export const drawio = (ctx: HookContext) => connect(ctx, { appId: "drawio", name: "Draw.io", file: "drawio" });
 export const paperless = (ctx: HookContext) => connect(ctx, { appId: "paperless-ngx", name: "Paperless", file: "paperless" });
 export const ollama = (ctx: HookContext) => connect(ctx, { appId: "ollama", name: "Ollama", file: "ollama" });
