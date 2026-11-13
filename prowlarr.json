@@ -67,6 +67,7 @@
       "id": "configure-prowlarr",
       "title": "Pre-configure Prowlarr",
       "description": "Setting up Prowlarr",
+      "summary": "Gives Prowlarr your sign-in at install and lets your home network open it without one. Running it again from here keeps the sign-in Prowlarr has.",
       "events": [
         "onAfterInstall",
         "userAction"

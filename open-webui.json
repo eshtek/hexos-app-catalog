@@ -67,6 +67,7 @@
       "id": "configure-open-webui",
       "title": "Pre-configure Open WebUI",
       "description": "Setting up Open WebUI",
+      "summary": "Makes your administrator account at install. Running it again from here changes nothing.",
       "events": [
         "onAfterInstall",
         "userAction"

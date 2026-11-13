@@ -1,0 +1,140 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.5.0",
+    "changeLog": "PhotoStructure imports your Photos folder and keeps its library in app storage. Accepting its licence and installing its photo and video tools are install questions, both off by default."
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance",
+      "ApplicationsCapacity",
+      "Photos"
+    ],
+    "specifications": [
+      "2CORE",
+      "2GBRAM"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30509
+    ]
+  },
+  "installation_questions": [
+    {
+      "question": "Accept the PhotoStructure End User License Agreement?",
+      "type": "select",
+      "key": "acceptEula",
+      "required": false,
+      "options": [
+        {
+          "text": "Yes",
+          "value": "true"
+        },
+        {
+          "text": "No",
+          "value": "false"
+        }
+      ],
+      "default": "false",
+      "description": "PhotoStructure finishes its first-run setup on its own when you accept; otherwise it asks you when you first open it."
+    },
+    {
+      "question": "Install the photo and video tools?",
+      "type": "select",
+      "key": "installTools",
+      "required": false,
+      "options": [
+        {
+          "text": "Yes",
+          "value": "true"
+        },
+        {
+          "text": "No",
+          "value": "false"
+        }
+      ],
+      "default": "false",
+      "description": "Needed for HEIC photos and for videos. These third-party tools aren't part of PhotoStructure, which doesn't distribute, warrant, or support them. They may require patent licenses depending on where and how you use them. You're responsible for compliance."
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)"
+    },
+    {
+      "path": "$LOCATION(Photos)",
+      "network_share": true
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/photostructure/config",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/photostructure/cache",
+      "owner": {
+        "user": "apps"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsCapacity)/photostructure/library",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "library"
+      }
+    }
+  ],
+  "app_values": {
+    "photostructure": {
+      "additional_envs": [
+        {
+          "name": "PS_PICK_PLAN_ON_WELCOME",
+          "value": "false"
+        },
+        {
+          "name": "PS_ACCEPT_PHOTOSTRUCTURE_END_USER_LICENSE_AGREEMENT",
+          "value": "$QUESTION(acceptEula)"
+        },
+        {
+          "name": "PS_INSTALL_TOOLS_AND_ACCEPT_PATENT_LICENSE_RESPONSIBILITY",
+          "value": "$QUESTION(installTools)"
+        },
+        {
+          "name": "PS_COPY_ASSETS_TO_LIBRARY_DEFAULT",
+          "value": "false"
+        }
+      ]
+    },
+    "storage": {
+      "library": "$HOST_PATH($LOCATION(ApplicationsCapacity)/photostructure/library)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/photostructure/config)",
+      "cache": "$HOST_PATH($LOCATION(ApplicationsPerformance)/photostructure/cache)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Photos), /ps/originals)"
+      ]
+    },
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30509)"
+      }
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(75%, 2)",
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  }
+}

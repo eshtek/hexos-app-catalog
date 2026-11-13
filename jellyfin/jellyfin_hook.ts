@@ -115,7 +115,7 @@ async function asOwnAdministrator(ctx: HookContext): Promise<string> {
     app: "Jellyfin",
   });
   if (token === "refused") {
-    stop(ctx, "Jellyfin refused the admin account you gave, or it isn't an administrator, so HexOS left Jellyfin as it is. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.");
+    stop(ctx, "Jellyfin refused the admin account you gave, or it isn't an administrator, so HexOS left Jellyfin as it is. Open Jellyfin in HexOS and run Pre-configure Jellyfin with an administrator's sign-in.");
   }
   return token ?? (await administrator(ctx));
 }
@@ -152,7 +152,7 @@ async function chooseSignIn(ctx: HookContext): Promise<SignIn> {
       description: "Jellyfin makes this its administrator. You'll sign in to Jellyfin with it.",
     }),
   );
-  if (!chosen) ctx.fail("Jellyfin needs a sign-in to finish its setup. Run Pre-configure Jellyfin from its Connections tab to choose one.");
+  if (!chosen) ctx.fail("Jellyfin needs a sign-in to finish its setup. Open Jellyfin in HexOS and run Pre-configure Jellyfin to choose one.");
   return chosen;
 }
 
@@ -473,6 +473,14 @@ async function libraryAppears(ctx: HookContext, token: string, path: string): Pr
   return false;
 }
 
+/**
+ * Whether the app was given the folder a library reads. HexOS leaves a folder's mount out of the
+ * app when its owner turned that location off, and Jellyfin refuses a library at a path it can't see.
+ * Mounts that couldn't be read prove nothing, so every library is asked for then.
+ */
+const hasFolder = (ctx: HookContext, path: string): boolean =>
+  ctx.mounts.length === 0 || ctx.mounts.some((mount) => mount.containerPath === path);
+
 async function createLibraries(ctx: HookContext, token: string): Promise<void> {
   await waitForLibrarySubsystem(ctx, token);
   await ctx.sleep(LIBRARY_PACE_MS);
@@ -492,6 +500,12 @@ async function createLibraries(ctx: HookContext, token: string): Promise<void> {
       ctx.log(`Library already exists: ${lib.name}`);
       await ctx.emitCheckpoint(lib.checkpointId, `${lib.name} — already exists`);
       if (i < LIBRARIES.length - 1) await ctx.sleep(LIBRARY_PACE_MS);
+      continue;
+    }
+
+    if (!hasFolder(ctx, lib.path)) {
+      ctx.log(`No ${lib.path} folder in the app, so no library is made for it: ${lib.name}`);
+      await ctx.skipCheckpoint(lib.checkpointId, `HexOS didn't give Jellyfin a ${lib.name} folder, so it has no library to make`);
       continue;
     }
 

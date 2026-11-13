@@ -96,6 +96,7 @@
       "entrypoint": "setup",
       "timeout": 420,
       "description": "Setting up Forgejo",
+      "summary": "Finishes Forgejo's first setup and makes your admin account. Run it again with that admin's sign-in to check it still works.",
       "optional": true,
       "retries": 0,
       "inputs": [

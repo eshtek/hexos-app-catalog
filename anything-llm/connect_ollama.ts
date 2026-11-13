@@ -42,7 +42,7 @@ export async function run(ctx: HookContext) {
   if (!url) ctx.fail("Ollama isn't installed, or HexOS can't find its port");
   await ctx.waitForApp("/api/ping", { maxAttempts: 60 });
   const { model, contextLength } = await ollamaSettings(ctx, url);
-  if (!model) ctx.fail("Ollama has no model yet. Choose one on its Connections tab, then run this again.");
+  if (!model) ctx.fail("Ollama has no model yet. Open Ollama in HexOS and run Choose a model, then run this again.");
   await ctx.emitCheckpoint("locate");
 
   // AnythingLLM takes the settings in the order sent and stops at the first it refuses, so the

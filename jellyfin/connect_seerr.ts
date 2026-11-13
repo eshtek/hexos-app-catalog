@@ -131,7 +131,7 @@ async function account(ctx: HookContext): Promise<SignIn> {
       app: "Jellyfin",
     });
     if (own === "refused") {
-      const message = "Jellyfin refused the admin account you gave, so HexOS couldn't connect Seerr to it. Run Pre-configure Jellyfin from its Connections tab with an administrator's sign-in.";
+      const message = "Jellyfin refused the admin account you gave, so HexOS couldn't connect Seerr to it. Open Jellyfin in HexOS and run Pre-configure Jellyfin with an administrator's sign-in.";
       if (ctx.skip) ctx.skip(message);
       ctx.fail(message);
     }

@@ -86,7 +86,7 @@ async function signIn(ctx: HookContext, session: Session, configDir: string): Pr
       },
     );
     if (own === "refused") {
-      const message = "Deluge refused the password you gave, so HexOS left Deluge as it is. Run Pre-configure Deluge from its Connections tab to set it up.";
+      const message = "Deluge refused the password you gave, so HexOS left Deluge as it is. Open Deluge in HexOS and run Pre-configure Deluge to set it up.";
       if (ctx.skip) ctx.skip(message);
       ctx.fail(message);
     }
@@ -110,7 +110,7 @@ async function signIn(ctx: HookContext, session: Session, configDir: string): Pr
   const given = typeof answers?.password === "string" ? answers.password : "";
   if (!given) return undefined;
   if (await delugeApi<boolean>(session, "auth.login", [given])) return given;
-  ctx.fail("Deluge didn't accept that password. Run Pre-configure Deluge from its Connections tab to try again.");
+  ctx.fail("Deluge didn't accept that password. Open Deluge in HexOS and run Pre-configure Deluge to try again.");
 }
 
 export async function configure(ctx: HookContext) {

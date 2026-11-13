@@ -42,6 +42,8 @@ import {
   reservedPortsWellFormed,
   type Finding,
 } from "./ports";
+import { hookSummaryProblems, linkRowProblems } from "./hook_summary";
+import { videoCardProblems } from "./video_card";
 import { instanceRules, linkCopyRules } from "./instances";
 
 type Problem = { file: string; message: string };
@@ -335,6 +337,8 @@ function validate(file: string, script: Record<string, unknown>) {
     if (req.game_port !== undefined && !(Array.isArray(req.ports) && req.ports.includes(req.game_port))) {
       err(file, `requirements.game_port: "${String(req.game_port)}" is not one of requirements.ports`);
     }
+    // One graphics card for a new install, and the hook that sets the app's video settings for it
+    for (const problem of videoCardProblems(script)) err(file, problem);
   }
 
   // --- metadata and its assets ---
@@ -504,6 +508,8 @@ function validate(file: string, script: Record<string, unknown>) {
       if (typeof hook.title !== "string" || !hook.title.trim()) {
         err(file, `${where}: title is missing`);
       }
+      for (const problem of hookSummaryProblems(hook)) err(file, `${where}: ${problem}`);
+      for (const problem of linkRowProblems(hook, file.replace(/\.json$/, ""))) err(file, `${where}: ${problem}`);
       if (hook.kind !== undefined) {
         if (typeof hook.kind !== "string" || !(HOOK_KINDS as readonly string[]).includes(hook.kind)) {
           err(file, `${where}: kind "${String(hook.kind)}" is not a known hook kind`);

@@ -31,7 +31,9 @@
     "ports": [
       30013,
       30014
-    ]
+    ],
+    "gpu": "one",
+    "gpu_hook": "hardware-transcoding"
   },
   "ensure_directories_exists": [
     {
@@ -125,6 +127,7 @@
       "entrypoint": "afterInstall",
       "timeout": 900,
       "description": "Setting up Jellyfin",
+      "summary": "Finishes Jellyfin's first setup and adds a library for each of your media folders. Run it again to add a missing library.",
       "optional": true,
       "retries": 0,
       "userOptional": {
@@ -138,7 +141,8 @@
     },
     {
       "id": "hardware-transcoding",
-      "title": "Set up transcoding and remote streaming",
+      "title": "Setup transcoding",
+      "summary": "Improves streaming on low-bandwidth connections. Uses your selected GPU, if available. Also limits streams from outside your network to 20 Mbps.",
       "events": [
         "onAfterInstall",
         "userAction"
@@ -248,7 +252,7 @@
     {
       "id": "connect-sportarr",
       "title": "Connect to Sportarr",
-      "description": "Adds a Sports library to Jellyfin for what Sportarr fetches.",
+      "description": "Adds a Sports library to Jellyfin for what Sportarr fetches. What Sportarr adds or renames shows in it right away.",
       "kind": "connect",
       "conditions": [
         {
@@ -299,6 +303,70 @@
       "script": "jellyfin/add_library.ts",
       "entrypoint": "chaptarr",
       "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-radarr",
+      "title": "Connect to Radarr",
+      "description": "Shows what Radarr adds, renames or removes in Jellyfin right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "radarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "radarr",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "connect-sonarr",
+      "title": "Connect to Sonarr",
+      "description": "Shows what Sonarr adds, renames or removes in Jellyfin right away.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "jellyfin"
+        }
+      ],
+      "requiresHooks": [
+        "configure-jellyfin"
+      ],
+      "rerun": "converge",
+      "copies": "each",
+      "script": "servarr/connect_media_server.ts",
+      "entrypoint": "sonarr",
+      "timeout": 300,
       "retries": 0
     }
   ],

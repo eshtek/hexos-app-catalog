@@ -65,6 +65,7 @@
       "id": "configure-nzbget",
       "title": "Pre-configure NZBGet",
       "description": "Gives NZBGet the sign-in you chose, and opens its web page on your home network without it",
+      "summary": "Gives NZBGet your sign-in and lets your home network open it without one. A second run changes nothing once NZBGet is set up.",
       "events": [
         "onAfterInstall",
         "userAction"

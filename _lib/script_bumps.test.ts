@@ -128,4 +128,12 @@ describe("what doesn't change a server", () => {
     // Anything else on the hook still changes what a server runs
     expect(runPart({ custom: true, hooks: [{ ...hook, entrypoint: "connect" }] })).not.toBe(runPart(base));
   });
+
+  test("a hook's summary, the line its row shows while nothing runs, read from the catalog's current script too", () => {
+    const hook = { id: "configure-app", description: "Setting up App", script: "x/configure.ts", entrypoint: "configure", rerun: "converge" };
+    const base = { custom: true, hooks: [hook] };
+    expect(runPart({ custom: true, hooks: [{ ...hook, summary: "Adds your Movies folder." }] })).toBe(runPart(base));
+    // The step's label is part of what an install shows, so it still counts
+    expect(runPart({ custom: true, hooks: [{ ...hook, description: "Setting App up" }] })).not.toBe(runPart(base));
+  });
 });

@@ -51,7 +51,7 @@ interface Options {
   mounts?: ContextMount[];
   /** What Ollama lists, or "down" when it doesn't answer. */
   tags?: Array<{ name: string }> | "down";
-  /** The model the owner chose on Ollama's Connections tab, which may still be downloading. */
+  /** The model the owner chose with Ollama's Choose a model, which may still be downloading. */
   wanted?: string;
   /** The context Ollama runs at, which a box from before it doesn't say. */
   contextLength?: number;
@@ -627,7 +627,7 @@ describe("AnythingLLM's link to Ollama", () => {
   test("an Ollama with no model fails with what to do, and AnythingLLM keeps its settings", async () => {
     const { llm, apps, baseUrl } = anythingLlm();
     const { ctx } = harness({ apps, baseUrl, tags: [] });
-    await expect(connectAnythingLlm(ctx)).rejects.toThrow("Ollama has no model yet. Choose one on its Connections tab, then run this again.");
+    await expect(connectAnythingLlm(ctx)).rejects.toThrow("Ollama has no model yet. Open Ollama in HexOS and run Choose a model, then run this again.");
     expect(llm.calls).toBe(0);
     expect(llm.env).toEqual({ LLMProvider: "openai", OllamaLLMModelPref: "old-model" });
   });

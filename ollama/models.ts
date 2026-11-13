@@ -2,8 +2,8 @@
 import type { HookContext } from "../_lib/hook_context";
 
 /**
- * Ollama's models, from its Connections tab. The model Ollama should have is an env on the app,
- * HEXOS_MODEL, so it survives a deploy, a restart and the run that asked for it, and a box pass
+ * Ollama's models, as actions its owner runs from Ollama in HexOS. The model Ollama should have is
+ * an env on the app, HEXOS_MODEL, so it survives a deploy, a restart and the run that asked for it, and a box pass
  * starts Download a model when Ollama is up without it. Choose a model sets that env and the context
  * the model needs, which restarts Ollama. Remove a model asks first, and is the only thing here that
  * deletes: nothing automatic ever removes a model. Read at Ollama 0.40.
