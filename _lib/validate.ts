@@ -9,7 +9,6 @@ import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
   CALL_MACROS,
-  LINK_PATH_PLACEHOLDER,
   HOOK_CONDITION_ROLES,
   HOOK_CONDITION_TYPES,
   HOOK_EVENT_SPECS,
@@ -23,8 +22,6 @@ import {
   QUESTION_TYPES,
   SPEC_REGEX,
   SUPPORTED_VERSIONS,
-  PREVIEW_OUTPUT_TYPES,
-  SUPPORTED_PREVIEWS_SCHEMA,
   SUPPORTED_WIDGETS_SCHEMA,
   WIDGET_MAX_SETTINGS,
   WIDGET_MAX_SLIDES,
@@ -94,29 +91,6 @@ function checkAssetPath(file: string, field: string, value: string) {
   }
   if (!existsSync(value) || !statSync(value).isFile()) {
     err(file, `${field}: "${value}" does not exist in the repository`);
-  }
-}
-
-/**
- * A previews script is protocol only: it must export the two entry points and may import nothing but
- * the contract types. The platform's scoped client is meant to be its only way to the app, and reading
- * files or opening connections of its own is against the authoring rules; this check catches the
- * imports, not a runtime that does it another way, since the loader is not a sandbox.
- */
-function checkPreviewScript(file: string, field: string, scriptPath: string, entrypoints: string[]) {
-  const source = readFileSync(scriptPath, "utf8");
-  for (const name of entrypoints) {
-    const literal = name.replace(/\$/g, "\\$");
-    const exported = new RegExp(`export\\s+(?:async\\s+)?(?:function\\s+${literal}\\b|const\\s+${literal}\\b)`);
-    if (!exported.test(source)) err(file, `${field}: ${scriptPath} does not export "${name}"`);
-  }
-  for (const match of source.matchAll(/^\s*import\s[^;]*?from\s+["']([^"']+)["']/gm)) {
-    const from = match[1] ?? "";
-    if (/^(node:|bun:|fs$|child_process$|net$|http$|https$|dgram$|tls$)/.test(from)) {
-      err(file, `${field}: a previews script may not import "${from}"`);
-    } else if (from.startsWith(".") && !/^\.\.\/_lib\//.test(from)) {
-      err(file, `${field}: a previews script imports only ../_lib/ types, not "${from}"`);
-    }
   }
 }
 
@@ -193,33 +167,6 @@ function checkWidgetSlots(file: string, where: string, slots: unknown) {
   }
 }
 
-/**
- * A container root as the platform takes it (packages/shared/eshtek/filePreviews.ts and appLinks.ts): one
- * or more non-empty segments, so neither "/" (every mount) nor "//x" nor a trailing slash.
- */
-const CONTAINER_ROOT = /^(?:\/[^/]+)+$/;
-
-/**
- * A link's path stays on the app (packages/shared/eshtek/appLinks.ts, isLinkPath): one leading slash,
- * no second slash or backslash there, no control or space character the URL parser would drop.
- */
-const LINK_PATH = /^\/(?![/\\])[^\\\s\p{Cc}]*$/u;
-
-/**
- * A web address as the platform's question-link schema takes it: written with its scheme and slashes
- * (the deck binds the text as it is, so "https:example.com" would resolve against the deck's page)
- * and parsing as a URL with a host.
- */
-function isWebAddress(value: string): boolean {
-  if (!/^https?:\/\//.test(value)) return false;
-  try {
-    const url = new URL(value);
-    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 function checkMacros(file: string, script: unknown, questionKeys: Set<string>) {
   const raw = JSON.stringify(script);
 
@@ -270,11 +217,11 @@ function checkMacros(file: string, script: unknown, questionKeys: Set<string>) {
   }
 
   // replaceLocation() throws PROCESS_INSTALL_SCRIPT_UNKNOWN_LOCATION on any
-  // name outside LocationPreferenceId, which aborts the whole install; $DECK_FOLDER_URL takes the same names.
-  for (const match of raw.matchAll(/\$(LOCATION|DECK_FOLDER_URL)\(([^)]+)\)/g)) {
-    const name = match[2].trim();
+  // name outside LocationPreferenceId, which aborts the whole install.
+  for (const match of raw.matchAll(/\$LOCATION\(([^)]+)\)/g)) {
+    const name = match[1].trim();
     if (!(LOCATIONS as readonly string[]).includes(name)) {
-      err(file, `$${match[1]}(${name}) is not a known location`);
+      err(file, `$LOCATION(${name}) is not a known location`);
     }
   }
 
@@ -441,12 +388,6 @@ function validate(file: string, script: Record<string, unknown>) {
     // The app's Settings tab shows a text answer as it is and hides a password until asked
     if (q.type === "text" && SECRET_KEY.test(key)) {
       err(file, `${where}: question "${key}" names a secret, so make its type "password"`);
-    }
-    // A link beside the description: the page it opens (a web address the platform's URL check takes) and the words on it
-    if (q.link !== undefined) {
-      if (!isObject(q.link) || typeof q.link.url !== "string" || !isWebAddress(q.link.url) || typeof q.link.label !== "string" || !q.link.label.trim()) {
-        err(file, `${where}: question "${key}" link must be { "url": "https://...", "label": "..." }`);
-      }
     }
   };
 
@@ -777,180 +718,6 @@ function validate(file: string, script: Record<string, unknown>) {
     }
   }
 
-  // --- previews (v6): a picture of a file for the file browser, drawn by the app through one script ---
-  if (script.previews !== undefined) {
-    if (version !== 6) err(file, "previews require version 6");
-    if (script.previewsSchema !== SUPPORTED_PREVIEWS_SCHEMA) {
-      err(file, `previewsSchema must be ${SUPPORTED_PREVIEWS_SCHEMA}; a previews list without it is refused`);
-    }
-    if (!Array.isArray(script.previews)) {
-      err(file, "previews must be an array");
-    } else {
-      const previewIds = new Set<string>();
-      for (const [i, preview] of script.previews.entries()) {
-        const where = `previews[${i}]`;
-        if (!isObject(preview)) {
-          err(file, `${where}: must be an object`);
-          continue;
-        }
-        const pid = preview.id;
-        if (typeof pid !== "string" || !/^[a-z0-9_-]+$/.test(pid)) {
-          err(file, `${where}: id must be lowercase alphanumeric with hyphens/underscores`);
-        } else {
-          if (previewIds.has(pid)) err(file, `${where}: duplicate preview id "${pid}"`);
-          previewIds.add(pid);
-        }
-        if (typeof preview.title !== "string" || !preview.title.trim()) err(file, `${where}: title is missing`);
-        if (preview.kind !== "file.preview") err(file, `${where}: kind must be "file.preview"`);
-        if (!Array.isArray(preview.surfaces) || preview.surfaces.length === 0 || preview.surfaces.some((s) => s !== "fileBrowser")) {
-          err(file, `${where}: surfaces must be a non-empty array of "fileBrowser"`);
-        }
-        const inputs = preview.inputs;
-        if (!isObject(inputs)) {
-          err(file, `${where}: inputs must be an object with image and/or video extension lists`);
-        } else {
-          let kinds = 0;
-          for (const [kind, list] of Object.entries(inputs)) {
-            if (kind !== "image" && kind !== "video") {
-              err(file, `${where}.inputs: kind "${kind}" is not known`);
-            } else if (!Array.isArray(list) || list.length === 0 || list.some((e) => typeof e !== "string" || !/^[a-z0-9]+$/.test(e))) {
-              err(file, `${where}.inputs.${kind}: a non-empty list of lower-case extensions without the dot`);
-            } else {
-              kinds += 1;
-            }
-          }
-          if (kinds === 0) err(file, `${where}.inputs: at least one kind with its extensions`);
-        }
-        if (!Array.isArray(preview.outputs) || preview.outputs.length === 0 || preview.outputs.some((o) => !(PREVIEW_OUTPUT_TYPES as readonly string[]).includes(o as string))) {
-          err(file, `${where}: outputs must be a non-empty list from ${PREVIEW_OUTPUT_TYPES.join(", ")}`);
-        }
-        // One mount or a list of them, each the container root of a folder the app serves
-        const mountList = Array.isArray(preview.mounts) ? preview.mounts : [preview.mounts];
-        if (Array.isArray(preview.mounts) && preview.mounts.length === 0) err(file, `${where}.mounts: a list of mounts holds at least one`);
-        for (const [m, mounts] of mountList.entries()) {
-          const at = Array.isArray(preview.mounts) ? `${where}.mounts[${m}]` : `${where}.mounts`;
-          if (!isObject(mounts)) {
-            err(file, `${at}: an object with containerRoot, and storage when the chart keeps the folder under a key`);
-            continue;
-          }
-          // storage names the chart's storage entry for the served folder; absent, the folder is the mount at the container root itself
-          if (mounts.storage !== undefined && (typeof mounts.storage !== "string" || !mounts.storage.trim())) {
-            err(file, `${at}: storage, when given, names the chart's storage entry the app serves`);
-          }
-          if (typeof mounts.containerRoot !== "string" || !CONTAINER_ROOT.test(mounts.containerRoot)) {
-            err(file, `${at}: containerRoot is an absolute container path of one or more segments, no empty segment and no trailing slash`);
-          }
-          if (mounts.descendants !== undefined && typeof mounts.descendants !== "boolean") {
-            err(file, `${at}: descendants, when given, is true or false`);
-          }
-        }
-        if (!Array.isArray(preview.credentials)) {
-          err(file, `${where}: credentials must be an array (empty when the app needs none)`);
-        } else {
-          const credentialIds = new Set<string>();
-          for (const [k, cred] of preview.credentials.entries()) {
-            if (!isObject(cred) || typeof cred.id !== "string" || !cred.id.trim() || typeof cred.env !== "string" || !cred.env.trim()) {
-              err(file, `${where}.credentials[${k}]: needs an id and the environment entry's name`);
-              continue;
-            }
-            if (credentialIds.has(cred.id)) err(file, `${where}.credentials[${k}]: duplicate id "${cred.id}"`);
-            credentialIds.add(cred.id);
-          }
-        }
-        const entrypoints = isObject(preview.entrypoints) ? preview.entrypoints : null;
-        const names = ["signIn", "picture"] as const;
-        for (const name of names) {
-          if (!entrypoints || typeof entrypoints[name] !== "string" || !(entrypoints[name] as string).trim()) {
-            err(file, `${where}.entrypoints: ${name} is missing`);
-          } else if (!/^[A-Za-z_$][\w$]*$/.test(entrypoints[name] as string)) {
-            // The loader looks the export up by this exact name; the check below builds a pattern from it
-            err(file, `${where}.entrypoints: ${name} names an export (letters, digits, _ and $)`);
-          }
-        }
-        const hasFile = typeof preview.script === "string" && preview.script.trim().length > 0;
-        const hasInline = typeof preview.scriptContent === "string" && preview.scriptContent.trim().length > 0;
-        // A field that is present but not a non-empty string is refused by the platform's parser, never read as absent
-        if (preview.script !== undefined && !hasFile) err(file, `${where}: script, when given, is a non-empty path`);
-        if (preview.scriptContent !== undefined && !hasInline) err(file, `${where}: scriptContent, when given, is non-empty`);
-        if (!hasFile && !hasInline) {
-          err(file, `${where}: needs either script or scriptContent`);
-        } else if (hasFile && hasInline) {
-          err(file, `${where}: declares both script and scriptContent`);
-        } else if (hasFile) {
-          checkAssetPath(file, `${where}.script`, preview.script as string);
-          if (existsSync(preview.script as string) && entrypoints) {
-            checkPreviewScript(file, `${where}.script`, preview.script as string, names.map((n) => String(entrypoints[n] ?? "")));
-          }
-        }
-        if (preview.timeouts !== undefined) {
-          if (!isObject(preview.timeouts)) {
-            err(file, `${where}: timeouts must be an object`);
-          } else {
-            for (const [name, value] of Object.entries(preview.timeouts)) {
-              if (!(names as readonly string[]).includes(name)) err(file, `${where}.timeouts: "${name}" is not an entry point`);
-              else if (typeof value !== "number" || value <= 0) err(file, `${where}.timeouts.${name}: must be a positive number`);
-            }
-          }
-        }
-        if (preview.conditions !== undefined) {
-          err(file, `${where}: conditions are not part of previewsSchema ${SUPPORTED_PREVIEWS_SCHEMA}; the app must be running, which the platform checks itself`);
-        }
-      }
-    }
-  }
-
-  // --- links (v6): a page of the app's web UI the file browser's right-click menu opens for a file ---
-  if (script.links !== undefined) {
-    if (version !== 6) err(file, "links require version 6");
-    if (!Array.isArray(script.links)) {
-      err(file, "links must be an array");
-    } else {
-      const linkIds = new Set<string>();
-      for (const [i, link] of script.links.entries()) {
-        const where = `links[${i}]`;
-        if (!isObject(link)) {
-          err(file, `${where}: must be an object`);
-          continue;
-        }
-        const lid = link.id;
-        if (typeof lid !== "string" || !/^[a-z0-9_-]+$/.test(lid)) {
-          err(file, `${where}: id must be lowercase alphanumeric with hyphens/underscores`);
-        } else {
-          if (linkIds.has(lid)) err(file, `${where}: duplicate link id "${lid}"`);
-          // The deck keys an app's rows and their Settings switches by one id space
-          if (hookIds.has(lid)) err(file, `${where}: link id "${lid}" is also a hook id`);
-          linkIds.add(lid);
-        }
-        if (typeof link.title !== "string" || !link.title.trim()) err(file, `${where}: title is missing`);
-        if (link.description !== undefined && typeof link.description !== "string") err(file, `${where}: description must be a string`);
-        if (link.kind !== "file.link") err(file, `${where}: kind must be "file.link"`);
-        if (!Array.isArray(link.surfaces) || link.surfaces.length === 0 || link.surfaces.some((s) => s !== "fileBrowser")) {
-          err(file, `${where}: surfaces must be a non-empty array of "fileBrowser"`);
-        }
-        const target = link.target;
-        if (!isObject(target) || target.type !== "files") {
-          err(file, `${where}: target must be { "type": "files", "accepts": [".ext", ...] }`);
-        } else if (!Array.isArray(target.accepts) || target.accepts.length === 0 || target.accepts.some((e) => typeof e !== "string" || !/^\.[a-z0-9]+$/i.test(e))) {
-          err(file, `${where}.target.accepts: a non-empty list of dot-prefixed extensions`);
-        } else if (target.maxFiles !== undefined) {
-          err(file, `${where}.target: a link opens one file; maxFiles is not part of a link`);
-        }
-        // The container roots the link applies to, when it applies to some of the app's folders only
-        if (link.mounts !== undefined) {
-          if (!Array.isArray(link.mounts) || link.mounts.length === 0 || link.mounts.some((root) => typeof root !== "string" || !CONTAINER_ROOT.test(root))) {
-            err(file, `${where}.mounts: a non-empty list of absolute container roots, each one or more segments, no empty segment and no trailing slash`);
-          }
-        }
-        if (typeof link.url !== "string" || !LINK_PATH.test(link.url) || !link.url.includes(LINK_PATH_PLACEHOLDER)) {
-          err(file, `${where}: url is a path on the app starting with / and carrying ${LINK_PATH_PLACEHOLDER}, with no second slash, backslash, space or control character`);
-        }
-        if (link.conditions !== undefined) {
-          err(file, `${where}: conditions are not part of a link; the app must be running, which the platform checks itself`);
-        }
-      }
-    }
-  }
-
   // --- widgets (v6) ---
   if (script.widgets !== undefined) {
     if (version !== 6) err(file, "widgets require version 6");
@@ -1094,7 +861,7 @@ function validate(file: string, script: Record<string, unknown>) {
   // resolves — but HexOS never prompts for it, so the requirements screen and
   // the permission grant are both wrong.
   const used = new Set(
-    [...JSON.stringify(script).matchAll(/\$(?:LOCATION|DECK_FOLDER_URL)\(([^)]+)\)/g)].map((m) => m[1].trim()),
+    [...JSON.stringify(script).matchAll(/\$LOCATION\(([^)]+)\)/g)].map((m) => m[1].trim()),
   );
   for (const loc of used) {
     if ((LOCATIONS as readonly string[]).includes(loc) && !declaredLocations.has(loc)) {
