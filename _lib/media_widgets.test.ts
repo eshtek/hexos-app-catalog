@@ -247,7 +247,7 @@ describe.each([
     file: "/config/data/jellyfin.db",
     localFile: "data/jellyfin.db",
     prefix: "hexos-jellyfin-",
-    reason: "Sign in to Jellyfin to see what's playing here",
+    reason: "Sign in to Jellyfin as an administrator to see what's playing here",
     token: (seen: Seen, at = 0) => seen.headers[at]?.get("Authorization")?.match(/Token="(.*)"/)?.[1],
     schema: (token: string) => [
       "CREATE TABLE ApiKeys (Name TEXT, AccessToken TEXT, DateCreated TEXT)",
@@ -803,5 +803,100 @@ describe("emby, whose card reads sessions as an administrator", () => {
     db.close();
     at(5_000);
     expect(streams(await run(context("emby", dir)))).toBe("1");
+  });
+});
+
+describe.each([
+  { place: "on the dataset", docker: false },
+  { place: "copied through Docker", docker: true },
+])("jellyfin's signed-in administrators, with the database $place", ({ docker }) => {
+  const script = "jellyfin/widget_now_playing.ts";
+  const REASON = "Sign in to Jellyfin as an administrator to see what's playing here";
+  // The columns Jellyfin 12.4 has; Jellyfin never sets IsActive, so a real sign-in carries 0
+  const SCHEMA = [
+    "CREATE TABLE ApiKeys (Id INTEGER PRIMARY KEY, DateCreated TEXT, DateLastActivity TEXT, Name TEXT, AccessToken TEXT)",
+    "CREATE TABLE Devices (Id INTEGER PRIMARY KEY, UserId TEXT, AccessToken TEXT, DeviceId TEXT, IsActive INTEGER, DateLastActivity TEXT)",
+    "CREATE TABLE Permissions (Id INTEGER PRIMARY KEY, Kind INTEGER, UserId TEXT, Value INTEGER)",
+  ];
+  const admin = (user: string) => `INSERT INTO Permissions (Kind, UserId, Value) VALUES (0, '${user}', 1)`;
+  const member = (user: string) => `INSERT INTO Permissions (Kind, UserId, Value) VALUES (0, '${user}', 0)`;
+  const disabled = (user: string) => `INSERT INTO Permissions (Kind, UserId, Value) VALUES (2, '${user}', 1)`;
+  const signIn = (user: string, token: string, at: string, device = `device-${token}`) =>
+    `INSERT INTO Devices (UserId, AccessToken, DeviceId, IsActive, DateLastActivity) VALUES ('${user}', '${token}', '${device}', 0, '${at}')`;
+  const key = (name: string, token: string, at: string) =>
+    `INSERT INTO ApiKeys (DateCreated, Name, AccessToken) VALUES ('${at}', '${name}', '${token}')`;
+
+  /** One refresh of a box whose Jellyfin holds `rows`, and the token the card read sessions with. */
+  async function refresh(rows: string[]): Promise<{ result: WidgetQueryResult; token: string | undefined }> {
+    const { run } = await fresh(script);
+    const statements = [...SCHEMA, ...rows];
+    let ctx: WidgetContext;
+    let seen: Seen;
+    if (docker) {
+      seen = box("jellyfin", { "/config/data/jellyfin.db": checkpointedDatabase(statements) }, () => Response.json([]));
+      ctx = context("jellyfin", NOT_MOUNTED());
+    } else {
+      const dir = scratch();
+      mkdirSync(join(dir, "data"));
+      const db = new Database(join(dir, "data/jellyfin.db"));
+      for (const statement of statements) db.run(statement);
+      db.close();
+      seen = box("jellyfin", {}, () => Response.json([]));
+      ctx = context("jellyfin", dir);
+    }
+    const result = await run(ctx);
+    return { result, token: seen.headers[0]?.get("Authorization")?.match(/Token="(.*)"/)?.[1] };
+  }
+
+  test("an administrator's sign-in reads sessions with no API key, IsActive 0 as Jellyfin leaves it", async () => {
+    const { result, token } = await refresh([admin("owner"), signIn("owner", "owner-web", "2026-11-12T18:00:00Z")]);
+    expect(result.needsSetup).toBeUndefined();
+    expect(token).toBe("owner-web");
+  });
+
+  test("a sign-in that isn't an administrator's is never used, and Jellyfin is asked nothing", async () => {
+    const { result, token } = await refresh([member("kid"), signIn("kid", "kid-tv", "2026-11-12T19:00:00Z")]);
+    expect(result).toEqual({ needsSetup: true, reason: REASON });
+    expect(token).toBeUndefined();
+  });
+
+  test("a newer member's sign-in is passed over for an older administrator's", async () => {
+    const { token } = await refresh([
+      member("kid"),
+      signIn("kid", "kid-tv", "2026-11-12T20:00:00Z"),
+      admin("owner"),
+      signIn("owner", "owner-web", "2026-11-10T08:00:00Z"),
+    ]);
+    expect(token).toBe("owner-web");
+  });
+
+  test("a disabled administrator's sign-in is passed over, and alone asks for a sign-in", async () => {
+    const off = [admin("old"), disabled("old"), signIn("old", "old-web", "2026-11-12T20:00:00Z")];
+    expect((await refresh([...off, admin("owner"), signIn("owner", "owner-web", "2026-11-01T00:00:00Z")])).token).toBe("owner-web");
+    expect((await refresh(off)).result).toEqual({ needsSetup: true, reason: REASON });
+  });
+
+  test("a sign-in with no token is skipped", async () => {
+    const { token } = await refresh([
+      admin("owner"),
+      signIn("owner", "", "2026-11-12T20:00:00Z"),
+      signIn("owner", "owner-web", "2026-11-01T00:00:00Z"),
+    ]);
+    expect(token).toBe("owner-web");
+  });
+
+  test("HexOS's key, then any key, then HexOS's setup sign-in, then the newest administrator's sign-in", async () => {
+    const rows = [
+      admin("owner"),
+      signIn("owner", "owner-old", "2026-11-01T00:00:00Z"),
+      signIn("owner", "owner-new", "2026-11-12T00:00:00Z"),
+    ];
+    expect((await refresh(rows)).token).toBe("owner-new");
+    rows.push(signIn("owner", "owner-setup", "2026-10-01T00:00:00Z", "hexos-jellyfin-setup"));
+    expect((await refresh(rows)).token).toBe("owner-setup");
+    rows.push(key("ThirdParty", "other-key", "2026-11-12T00:00:00Z"));
+    expect((await refresh(rows)).token).toBe("other-key");
+    rows.push(key("HexOS", "hexos-key", "2026-10-09T00:00:00Z"));
+    expect((await refresh(rows)).token).toBe("hexos-key");
   });
 });

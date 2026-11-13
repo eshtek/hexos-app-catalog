@@ -19,7 +19,9 @@ const KEY_NAME = "HexOS";
 const SETUP_DEVICE_ID = "hexos-jellyfin-setup";
 /** Jellyfin's PermissionKind.IsAdministrator. Only an administrator sees every session. */
 const IS_ADMINISTRATOR = 0;
-const SETUP_REASON = "Sign in to Jellyfin to see what's playing here";
+/** Jellyfin's PermissionKind.IsDisabled: Jellyfin refuses a disabled user's sign-in. */
+const IS_DISABLED = 2;
+const SETUP_REASON = "Sign in to Jellyfin as an administrator to see what's playing here";
 /** Jellyfin counts time in ticks of 100 ns. */
 const TICKS_PER_MS = 10_000;
 const DOCKER_SOCKET = "/var/run/docker.sock";
@@ -35,8 +37,9 @@ let nextDockerCopy = 0;
 /**
  * A token the widget can read sessions with: the API key HexOS's setup made, else any API key, else
  * the session of an administrator signed in to any Jellyfin app (HexOS's setup sign-in first, then
- * the most recently used). Only an administrator sees every stream. Null when no administrator has
- * ever signed in, which signing in fixes.
+ * the most recently used). Only an administrator sees every stream. Null when no administrator is
+ * signed in, which signing in fixes. A Devices row is a live sign-in: Jellyfin deletes it at sign-out
+ * and never sets its IsActive column (always 0, through 12.4), so that column isn't read.
  */
 function tokenIn(db: Database): string | null {
   const key = db
@@ -46,14 +49,15 @@ function tokenIn(db: Database): string | null {
     .get(KEY_NAME);
   if (key?.AccessToken) return key.AccessToken;
   const session = db
-    .query<{ AccessToken: string }, [number, string]>(
+    .query<{ AccessToken: string }, [number, number, string]>(
       `SELECT d.AccessToken FROM Devices d
          JOIN Permissions p ON p.UserId = d.UserId AND p.Kind = ? AND p.Value = 1
-        WHERE d.IsActive = 1
+        WHERE d.AccessToken != ''
+          AND NOT EXISTS (SELECT 1 FROM Permissions x WHERE x.UserId = d.UserId AND x.Kind = ? AND x.Value = 1)
         ORDER BY (d.DeviceId = ?) DESC, d.DateLastActivity DESC
         LIMIT 1`,
     )
-    .get(IS_ADMINISTRATOR, SETUP_DEVICE_ID);
+    .get(IS_ADMINISTRATOR, IS_DISABLED, SETUP_DEVICE_ID);
   return session?.AccessToken ?? null;
 }
 
