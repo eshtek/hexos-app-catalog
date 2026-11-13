@@ -52,25 +52,17 @@
         {
           "app": "collabora",
           "core": true,
-          "summary": "Made for Nextcloud",
-          "requires": [
-            "nextcloud"
-          ]
+          "default": true,
+          "summary": "Open source, best with OpenDocument files"
         },
         {
           "app": "onlyoffice-document-server",
           "core": true,
-          "summary": "Closest to Microsoft Office",
-          "requires": [
-            "opencloud"
-          ]
+          "summary": "Closest to Microsoft Office"
         },
         {
           "app": "eurooffice-document-server",
-          "summary": "A European fork of ONLYOFFICE",
-          "requires": [
-            "opencloud"
-          ]
+          "summary": "A European fork of ONLYOFFICE"
         }
       ]
     },
@@ -101,7 +93,7 @@
       "id": "extras",
       "type": "multiple",
       "title": "More for your documents",
-      "description": "Add any of these now, or later from Nextcloud's Connections tab.",
+      "description": "Add any of these now, or later from the Connections tab of the app they work with.",
       "options": [
         {
           "app": "paperless-ngx",

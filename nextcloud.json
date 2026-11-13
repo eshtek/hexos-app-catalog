@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "2.0.0",
-    "changeLog": "Nextcloud can connect to Collabora, Draw.io, Paperless and Ollama from its Connections tab. Nothing changes until you connect one."
+    "version": "2.1.0",
+    "changeLog": "Nextcloud can also connect to Euro-Office and ONLYOFFICE from its Connections tab. Nothing changes until you connect one"
   },
   "requirements": {
     "locations": [
@@ -212,6 +212,62 @@
       "rerun": "converge",
       "script": "nextcloud/startup.ts",
       "entrypoint": "collabora",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-eurooffice-document-server",
+      "title": "Connect to Euro-Office",
+      "description": "Opens and edits documents in Nextcloud with Euro-Office.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "eurooffice",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-onlyoffice-document-server",
+      "title": "Connect to ONLYOFFICE",
+      "description": "Opens and edits documents in Nextcloud with ONLYOFFICE.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "onlyoffice",
       "timeout": 600,
       "retries": 0
     },

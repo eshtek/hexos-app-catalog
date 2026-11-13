@@ -8,7 +8,7 @@ Files for your household, on your own server, in your browser. Open it with Laun
 
 **New documents.** "New documents are made as" sets what the New menu creates. You can change it on the Settings tab. Every format still opens.
 
-**Editing documents.** Install Euro-Office or ONLYOFFICE and connect it from OpenCloud's Connections tab. There's nothing to copy. Connecting gives OpenCloud the editor's certificate, so your browser may warn about OpenCloud once more: accept it, and the editor opens without a warning of its own. Firefox remembers a warning for each port, so there, open the editor's own address once (Launch on its card) and accept it.
+**Editing documents.** Install Euro-Office, ONLYOFFICE or Collabora and connect it from OpenCloud's Connections tab. There's nothing to copy. Pre-configure Collabora sets Collabora up for OpenCloud when it finds OpenCloud, which only works with Collabora on port 9980. If you install OpenCloud after Collabora, run Pre-configure Collabora from Collabora's card first. A Nextcloud already connected to Collabora then needs Connect to Collabora run again. Connecting gives OpenCloud the editor's certificate, so your browser may warn about OpenCloud once more: accept it, and the editor opens without a warning of its own. Firefox remembers a warning for each port, so there, open the editor's own address once (Launch on its card) and accept it.
 
 **Calendars and contacts** work with any CalDAV or CardDAV app, and you can turn them off on the Settings tab.
 
