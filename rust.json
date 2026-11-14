@@ -67,6 +67,8 @@
       "required": true,
       "default": "3500",
       "options": [
+        { "text": "Tiny (1000), the smallest Rust makes, with few monuments", "value": "1000" },
+        { "text": "Extra small (2000)", "value": "2000" },
         { "text": "Small (3000)", "value": "3000" },
         { "text": "Medium (3500)", "value": "3500" },
         { "text": "Large (4000)", "value": "4000" },
