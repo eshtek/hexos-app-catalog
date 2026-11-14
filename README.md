@@ -9,6 +9,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | App | Description |
 |-----|-------------|
 | [Actual Budget](actual-budget.json) | Financial planning software |
+| [AdGuard Home](adguard-home.json) | Network-wide ad and tracker blocking |
 | [AFFiNE](affine.json) | Knowledge base software |
 | [ARK: Survival Evolved](ark-survival-evolved.json) | Dinosaur survival game server |
 | [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
