@@ -1,0 +1,215 @@
+{
+  "version": 6,
+  "custom": true,
+  "internal": false,
+  "metadata": {
+    "name": "Rust",
+    "description": "Gather, build and raid with friends on your own Rust server. The first start downloads the game, about 6 GB, so players can join only once that finishes. Restart it after Rust's monthly update, which also starts a fresh map. Players join from the game's F1 console: client.connect, then the address HexOS copies.",
+    "icon": "rust/icon.png",
+    "version": "1.0.11",
+    "categories": ["games"],
+    "screenshots": [
+      "rust/screenshot-1.jpg",
+      "rust/screenshot-2.jpg",
+      "rust/screenshot-3.jpg",
+      "rust/screenshot-4.jpg",
+      "rust/screenshot-5.jpg",
+      "rust/screenshot-6.jpg",
+      "rust/screenshot-7.jpg",
+      "rust/screenshot-8.jpg"
+    ],
+    "keywords": ["rust", "facepunch", "survival", "pvp", "game server", "dedicated server", "multiplayer", "steam"],
+    "homepage": "https://rust.facepunch.com/",
+    "sources": ["https://github.com/indifferentbroccoli/rust-server-docker"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: a Rust server that players join on the server's own address, one folder and set of ports per copy"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["4CORE", "12GBRAM", "15GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [28015, 28016],
+    "game_port": 28015,
+    "instances": "many"
+  },
+  "installation_questions": [
+    {
+      "question": "Server name",
+      "description": "Shown in the game's server list.",
+      "type": "text",
+      "key": "server_name",
+      "required": true,
+      "default": "HexOS Rust"
+    },
+    {
+      "question": "Server description",
+      "description": "Shown to players in the game's server list.",
+      "type": "text",
+      "key": "server_description",
+      "required": true,
+      "default": "A Rust server running on HexOS"
+    },
+    {
+      "question": "Most players at once",
+      "description": "A whole number.",
+      "type": "text",
+      "key": "max_players",
+      "required": true,
+      "default": "50"
+    },
+    {
+      "question": "Map size",
+      "description": "A bigger map needs more memory. Changing it later starts a fresh map. The old one stays on the server.",
+      "type": "select",
+      "key": "world_size",
+      "required": true,
+      "default": "3500",
+      "options": [
+        { "text": "Tiny (1000), the smallest Rust makes, with few monuments", "value": "1000" },
+        { "text": "Extra small (2000)", "value": "2000" },
+        { "text": "Small (3000)", "value": "3000" },
+        { "text": "Medium (3500)", "value": "3500" },
+        { "text": "Large (4000)", "value": "4000" },
+        { "text": "Full size (4500), as most Rust servers use", "value": "4500" }
+      ]
+    },
+    {
+      "question": "Map seed",
+      "description": "A whole number that decides how the map looks. Changing it later starts a fresh map. The old one stays on the server.",
+      "type": "text",
+      "key": "seed",
+      "required": true,
+      "default": "12345"
+    },
+    {
+      "question": "Console password",
+      "description": "Admin tools such as RustAdmin sign in to the server's console with it, at the Console address. Run console command uses it for you, to make yourself admin with ownerid.",
+      "type": "password",
+      "key": "rcon_password",
+      "required": true,
+      "default": "$RANDOM_STRING(16)"
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(rust)/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(rust)/server",
+      "owner": {
+        "user": "apps"
+      }
+    }
+  ],
+  "app_values": {
+    "image": {
+      "repository": "indifferentbroccoli/rust-server-docker",
+      "tag": "v1.0.11@sha256:49e8469bf49d00a7a0a75798d4524aab1febecf273095e422c5b8483cb068179",
+      "pull_policy": "missing"
+    },
+    "restart_policy": "unless-stopped",
+    "envs": [
+      { "name": "SERVER_NAME", "value": "$QUESTION(server_name)" },
+      { "name": "SERVER_DESCRIPTION", "value": "$QUESTION(server_description)" },
+      { "name": "MAX_PLAYERS", "value": "$QUESTION(max_players)" },
+      { "name": "WORLD_SIZE", "value": "$QUESTION(world_size)" },
+      { "name": "SERVER_SEED", "value": "$QUESTION(seed)" },
+      { "name": "RCON_PASSWORD", "value": "$QUESTION(rcon_password)" },
+      { "name": "SERVER_IDENTITY", "value": "hexos" },
+      { "name": "SERVER_PORT", "value": "$PORT(28015)" },
+      { "name": "RCON_PORT", "value": "$PORT(28016)" },
+      { "name": "GENERATE_SETTINGS", "value": "true" },
+      { "name": "UPDATE_ON_START", "value": "true" },
+      { "name": "PUID", "value": "568" },
+      { "name": "PGID", "value": "568" }
+    ],
+    "host_network": false,
+    "ports": [
+      { "bind_mode": "published", "port_number": "$PORT(28015)", "container_port": "$PORT(28015)", "protocol": "udp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(28016)", "container_port": "$PORT(28016)", "protocol": "tcp", "host_ips": [] },
+      { "bind_mode": "published", "port_number": "$PORT(28016)", "container_port": "$PORT(28016)", "protocol": "udp", "host_ips": [] }
+    ],
+    "storage": [
+      {
+        "type": "host_path",
+        "mount_path": "/steamcmd/rust",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(rust)/server"
+        }
+      },
+      {
+        "type": "host_path",
+        "mount_path": "/steamcmd/rust/server",
+        "host_path_config": {
+          "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(rust)/data"
+        }
+      }
+    ],
+    "resources": {
+      "enable_resource_limits": true,
+      "limits": {
+        "cpus": "$CPUS(50%, 4)",
+        "memory": "$MEMORY(50%, 12288)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "console-command",
+      "title": "Run console command",
+      "description": "Sends a command to the server's console and shows its reply. To make yourself admin, run ownerid and your 17-digit Steam ID, then server.writecfg.",
+      "events": ["userAction"],
+      "surfaces": ["card"],
+      "rerun": "idempotent",
+      "inputs": [
+        {
+          "type": "question",
+          "id": "command",
+          "question": {
+            "question": "Console command",
+            "description": "As you'd type it in the game's F1 console, such as status or say hello. quit stops the server, and it starts again by itself.",
+            "placeholder": "ownerid 76561198000000001",
+            "type": "text",
+            "key": "command",
+            "required": true
+          }
+        }
+      ],
+      "conditions": [{ "role": "availability", "type": "appRunning", "app": "rust" }],
+      "script": "rust/console_command.ts",
+      "entrypoint": "run",
+      "timeout": 60,
+      "retries": 0
+    }
+  ],
+  "widgets": [
+    {
+      "id": "players",
+      "title": "Online now",
+      "description": "Who's playing on this server's map, and the address of its console.",
+      "refresh": 10,
+      "conditions": [{ "role": "availability", "type": "appRunning", "app": "rust" }],
+      "background": { "field": "online" },
+      "slots": [
+        { "type": "stat", "field": "count" },
+        { "type": "list", "field": "online", "rows": 1 }
+      ],
+      "settings": [{ "field": "console" }],
+      "script": "rust/widget_players.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}
