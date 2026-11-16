@@ -600,8 +600,8 @@ function validate(file: string, script: Record<string, unknown>) {
         // The box runs a link again after a change it passes on; one it can't run again has none
         if (hook.rerunsOn !== undefined) {
           const triggers = hook.rerunsOn;
-          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model")) {
-            err(file, `${where}: rerunsOn takes a list of "local-ai-model"`);
+          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model" || trigger === "home-addresses")) {
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model" and "home-addresses"`);
           }
           if (hook.rerun !== "converge" && hook.rerun !== "idempotent") err(file, `${where}: rerunsOn needs a hook that may run again`);
         }

@@ -387,6 +387,13 @@ export interface HookContext {
     };
   }>;
 
+  /**
+   * The Anywhere names a device on the owner's network reaches at the box itself, with the box's
+   * address: what a DNS server's link answers them with. No names while TrueNAS holds the standard
+   * web ports. A link that reads it says `rerunsOn: ["home-addresses"]`. Missing on a box from before it.
+   */
+  readHomeAddresses?(): Promise<{ address: string | null; names: string[] }>;
+
   /** Async sleep helper */
   sleep(ms: number): Promise<void>;
 
