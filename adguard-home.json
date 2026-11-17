@@ -8,7 +8,9 @@
     "locations": ["ApplicationsPerformance"],
     "specifications": ["1CORE", "500MB"],
     "permissions": ["READ_WRITE_LOCATIONS"],
-    "ports": [30004, 53]
+    "ports": [30004, 53],
+    "home_dns": true,
+    "exclusive_with": ["pihole"]
   },
   "sign_in": {
     "username": true
