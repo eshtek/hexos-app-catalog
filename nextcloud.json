@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "2.1.0",
-    "changeLog": "Nextcloud can also connect to Euro-Office and ONLYOFFICE from its Connections tab. Nothing changes until you connect one"
+    "version": "2.1.1",
+    "changeLog": "Nextcloud opens at its Anywhere address instead of refusing it as an untrusted domain."
   },
   "requirements": {
     "locations": [
@@ -353,6 +353,27 @@
       "script": "nextcloud/startup.ts",
       "entrypoint": "ollama",
       "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "anywhere-address",
+      "title": "Open at its Anywhere address",
+      "description": "Letting Nextcloud open at its Anywhere address",
+      "summary": "Nextcloud opens at its Anywhere address instead of refusing it as untrusted. HexOS runs this again when the address changes.",
+      "kind": "maintain",
+      "events": [
+        "userAction"
+      ],
+      "rerun": "converge",
+      "rerunsOn": [
+        "remote-address"
+      ],
+      "surfaces": [
+        "card"
+      ],
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "anywhere",
+      "timeout": 900,
       "retries": 0
     }
   ]

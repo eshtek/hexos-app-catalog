@@ -621,8 +621,23 @@ function validate(file: string, script: Record<string, unknown>) {
         // The box runs a link again after a change it passes on; one it can't run again has none
         if (hook.rerunsOn !== undefined) {
           const triggers = hook.rerunsOn;
-          if (!Array.isArray(triggers) || triggers.length === 0 || !triggers.every((trigger) => trigger === "local-ai-model")) {
-            err(file, `${where}: rerunsOn takes a list of "local-ai-model"`);
+          if (
+            !Array.isArray(triggers) ||
+            triggers.length === 0 ||
+            !triggers.every((trigger) => trigger === "local-ai-model" || trigger === "remote-address")
+          ) {
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model" and "remote-address"`);
+          }
+          // A server from before "remote-address" drops the whole hook, so nothing else may ride on it
+          if (Array.isArray(triggers) && triggers.includes("remote-address")) {
+            const events = Array.isArray(hook.events) ? hook.events : [];
+            if (events.length !== 1 || events[0] !== "userAction") {
+              err(file, `${where}: a hook that reruns on "remote-address" takes "userAction" as its only event, in a hook of its own`);
+            }
+            const needed = ((script.hooks as unknown[]) ?? []).some(
+              (other) => isObject(other) && Array.isArray(other.requiresHooks) && other.requiresHooks.includes(hook.id),
+            );
+            if (needed) err(file, `${where}: another hook requires this one, which a server from before "remote-address" doesn't have`);
           }
           if (hook.rerun !== "converge" && hook.rerun !== "idempotent") err(file, `${where}: rerunsOn needs a hook that may run again`);
         }

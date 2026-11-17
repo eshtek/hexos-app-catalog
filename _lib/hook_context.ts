@@ -372,6 +372,13 @@ export interface HookContext {
    */
   updateAppValues?(change: (values: Record<string, unknown>) => void): Promise<boolean>;
 
+  /**
+   * The Anywhere names this app answers at, or those of `appId` for a link to it. Empty while the
+   * app has no address turned on. A hook that declares `rerunsOn: ["remote-address"]` is run again
+   * when they change. Missing on a box from before it.
+   */
+  readRemoteAddresses?(appId?: string): Promise<{ names: string[] }>;
+
   /** This app's current TrueNAS values, to read a setting from. Missing on a box from before it. */
   getAppValues?(): Promise<Record<string, unknown>>;
 
