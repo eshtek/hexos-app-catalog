@@ -1,7 +1,7 @@
 {
   "version": 6,
   "script": {
-    "version": "2.0.1",
+    "version": "2.1.1",
     "changeLog": "Nextcloud opens at its Anywhere address instead of refusing it as an untrusted domain."
   },
   "requirements": {
@@ -212,6 +212,62 @@
       "rerun": "converge",
       "script": "nextcloud/startup.ts",
       "entrypoint": "collabora",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-eurooffice-document-server",
+      "title": "Connect to Euro-Office",
+      "description": "Opens and edits documents in Nextcloud with Euro-Office.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "eurooffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "eurooffice",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "connect-onlyoffice-document-server",
+      "title": "Connect to ONLYOFFICE",
+      "description": "Opens and edits documents in Nextcloud with ONLYOFFICE.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "onlyoffice-document-server"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "nextcloud"
+        }
+      ],
+      "rerun": "converge",
+      "script": "nextcloud/startup.ts",
+      "entrypoint": "onlyoffice",
       "timeout": 600,
       "retries": 0
     },
