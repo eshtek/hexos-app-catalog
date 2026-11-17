@@ -1,0 +1,81 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "initial"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["1CORE", "500MB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30004, 53],
+    "home_dns": true,
+    "exclusive_with": ["pihole"]
+  },
+  "sign_in": {
+    "username": true
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(ApplicationsPerformance)/adguard-home/config", "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/adguard-home/work" }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30004)"
+      },
+      "dns_port": {
+        "bind_mode": "published",
+        "port_number": 53,
+        "host_ips": ["$SERVER_LAN_IP"]
+      },
+      "host_network": false,
+      "dhcp_enabled": false
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/adguard-home/config)",
+      "work": "$HOST_PATH($LOCATION(ApplicationsPerformance)/adguard-home/work)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": 1024
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "configure-adguard-home",
+      "title": "Pre-configure AdGuard Home",
+      "description": "Finishes AdGuard Home's setup with the sign-in you chose, so it answers your network at once",
+      "summary": "Finishes AdGuard Home's setup with your sign-in at install. Running it again from here changes nothing.",
+      "events": ["onAfterInstall", "userAction"],
+      "rerun": "converge",
+      "surfaces": ["card"],
+      "optional": true,
+      "script": "adguard-home/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "home-addresses",
+      "title": "Use Anywhere addresses at home",
+      "description": "Sends devices on your network straight to this server when they open an Anywhere address",
+      "summary": "Devices that use AdGuard Home reach your Anywhere addresses at this server itself, without leaving your network. HexOS keeps the list up to date.",
+      "kind": "maintain",
+      "events": ["onAfterInstall", "userAction"],
+      "rerun": "converge",
+      "rerunsOn": ["home-addresses"],
+      "requiresHooks": ["configure-adguard-home"],
+      "surfaces": ["card"],
+      "optional": true,
+      "script": "adguard-home/configure.ts",
+      "entrypoint": "homeAddresses",
+      "timeout": 300,
+      "retries": 0
+    }
+  ]
+}

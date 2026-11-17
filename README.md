@@ -9,6 +9,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | App | Description |
 |-----|-------------|
 | [Actual Budget](actual-budget.json) | Financial planning software |
+| [AdGuard Home](adguard-home.json) | Ad and tracker blocking DNS for the whole network |
 | [AFFiNE](affine.json) | Knowledge base software |
 | [ARK: Survival Evolved](ark-survival-evolved.json) | Dinosaur survival game server |
 | [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
@@ -62,6 +63,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Palworld Server](palworld.json) | Creates a Multiplayer Palworld Server |
 | [Paperless-ngx](paperless-ngx.json) | Document management system |
 | [Peanut](peanut.json) | UPS monitoring dashboard |
+| [Pi-hole](pihole.json) | Ad and tracker blocking DNS for the whole network |
 | [Planka](planka.json) | A Kanban tool for those who want their work visible and organized |
 | [Pelican Panel](pelican-panel.json) | Game server panel; its game servers run in Pelican Wings |
 | [Pelican Wings](pelican-wings.json) | Runs Pelican's game servers, on ports 27200 to 27219 |
@@ -148,6 +150,20 @@ Leave it out when the owner picks the ports inside the app, as with each Minecra
 "requirements": {
   "ports": [30443, 38212, 38211],
   "game_port": 38211
+}
+```
+
+An app that answers DNS for the whole home says `requirements.home_dns: true`. It takes port 53 on the server's own address, and HexOS's own DNS service, which answers the Anywhere names at home, gives the port up to it. The app's hook then keeps those names answered inside the app: it reads them with `ctx.readHomeAddresses?.()` and runs again when they change (`rerunsOn: ["home-addresses"]`). So the script has to list 53 in `requirements.ports` and have such a hook, and `bun run validate` refuses one that doesn't. Publish the port on `"host_ips": ["$SERVER_LAN_IP"]` and not on every address, because NetBird's resolver holds port 53 on the mesh address. AdGuard Home and Pi-hole set it.
+
+`requirements.exclusive_with` lists the apps this one can't be installed beside, by their ids. HexOS refuses the install while one of them is installed and names it. Two DNS apps both want port 53, and TrueNAS would refuse the second one anyway, with a message about its templates. Each app has to name the other, because HexOS reads the list of the app being installed. `bun run validate` refuses an id that isn't a script in the catalog and a list the other app doesn't answer. AdGuard Home names `pihole`, and Pi-hole names `adguard-home`.
+
+Both keys are read from the catalog's current script, so changing them needs no new `script.version`.
+
+```json
+"requirements": {
+  "ports": [20720, 53],
+  "home_dns": true,
+  "exclusive_with": ["adguard-home"]
 }
 ```
 
@@ -311,7 +327,7 @@ Each app appears once in a collection. Apps install one after another, in the or
 
 The links between a collection's apps are the apps' own pairing hooks: a hook on one app whose conditions name another (Prowlarr's `connect-radarr`). HexOS runs each one whose apps are all in the collection once those apps are in, in the order the file lists the apps. A link out of an app waits for the links into it, since one may be what sets the app up: Jellyfin's `connect-seerr` signs Seerr in before Seerr's own links act as that account. Two links into the same app keep the file's order too, so list first the app whose link changes what a later one reads: Media library lists Profilarr before Seerr, so Radarr has Profilarr's profiles before Seerr picks its default one. A link that needs its own app set up first names that hook in `requiresHooks`; one that takes that setup's answers declares inputs with the same ids (Plex's `connect-seerr` takes the Plex sign-in Pre-configure Plex was given, `plex_login`), and, in a collection, the run goes back to that setup first when it didn't finish in the run (nobody signed in to Plex while it installed, or Plex was there before), asking again, so the link takes its answers; from the card, a link asks for them itself when that setup didn't run. A setup a link can go back to runs from the app's card too (`userAction`, `rerun: converge`), as Pre-configure Jellyfin, Emby and Plex do; Pre-configure Plex keeps the name of a server that was already claimed. A link that finds the owner skipped what it needs (Plex's sign-in, so Seerr was never set up) ends with `ctx.skip(message)` rather than `ctx.fail`: a collection skips it with the message instead of offering a Try again that can't help, and a run from the app's card fails with the same message. A box from before `ctx.skip` doesn't have it, so call it as `if (ctx.skip) ctx.skip(message);` followed by `ctx.fail(message);`. A hook reaches an app at the box's address and the app's `requirements.ports[0]`, so every app that runs a hook or is named by one pins its web port in `app_values.network` and declares that same port first: the port TrueNAS publishes, not the one inside the container. `bun run validate` refuses a mismatch and warns when nothing is pinned.
 
-A link that passes a setting of the box on into its app says so in `rerunsOn`, and the box runs it again when that setting changes. The one so far is `"local-ai-model"`: a link to Ollama that sets Ollama's model or context in its app (AnythingLLM's, Hermes Agent's, OpenClaw's and OpenCode's) runs again after the owner moves Ollama to another model. A link that only sets Ollama's address, as Open WebUI's does, has no `rerunsOn`: the model doesn't move the address, and its run would ask for a sign-in to change nothing. Only a link that may run again (`converge` or `idempotent`) takes it.
+A link that passes a setting of the box on into its app says so in `rerunsOn`, and the box runs it again when that setting changes. The one so far is `"local-ai-model"`: a link to Ollama that sets Ollama's model or context in its app (AnythingLLM's, Hermes Agent's, OpenClaw's and OpenCode's) runs again after the owner moves Ollama to another model. A link that only sets Ollama's address, as Open WebUI's does, has no `rerunsOn`: the model doesn't move the address, and its run would ask for a sign-in to change nothing. The other is `"home-addresses"`: a hook that answers the box's Anywhere names on the owner's network (AdGuard Home's and Pi-hole's) runs again when those names change, or when the box starts or stops answering them on the standard web ports. It reads them with `ctx.readHomeAddresses`. Only a link that may run again (`converge` or `idempotent`) takes it.
 
 `"remote-address"` is for an app that checks the address it is opened at. When an owner turns on, renames or turns off the app's Anywhere address, the box runs the hook again, and the hook reads the app's names with `ctx.readRemoteAddresses?.()`. The list is empty once the app has no address, so the hook takes its setting back out. Nextcloud's `anywhere-address` adds the names to its trusted domains this way. A link reads the other app's names with `ctx.readRemoteAddresses?.("collabora")`, and runs again when that app's address changes.
 
