@@ -93,11 +93,23 @@ gateway_of() {
   php -r 'foreach (file("/proc/net/route") as $l) { $f = preg_split("/\\s+/", trim($l)); if (($f[1] ?? "") === "00000000") { echo long2ip(unpack("V", hex2bin($f[2]))[1]); break; } }'
 }
 
+# The image's other start-up scripts are done once the web server answers. TrueNAS's own rewrites
+# the trusted domains from the list it read at the start, which would drop a name added meanwhile.
+wait_started() {
+  tries=0
+  until curl -fsS -m 3 -o /dev/null -H "Host: localhost" http://localhost/status.php 2>/dev/null; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 300 ] || return 1
+    sleep 2
+  done
+}
+
 # Nextcloud answers only at the addresses it trusts, and believes only a proxy it trusts about the
 # address and scheme a visitor used. names= holds the app's Anywhere names. The names and the proxy
 # added last time are taken out first, so a name that is gone stops being trusted.
 apply_anywhere() (
   set -f
+  wait_started || exit 1
   names=$(value_of "$1" names)
   before=$(value_of "$dir/anywhere.applied" names 2>/dev/null)
   domains=$(list_of trusted_domains)
@@ -127,7 +139,11 @@ apply_anywhere() (
         ;;
     esac
   fi
-  write_list trusted_proxies "$@"
+  write_list trusted_proxies "$@" || exit 1
+  # Applied only once Nextcloud holds every name
+  for name in $names; do
+    list_of trusted_domains | grep -qxF "$name" || exit 1
+  done
 )
 
 {

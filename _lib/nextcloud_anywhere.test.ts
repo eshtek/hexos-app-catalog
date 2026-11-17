@@ -21,6 +21,7 @@ if [ "$1" = "-r" ]; then printf '%s' "$FAKE_GATEWAY"; exit 0; fi
 shift
 command=$1
 key=$2
+echo "$command $key" >>"$FAKE_CONFIG/../calls"
 case "$command" in
   config:system:get)
     ls "$FAKE_CONFIG/$key".* >/dev/null 2>&1 || exit 1
@@ -29,6 +30,8 @@ case "$command" in
   config:system:set)
     [ "$FAKE_FAIL_SET" = "all" ] && exit 1
     [ "$FAKE_FAIL_SET" = "$key" ] && exit 1
+    # Another script rewrote the list after it was read: the write is taken and then gone
+    [ "$FAKE_LOSE_SET" = "$key" ] && exit 0
     printf '%s' "\${4#--value=}" >"$FAKE_CONFIG/$key.$3"
     ;;
   config:system:delete) rm -f "$FAKE_CONFIG/$key.$3" ;;
@@ -74,6 +77,14 @@ beforeEach(() => {
   writeFileSync(script, START_SCRIPT.replaceAll(START_FOLDER, folder));
   writeFileSync(join(root, "bin", "php"), OCC);
   writeFileSync(join(root, "bin", "timeout"), '#!/bin/sh\nshift\nexec "$@"\n');
+  // The web server: refuses FAKE_STARTING times, then answers
+  writeFileSync(
+    join(root, "bin", "curl"),
+    '#!/bin/sh\necho curl >>"$FAKE_CONFIG/../calls"\nn=$(grep -c curl "$FAKE_CONFIG/../calls")\n[ "$n" -gt "${FAKE_STARTING:-0}" ]\n',
+  );
+  writeFileSync(join(root, "bin", "sleep"), "#!/bin/sh\nexit 0\n");
+  chmodSync(join(root, "bin", "curl"), 0o755);
+  chmodSync(join(root, "bin", "sleep"), 0o755);
   chmodSync(join(root, "bin", "php"), 0o755);
   chmodSync(join(root, "bin", "timeout"), 0o755);
   seed("trusted_domains", ["127.0.0.1", "localhost", "nextcloud", "192.168.1.20"]);
@@ -136,6 +147,26 @@ test("a change occ refuses is not recorded as applied, so the next start tries a
   start(null);
   expect(applied()).toBe("names=nextcloud.k7q2m9.example.com\n");
   expect(list("trusted_domains")).toContain("nextcloud.k7q2m9.example.com");
+});
+
+// On a real install the name was applied and then gone: TrueNAS's start-up script rewrote the list
+test("nothing is changed until Nextcloud's web server answers, when its other start-up scripts are done", () => {
+  start("nextcloud.k7q2m9.example.com", { FAKE_STARTING: "3" });
+  const calls = readFileSync(join(root, "calls"), "utf-8").trim().split("\n");
+  const firstChange = calls.findIndex((call) => call.startsWith("config:system:"));
+  expect(calls.slice(0, firstChange)).toEqual(["curl", "curl", "curl", "curl"]);
+  expect(list("trusted_domains")).toContain("nextcloud.k7q2m9.example.com");
+});
+
+test("a Nextcloud that never finishes starting is left as it was, for the next start", () => {
+  start("nextcloud.k7q2m9.example.com", { FAKE_STARTING: "100000" });
+  expect(list("trusted_domains")).toEqual(["127.0.0.1", "localhost", "nextcloud", "192.168.1.20"]);
+  expect(applied()).toBeUndefined();
+});
+
+test("a name that didn't stay in the list is not recorded as applied", () => {
+  start("nextcloud.k7q2m9.example.com", { FAKE_LOSE_SET: "trusted_domains" });
+  expect(applied()).toBeUndefined();
 });
 
 test("a Nextcloud whose trusted domains can't be read is left alone", () => {
