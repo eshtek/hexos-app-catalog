@@ -79,6 +79,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Radarr](radarr.json) | Movie collection manager |
 | [Ratelog](ratelog.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
+| [Rust](rust.json) | Multiplayer survival game server |
 | [RustDesk](rust-desk.json) | Remote desktop server, used with RustDesk Relay |
 | [RustDesk Relay](rust-desk-relay.json) | Relay server for RustDesk |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
