@@ -91,6 +91,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [SparkyFitness](sparkyfitness.json) | Food, exercise and weight tracker |
 | [Sportarr](sportarr.json) | Sports collection manager |
 | [Sure](sure.json) | Financial planning software |
+| [Stardew Valley](stardew-valley.json) | Dedicated farm friends join with an invite code, any time |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Vikunja](vikunja.json) | Task manager with lists |
