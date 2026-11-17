@@ -98,6 +98,7 @@ test("an address that isn't one writes nothing", () => {
 
 test("names are written once, in small letters", () => {
   expect(lineChanges([], [], [], ["Photos.Example.com", "photos.example.com"], BOX).lines).toEqual(PHOTOS);
+  expect(lineChanges([], [], [], ["Photos.Example.com"], BOX).lines).toEqual(PHOTOS);
 });
 
 test("the answer to wait for is an added name's, or else a removed one's", () => {
