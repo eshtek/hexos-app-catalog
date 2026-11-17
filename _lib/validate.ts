@@ -5,6 +5,7 @@
 //
 // Run: bun run validate
 
+import { composeScriptProblems } from "./compose";
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
@@ -261,6 +262,12 @@ function validate(file: string, script: Record<string, unknown>) {
     return;
   }
 
+  // --- v7: an app with several containers, whose app_values is a compose document ---
+  if (version === 7) {
+    for (const problem of composeScriptProblems(script, { processed: false })) err(file, `app_values: ${problem}`);
+    if (script.custom !== true) err(file, "a version-7 script is a custom app: set custom to true");
+  }
+
   // --- script block (required from v4 on) ---
   const scriptMeta = script.script;
   if (!isObject(scriptMeta)) {
@@ -445,7 +452,21 @@ function validate(file: string, script: Record<string, unknown>) {
   // the platform reads with semver (one it can't read never offers its update). A tag that moves
   // (latest) gives new installs a different image from the servers that have it, and the image
   // watcher has no version in it to follow. An internal app never reaches a customer's server.
-  if (script.custom === true) {
+  if (script.custom === true && version === 7) {
+    // Each container names its own image, as repository:tag, pinned as a chart's is
+    const services = isObject(script.app_values) && isObject(script.app_values.services) ? script.app_values.services : {};
+    for (const [name, service] of Object.entries(services)) {
+      const ref = isObject(service) && typeof service.image === "string" ? service.image : "";
+      const [named, digest] = ref.split("@");
+      const tag = named.includes(":") ? named.slice(named.lastIndexOf(":") + 1) : "";
+      if (script.internal !== true && !/\d/.test(tag)) {
+        err(file, `app_values.services.${name}.image "${ref}" names no version; pin one so every server runs the same image`);
+      }
+      if (digest !== undefined && !/^sha256:[0-9a-f]{64}$/.test(digest)) {
+        err(file, `app_values.services.${name}.image "${ref}": a pinned digest is the tag, "@", then sha256: and 64 hex digits`);
+      }
+    }
+  } else if (script.custom === true) {
     const image = isObject(script.app_values) ? script.app_values.image : undefined;
     if (!isObject(image) || typeof image.repository !== "string" || !image.repository.trim()) {
       err(file, "app_values.image.repository is missing: a custom app runs the image it names");
@@ -495,7 +516,7 @@ function validate(file: string, script: Record<string, unknown>) {
       err(file, `${where}: must be an object`);
       continue;
     }
-    if (version !== 5 && version !== 6) err(file, `${where}: hooks require version 5 or 6`);
+    if (version !== 5 && version !== 6 && version !== 7) err(file, `${where}: hooks require version 5, 6 or 7`);
     const id = hook.id;
     if (typeof id !== "string" || !id.trim()) {
       err(file, `${where}: id is missing`);
@@ -504,7 +525,7 @@ function validate(file: string, script: Record<string, unknown>) {
       hookIds.add(id);
     }
 
-    if (version === 6) {
+    if (version === 6 || version === 7) {
       if (typeof hook.title !== "string" || !hook.title.trim()) {
         err(file, `${where}: title is missing`);
       }
@@ -716,7 +737,7 @@ function validate(file: string, script: Record<string, unknown>) {
     if (hook.timeout !== undefined && (typeof hook.timeout !== "number" || hook.timeout <= 0)) {
       err(file, `${where}: timeout must be a positive number`);
     }
-    const hookQuestionScope = version === 6 ? new Set<string>() : undefined;
+    const hookQuestionScope = version === 6 || version === 7 ? new Set<string>() : undefined;
     for (const [j, input] of ((hook.inputs as unknown[]) ?? []).entries()) {
       if (!isObject(input)) continue;
       if (input.type === "question") collectQuestion(input.question, `${where}.inputs[${j}]`, hookQuestionScope);
@@ -735,7 +756,7 @@ function validate(file: string, script: Record<string, unknown>) {
 
   // --- widgets (v6) ---
   if (script.widgets !== undefined) {
-    if (version !== 6) err(file, "widgets require version 6");
+    if (version !== 6 && version !== 7) err(file, "widgets require version 6 or 7");
     if (script.widgetsSchema !== undefined && script.widgetsSchema !== SUPPORTED_WIDGETS_SCHEMA) {
       err(file, `widgetsSchema ${script.widgetsSchema} is not supported (expected ${SUPPORTED_WIDGETS_SCHEMA})`);
     }
@@ -1059,10 +1080,15 @@ for (const appId of [...linkedApps].sort()) {
     .map((port) => preferredPort(port.port_number))
     .filter((port) => port !== undefined);
   const customPins = script.custom === true
-    ? publishedPorts(script).flatMap((pin) => "port" in pin && pin.path.startsWith("app_values.ports[") ? [pin.port] : [])
+    ? publishedPorts(script).flatMap((pin) =>
+        "port" in pin && (pin.path.startsWith("app_values.ports[") || pin.path.startsWith("app_values.services."))
+          ? [pin.port]
+          : [],
+      )
     : [];
   const pinned = [...namedPins, ...customPins];
-  const pinLocation = script.custom === true ? "app_values.ports" : "app_values.network";
+  const pinLocation =
+    script.version === 7 ? "a service's ports" : script.custom === true ? "app_values.ports" : "app_values.network";
   if (pinned.length === 0) {
     warn(`${appId}.json`, `takes part in a hook, so pin its web port in ${pinLocation} (requirements.ports[0] is ${declared ?? "missing"})`);
   } else if (!pinned.includes(declared)) {

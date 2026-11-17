@@ -1,0 +1,190 @@
+{
+  "version": 7,
+  "custom": true,
+  "metadata": {
+    "name": "Stardew Valley",
+    "description": "A farm that's always open. Friends join your Stardew Valley farm with an invite code whenever they like, even when you're not playing, and the game keeps their crops, animals and progress. It needs a Steam account that owns Stardew Valley, which downloads the game to the server.",
+    "icon": "stardew-valley/icon.png",
+    "version": "1.5.0-preview.140",
+    "categories": ["games"],
+    "keywords": ["stardew valley", "stardew", "junimoserver", "game server", "dedicated server", "multiplayer", "farm", "steam"],
+    "homepage": "https://docs.junimoserver.com/",
+    "sources": ["https://github.com/stardew-valley-dedicated-server/server"]
+  },
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial curation: the JunimoServer dedicated server and its Steam sign-in container run as one app, and the card shows who's on the farm"
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "4GBRAM", "5GB"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [5800, 24642, 27015]
+  },
+  "installation_questions": [
+    {
+      "question": "Steam username",
+      "description": "A Steam account that owns Stardew Valley. The server downloads the game with it. You type its password, and approve the sign-in, at the end of the install.",
+      "type": "text",
+      "key": "steam_username",
+      "required": true
+    },
+    {
+      "question": "Password for the game's screen",
+      "description": "Opening the app shows the game running on the server. You type this password to see it. Only the first 8 characters count.",
+      "type": "password",
+      "key": "vnc_password",
+      "required": true
+    }
+  ],
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/stardew-valley/saves",
+      "owner": { "user": "apps" },
+      "snapshot": { "id": "saves" }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/stardew-valley/config",
+      "owner": { "user": "apps" }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/stardew-valley/settings",
+      "owner": { "user": "apps" },
+      "snapshot": { "id": "settings" }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/stardew-valley/game",
+      "owner": { "user": "apps" }
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/stardew-valley/steam-session",
+      "owner": { "user": "apps" }
+    }
+  ],
+  "app_values": {
+    "services": {
+      "server": {
+        "image": "sdvd/server:1.5.0-preview.140@sha256:f23fdc3a3e999032be363fa43291c2d72626555913ef2b3dcf71b0aec53c49db",
+        "restart": "unless-stopped",
+        "stdin_open": true,
+        "tty": true,
+        "environment": {
+          "SDVD_COMPOSE_REV": 4,
+          "STEAM_AUTH_URL": "http://steam-auth:3001",
+          "SETTINGS_PATH": "/data/settings/server-settings.json",
+          "USER_ID": 568,
+          "GROUP_ID": 568,
+          "VNC_PASSWORD": "$QUESTION(vnc_password)",
+          "API_KEY": "$RANDOM_STRING(32)"
+        },
+        "volumes": [
+          "$LOCATION(ApplicationsPerformance)/stardew-valley/config:/config",
+          "$LOCATION(ApplicationsPerformance)/stardew-valley/saves:/config/xdg/config/StardewValley",
+          "$LOCATION(ApplicationsPerformance)/stardew-valley/settings:/data/settings",
+          "$LOCATION(ApplicationsPerformance)/stardew-valley/game:/data/game"
+        ],
+        "ports": [
+          { "target": 5800, "published": "$PORT(5800)" },
+          { "target": 24642, "published": "$PORT(24642)", "protocol": "udp" },
+          { "target": 27015, "published": "$PORT(27015)", "protocol": "udp" }
+        ],
+        "depends_on": {
+          "steam-auth": { "condition": "service_started" }
+        },
+        "deploy": {
+          "resources": {
+            "limits": {
+              "cpus": "$CPUS(50%, 2)",
+              "memory": "$MEMORY(50%, 4096)"
+            }
+          }
+        }
+      },
+      "steam-auth": {
+        "image": "sdvd/steam-service:1.5.0-preview.140@sha256:196a79e9fc36a030023d6fbcb903afad4944a3659ad1fb959205f0ec25e9c032",
+        "restart": "unless-stopped",
+        "stdin_open": true,
+        "tty": true,
+        "entrypoint": ["/bin/sh", "-c"],
+        "command": [
+          "if ! ls /data/steam-session/session.json /data/steam-session/*/session.json >/dev/null 2>&1; then /entrypoint.sh login; fi; exec /entrypoint.sh serve"
+        ],
+        "environment": {
+          "PORT": 3001,
+          "USER_ID": 568,
+          "GROUP_ID": 568,
+          "STEAM_USERNAME": "$QUESTION(steam_username)"
+        },
+        "volumes": [
+          "$LOCATION(ApplicationsPerformance)/stardew-valley/steam-session:/data/steam-session",
+          "$LOCATION(ApplicationsPerformance)/stardew-valley/game:/data/game"
+        ],
+        "healthcheck": {
+          "disable": true
+        }
+      }
+    },
+    "x-portals": [
+      {
+        "name": "Web UI",
+        "scheme": "http",
+        "host": "0.0.0.0",
+        "port": "$PORT(5800)",
+        "path": "/"
+      }
+    ]
+  },
+  "hooks": [
+    {
+      "id": "sign-in-steam",
+      "title": "Sign in to Steam",
+      "description": "Signing in to Steam",
+      "summary": "Signs the server in to Steam, which downloads the game and gives friends an invite code.",
+      "events": ["onAfterInstall", "userAction"],
+      "rerun": "converge",
+      "inputs": [
+        {
+          "type": "question",
+          "id": "steam_password",
+          "question": {
+            "question": "Steam password",
+            "description": "The password of the Steam account you named. HexOS types it into the server's Steam sign-in and doesn't keep it.",
+            "type": "password",
+            "key": "steam_password",
+            "required": true
+          }
+        }
+      ],
+      "script": "stardew-valley/sign_in_steam.ts",
+      "entrypoint": "run",
+      "timeout": 600
+    }
+  ],
+  "widgets": [
+    {
+      "id": "farm",
+      "title": "On the farm",
+      "description": "Who's on your farm, the day it is there, and the code friends join with.",
+      "refresh": 10,
+      "conditions": [
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "stardew-valley"
+        }
+      ],
+      "slots": [
+        { "type": "stat", "field": "count" },
+        { "type": "list", "field": "online", "rows": 1 }
+      ],
+      "settings": [{ "field": "code" }],
+      "script": "stardew-valley/widget_farm.ts",
+      "entrypoint": "run",
+      "timeout": 5
+    }
+  ],
+  "widgetsSchema": 3
+}

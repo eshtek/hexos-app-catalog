@@ -382,6 +382,22 @@ export interface HookContext {
   /** This app's current TrueNAS values, to read a setting from. Missing on a box from before it. */
   getAppValues?(): Promise<Record<string, unknown>>;
 
+  /**
+   * This app's running containers, by the compose project TrueNAS names after it: each one's id,
+   * name, compose `service`, state, and addresses on the app's network, which the HexOS container
+   * reaches. Read through the Docker socket. Missing on a box from before it.
+   */
+  appContainers?(): Promise<
+    Array<{ id: string; name: string; service: string | null; state: string; addresses: string[] }>
+  >;
+
+  /**
+   * Writes `text` to the console of this app's container, as typing at it would: include the
+   * newline or carriage return a line ends with. `service` picks the container when the app runs
+   * several. The container keeps its stdin open (`stdin_open`). Missing on a box from before it.
+   */
+  writeAppStdin?(text: string, options?: { service?: string }): Promise<void>;
+
   /** What this server's graphics cards can run, for a hook that offers models. Missing on a box from before it. */
   readLocalAiHardware?(): Promise<{
     cards: Array<{ pciSlot: string; name: string; memoryGB: number | null }>;

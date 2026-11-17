@@ -42,8 +42,8 @@ export const HOOK_EVENTS = [
   "action",
 ] as const;
 
-/** Install-script versions the backend still parses (appsInstallScriptSchema). */
-export const SUPPORTED_VERSIONS = [4, 5, 6] as const;
+/** Install-script versions the backend still parses (appsInstallScriptSchema). 7 is an app with several containers (compose.ts). */
+export const SUPPORTED_VERSIONS = [4, 5, 6, 7] as const;
 
 /** Macros taking parenthesised arguments. */
 export const CALL_MACROS = [

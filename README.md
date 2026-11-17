@@ -18,7 +18,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
 | [Code Server](code-server.json) | VS Code in the browser |
-| [Collabora](collabora.json) | Documents you edit together in Nextcloud |
+| [Collabora](collabora.json) | Documents you edit together in Nextcloud or OpenCloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
 | [Donetick](donetick.json) | Smart task manager |
@@ -79,6 +79,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Radarr](radarr.json) | Movie collection manager |
 | [Ratelog](ratelog.json) | App for rating movies and TV shows |
 | [RomM](romm.json) | Game ROM collection manager and player |
+| [Rust](rust.json) | Multiplayer survival game server |
 | [RustDesk](rust-desk.json) | Remote desktop server, used with RustDesk Relay |
 | [RustDesk Relay](rust-desk-relay.json) | Relay server for RustDesk |
 | [SABnzbd](sabnzbd.json) | Usenet downloader |
@@ -91,6 +92,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [SparkyFitness](sparkyfitness.json) | Food, exercise and weight tracker |
 | [Sportarr](sportarr.json) | Sports collection manager |
 | [Sure](sure.json) | Financial planning software |
+| [Stardew Valley](stardew-valley.json) | Dedicated farm friends join with an invite code, any time |
 | [Swiparr](swiparr.json) | Collaborative content watching decision software |
 | [Syncthing](syncthing.json) | Continuous file synchronization |
 | [Vikunja](vikunja.json) | Task manager with lists |

@@ -99,6 +99,15 @@ function* pins(script: Script): Generator<Pin> {
   for (const [i, entry] of entries(values.ports)) {
     yield { path: `app_values.ports[${i}].port_number`, ...withProtocol(entry), value: entry.port_number };
   }
+  // An app with several containers (version 7): each service publishes its own, long-form
+  const services = isObject(values.services) ? values.services : {};
+  for (const [name, service] of Object.entries(services)) {
+    if (!isObject(service)) continue;
+    for (const [i, entry] of (Array.isArray(service.ports) ? service.ports : []).entries()) {
+      if (!isObject(entry)) continue;
+      yield { path: `app_values.services.${name}.ports[${i}].published`, ...withProtocol(entry), value: entry.published };
+    }
+  }
   // A portal is only a link, but with host networking it's the one place the app's port is written
   if (usesHostNetwork(script)) {
     for (const [i, entry] of entries(values.portals)) {

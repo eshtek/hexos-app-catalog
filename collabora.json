@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Collabora edits documents inside Nextcloud on your home network."
+    "version": "1.1.0",
+    "changeLog": "Collabora can edit documents inside OpenCloud too. Beside Nextcloud alone nothing changes"
   },
   "requirements": {
     "locations": [],
@@ -70,6 +70,26 @@
       ],
       "rerun": "converge",
       "script": "collabora/connect_languagetool.ts",
+      "entrypoint": "run",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "configure-collabora",
+      "title": "Pre-configure Collabora",
+      "description": "Setting up Collabora",
+      "summary": "Sets Collabora up for OpenCloud when OpenCloud is on this server. Run it again after installing OpenCloud. It keeps your other settings.",
+      "events": [
+        "onAfterInstall",
+        "onAfterUpgrade",
+        "userAction"
+      ],
+      "optional": true,
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "script": "collabora/configure.ts",
       "entrypoint": "run",
       "timeout": 300,
       "retries": 0
