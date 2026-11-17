@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "2.0.0",
-    "changeLog": "Nextcloud can connect to Collabora, Draw.io, Paperless and Ollama from its Connections tab. Nothing changes until you connect one."
+    "version": "2.0.1",
+    "changeLog": "Connect to Collabora also works when Collabora serves https, as it does once OpenCloud is on the server"
   },
   "requirements": {
     "locations": [

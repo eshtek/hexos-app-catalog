@@ -44,7 +44,11 @@ app_on() { occ_try app:enable "$1"; }
 apply_collabora() {
   url=$(value_of "$1" url)
   [ -n "$url" ] || return 1
+  # Over https Collabora serves the server's self-signed certificate
+  verify=no
+  case "$url" in https:*) verify=yes ;; esac
   app_on richdocuments &&
+    occ_try config:app:set richdocuments disable_certificate_verification --value="$verify" &&
     occ_try config:app:set richdocuments wopi_url --value="$url" &&
     occ_try config:app:set richdocuments public_wopi_url --value="$url" &&
     occ_try richdocuments:activate-config
@@ -186,6 +190,21 @@ interface Link {
   appId: string;
   name: string;
   file: string;
+  /** The address to give Nextcloud, from the one HexOS knows. */
+  address?: (known: string) => Promise<string>;
+}
+
+const insecure = { tls: { rejectUnauthorized: false } } as RequestInit;
+
+/**
+ * Collabora serves https once OpenCloud is on this server too (collabora/configure.ts), on the same
+ * port, so Nextcloud asks over https when Collabora answers there.
+ */
+export async function collaboraAddress(known: string): Promise<string> {
+  const https = known.replace(/^http:/, "https:").replace(/\/+$/, "");
+  const response = await fetch(`${https}/hosting/discovery`, { signal: AbortSignal.timeout(15_000), ...insecure }).catch(() => undefined);
+  await response?.body?.cancel();
+  return response?.ok ? https : known;
 }
 
 async function connect(ctx: HookContext, link: Link) {
@@ -197,8 +216,9 @@ async function connect(ctx: HookContext, link: Link) {
 
   const mount = startMount(ctx.mounts);
   if (!mount) ctx.fail(`This Nextcloud can't connect to ${link.name} yet. Update its setup from the app's page, then try again.`);
-  const url = await ctx.getInstalledAppUrl(link.appId);
-  if (!url) ctx.fail(`${link.name} isn't installed, or HexOS can't find its port`);
+  const known = await ctx.getInstalledAppUrl(link.appId);
+  if (!known) ctx.fail(`${link.name} isn't installed, or HexOS can't find its port`);
+  const url = link.address ? await link.address(known!) : known;
   await ctx.emitCheckpoint("locate");
 
   writeStartScript(mount);
@@ -227,7 +247,7 @@ async function connect(ctx: HookContext, link: Link) {
   await ctx.emitCheckpoint("confirm");
 }
 
-export const collabora = (ctx: HookContext) => connect(ctx, { appId: "collabora", name: "Collabora", file: "collabora" });
+export const collabora = (ctx: HookContext) => connect(ctx, { appId: "collabora", name: "Collabora", file: "collabora", address: collaboraAddress });
 export const drawio = (ctx: HookContext) => connect(ctx, { appId: "drawio", name: "Draw.io", file: "drawio" });
 export const paperless = (ctx: HookContext) => connect(ctx, { appId: "paperless-ngx", name: "Paperless", file: "paperless" });
 export const ollama = (ctx: HookContext) => connect(ctx, { appId: "ollama", name: "Ollama", file: "ollama" });

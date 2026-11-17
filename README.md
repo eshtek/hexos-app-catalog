@@ -18,7 +18,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Blinko](blinko.json) | Self-hosted bookmarking and note-taking |
 | [Chaptarr](chaptarr.json) | Book and audiobook collection manager |
 | [Code Server](code-server.json) | VS Code in the browser |
-| [Collabora](collabora.json) | Documents you edit together in Nextcloud |
+| [Collabora](collabora.json) | Documents you edit together in Nextcloud or OpenCloud |
 | [Crafty 4](crafty-4.json) | Minecraft server manager |
 | [Deluge](deluge.json) | BitTorrent client, lightweight |
 | [Donetick](donetick.json) | Smart task manager |
