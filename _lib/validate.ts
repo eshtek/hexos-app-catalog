@@ -46,6 +46,7 @@ import {
 import { hookSummaryProblems, linkRowProblems } from "./hook_summary";
 import { videoCardProblems } from "./video_card";
 import { instanceRules, linkCopyRules } from "./instances";
+import { homeDnsRules } from "./home_dns";
 
 type Problem = { file: string; message: string };
 
@@ -624,9 +625,9 @@ function validate(file: string, script: Record<string, unknown>) {
           if (
             !Array.isArray(triggers) ||
             triggers.length === 0 ||
-            !triggers.every((trigger) => trigger === "local-ai-model" || trigger === "remote-address")
+            !triggers.every((trigger) => trigger === "local-ai-model" || trigger === "remote-address" || trigger === "home-addresses")
           ) {
-            err(file, `${where}: rerunsOn takes a list of "local-ai-model" and "remote-address"`);
+            err(file, `${where}: rerunsOn takes a list of "local-ai-model", "remote-address" and "home-addresses"`);
           }
           // A server from before "remote-address" drops the whole hook, so nothing else may ride on it
           if (Array.isArray(triggers) && triggers.includes("remote-address")) {
@@ -1103,6 +1104,8 @@ for (const [appId, script] of parsedScripts) {
 const runsInCopies = (appId: string) =>
   (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
 for (const [appId, script] of parsedScripts) report(`${appId}.json`, linkCopyRules(appId, script, runsInCopies));
+// An app that answers the home's DNS, and apps that can't share a server (see home_dns.ts)
+for (const [appId, script] of parsedScripts) report(`${appId}.json`, homeDnsRules(appId, script, parsedScripts));
 report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 
 const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));

@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "2.1.1",
-    "changeLog": "Nextcloud opens at its Anywhere address instead of refusing it as an untrusted domain."
+    "version": "2.1.2",
+    "changeLog": "Nextcloud's setup and connections work when it has a certificate set in TrueNAS."
   },
   "requirements": {
     "locations": [
