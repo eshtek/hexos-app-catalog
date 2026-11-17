@@ -290,15 +290,22 @@ const readText = (path: string) => {
   }
 };
 
-/** Whether Nextcloud is up and out of maintenance, by its own status page. */
+/**
+ * Whether Nextcloud is up and out of maintenance, by its own status page. With a certificate set in
+ * TrueNAS its port answers https only, so a refusal over http is asked again over https.
+ */
 async function nextcloudUp(ctx: HookContext): Promise<boolean> {
-  const response = await fetch(`${ctx.baseUrl}/status.php`, { signal: AbortSignal.timeout(10_000) }).catch(() => undefined);
-  if (!response?.ok) {
-    await response?.body?.cancel();
-    return false;
+  for (const base of [ctx.baseUrl, ctx.baseUrl.replace(/^http:/, "https:")]) {
+    const options = { signal: AbortSignal.timeout(10_000), ...(base.startsWith("https:") ? insecure : {}) };
+    const response = await fetch(`${base}/status.php`, options).catch(() => undefined);
+    if (!response?.ok) {
+      await response?.body?.cancel();
+      continue;
+    }
+    const status = (await response.json().catch(() => undefined)) as { installed?: boolean; maintenance?: boolean } | undefined;
+    return status?.installed === true && status.maintenance === false;
   }
-  const status = (await response.json().catch(() => undefined)) as { installed?: boolean; maintenance?: boolean } | undefined;
-  return status?.installed === true && status.maintenance === false;
+  return false;
 }
 
 interface Link {
