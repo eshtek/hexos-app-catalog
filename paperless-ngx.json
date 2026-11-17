@@ -1,8 +1,8 @@
 {
-    "version": 5,
+    "version": 6,
     "script": {
-        "version": "1.0.2",
-        "changeLog": "Declared CPU, install size, and RAM requirements"
+        "version": "1.0.3",
+        "changeLog": "Sign-in works at the app's Anywhere address"
     },
     "requirements": {
         "locations": [
@@ -85,5 +85,22 @@
                 "port_number": "$PORT(30070)"
             }
         }
-    }
+    },
+    "hooks": [
+        {
+            "id": "anywhere-address",
+            "title": "Sign in at its Anywhere address",
+            "description": "Letting Paperless-ngx accept sign-ins at its Anywhere address",
+            "summary": "Paperless-ngx accepts sign-ins at its Anywhere address instead of refusing them. HexOS runs this again when the address changes.",
+            "kind": "maintain",
+            "events": ["userAction"],
+            "rerun": "converge",
+            "rerunsOn": ["remote-address"],
+            "surfaces": ["card"],
+            "script": "anywhere/proxy_setting.ts",
+            "entrypoint": "paperless",
+            "timeout": 600,
+            "retries": 0
+        }
+    ]
 }
