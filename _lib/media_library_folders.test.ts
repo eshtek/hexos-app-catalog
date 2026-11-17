@@ -45,6 +45,8 @@ interface Options {
   also?: "sportarr" | "chaptarr";
   /** The second list of libraries is held until the server starts restarting. */
   holdSecondList?: boolean;
+  /** Jellyfin has no API key, only an administrator's sign-in (IsActive 0, as Jellyfin leaves it), with a disabled administrator's and a member's newer. */
+  signedInOnly?: boolean;
 }
 
 function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Options) {
@@ -58,7 +60,17 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
   const db = new Database(join(config, "data", server === "jellyfin" ? "jellyfin.db" : "authentication.db"));
   if (server === "jellyfin") {
     db.run("CREATE TABLE ApiKeys (AccessToken TEXT, DateCreated TEXT)");
-    db.run("INSERT INTO ApiKeys VALUES (?, '2026-01-01')", [TOKEN]);
+    if (options.signedInOnly) {
+      db.run("CREATE TABLE Devices (UserId TEXT, AccessToken TEXT, DeviceId TEXT, IsActive INT, DateLastActivity TEXT)");
+      db.run("CREATE TABLE Permissions (UserId TEXT, Kind INT, Value INT)");
+      db.run("INSERT INTO Permissions VALUES ('owner', 0, 1), ('gone', 0, 1), ('gone', 2, 1), ('kid', 0, 0)");
+      db.run(
+        "INSERT INTO Devices VALUES ('owner', ?, 'web', 0, '2026-11-01'), ('gone', 'disabled-token', 'tv', 0, '2026-11-12'), ('kid', 'member-token', 'tv', 0, '2026-11-13')",
+        [TOKEN],
+      );
+    } else {
+      db.run("INSERT INTO ApiKeys VALUES (?, '2026-01-01')", [TOKEN]);
+    }
   } else {
     db.run("CREATE TABLE Tokens_2 (AccessToken TEXT, DeviceId INT, UserId TEXT, IsActive INT, DateLastActivityInt INT)");
     db.run("INSERT INTO Tokens_2 VALUES (?, 1, '', 1, 1)", [TOKEN]);
@@ -165,6 +177,12 @@ function fakes(server: Server, companion: "sportarr" | "chaptarr", options: Opti
   const leftovers = () => readdirSync(media, { recursive: true }).map(String).filter((entry) => entry.includes(".hexos"));
   return { ctx, libraries, restarts, looks, leftovers, media, connections };
 }
+
+test("Jellyfin: with no API key, an administrator's sign-in adds the library, and newer ones of a disabled administrator and a member are passed over", async () => {
+  const { ctx, libraries } = fakes("jellyfin", "chaptarr", { media: "visible", signedInOnly: true });
+  await jellyfinLibraries.chaptarr(ctx);
+  expect(libraries).toEqual(["/media/books", "/media/audiobooks"]);
+});
 
 for (const server of ["jellyfin", "emby"] as const) {
   const name = NAMES[server];

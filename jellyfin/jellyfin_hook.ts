@@ -22,6 +22,8 @@ const SERVER_NAME = "HexOS Jellyfin";
 const DB_RELATIVE = "/data/jellyfin.db";
 /** Jellyfin's PermissionKind.IsAdministrator. */
 const IS_ADMINISTRATOR = 0;
+/** Jellyfin's PermissionKind.IsDisabled: Jellyfin refuses a disabled user's sign-in. */
+const IS_DISABLED = 2;
 
 /** The name of the API key the now-playing widget reads sessions with. */
 const WIDGET_KEY_NAME = "HexOS";
@@ -184,14 +186,15 @@ function storedAdministratorToken(ctx: HookContext): string | null {
     const key = db.query<{ AccessToken: string }, []>("SELECT AccessToken FROM ApiKeys ORDER BY DateCreated DESC LIMIT 1").get();
     if (key?.AccessToken) return key.AccessToken;
     const session = db
-      .query<{ AccessToken: string }, [number]>(
+      .query<{ AccessToken: string }, [number, number]>(
         `SELECT d.AccessToken FROM Devices d
            JOIN Permissions p ON p.UserId = d.UserId AND p.Kind = ? AND p.Value = 1
-          WHERE d.IsActive = 1
+          WHERE d.AccessToken != ''
+            AND NOT EXISTS (SELECT 1 FROM Permissions x WHERE x.UserId = d.UserId AND x.Kind = ? AND x.Value = 1)
           ORDER BY d.DateLastActivity DESC
           LIMIT 1`,
       )
-      .get(IS_ADMINISTRATOR);
+      .get(IS_ADMINISTRATOR, IS_DISABLED);
     return session?.AccessToken ?? null;
   } catch {
     return null;

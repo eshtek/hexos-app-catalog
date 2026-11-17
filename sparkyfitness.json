@@ -1,8 +1,8 @@
 {
-  "version": 5,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation"
+    "version": "1.0.1",
+    "changeLog": "Sign-in works at the app's Anywhere address"
   },
   "requirements": {
     "locations": [
@@ -82,5 +82,28 @@
         "memory": "$MEMORY(10%, 2048)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "anywhere-address",
+      "title": "Sign in at its Anywhere address",
+      "description": "Letting SparkyFitness accept sign-ins at its Anywhere address",
+      "summary": "SparkyFitness accepts sign-ins at its Anywhere address instead of refusing them. HexOS runs this again when the address changes.",
+      "kind": "maintain",
+      "events": [
+        "userAction"
+      ],
+      "rerun": "converge",
+      "rerunsOn": [
+        "remote-address"
+      ],
+      "surfaces": [
+        "card"
+      ],
+      "script": "sparkyfitness/anywhere.ts",
+      "entrypoint": "anywhere",
+      "timeout": 600,
+      "retries": 0
+    }
+  ]
 }
