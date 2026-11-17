@@ -58,17 +58,11 @@
         {
           "app": "onlyoffice-document-server",
           "core": true,
-          "summary": "Closest to Microsoft Office",
-          "requires": [
-            "opencloud"
-          ]
+          "summary": "Closest to Microsoft Office"
         },
         {
           "app": "eurooffice-document-server",
-          "summary": "A European fork of ONLYOFFICE",
-          "requires": [
-            "opencloud"
-          ]
+          "summary": "A European fork of ONLYOFFICE"
         }
       ]
     },
