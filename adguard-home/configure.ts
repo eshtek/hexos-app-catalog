@@ -1,5 +1,6 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
@@ -8,6 +9,13 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * AdGuard Home answers it (`/control/install/configure`, the call the page itself makes) with the
  * ports the app was installed on and the sign-in the owner chose, so it answers DNS at once. An
  * AdGuard Home that is already set up keeps its account.
+ *
+ * AdGuard Home runs on the server's own network, because TrueNAS only publishes a port on one
+ * address when that address is set by hand, and most servers get theirs from the router. So AdGuard
+ * Home has to pick its own DNS address, and it gets the server's: on every address it would fight
+ * the mesh client for port 53 and never start (v0.107.80 ends with "address already in use"). Use
+ * Anywhere addresses at home puts that right too, when AdGuard Home's settings name every address
+ * or one the server no longer has.
  *
  * Use Anywhere addresses at home keeps one DNS rewrite per Anywhere name the box answers on the
  * standard web ports, each pointing at the box's own address, so a device on the owner's network
@@ -19,6 +27,7 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  */
 
 const HEXOS_ACCOUNT = "hexos-anywhere";
+const EVERY_ADDRESS = ["0.0.0.0", "::"];
 
 interface Account {
   name: string;
@@ -43,6 +52,56 @@ async function api(ctx: HookContext, account: Account, path: string, body?: unkn
     redirect: "manual",
     signal: AbortSignal.timeout(30_000),
   });
+}
+
+/** Whether the app runs on the server's own network. A box that can't say installed it that way. */
+async function onHostNetwork(ctx: HookContext): Promise<boolean> {
+  const values = await ctx.getAppValues?.().catch(() => undefined);
+  return values === undefined || (values.network as { host_network?: unknown } | undefined)?.host_network !== false;
+}
+
+/**
+ * The settings file with AdGuard Home's DNS on the server's address, or undefined when it is fine
+ * as it is or can't be read. Only two cases change: every address, and one address the server
+ * doesn't have (`local` is every address it does have). Anything else is the owner's choice.
+ */
+export function withDnsAddress(yaml: string, address: string, local: string[]): string | undefined {
+  const lines = yaml.split("\n");
+  const dns = lines.findIndex((line) => /^dns:\s*$/.test(line));
+  if (dns === -1) return undefined;
+  let at = dns + 1;
+  while (at < lines.length && /^\s/.test(lines[at]!) && !/^  bind_hosts:\s*$/.test(lines[at]!)) at++;
+  if (at >= lines.length || !/^  bind_hosts:\s*$/.test(lines[at]!)) return undefined;
+  let end = at + 1;
+  while (end < lines.length && /^    - \S/.test(lines[end]!)) end++;
+  const hosts = lines.slice(at + 1, end).map((line) => line.slice(6).trim().replace(/^["']|["']$/g, ""));
+  const everywhere = hosts.length > 0 && hosts.every((host) => EVERY_ADDRESS.includes(host));
+  const gone = hosts.length === 1 && local.length > 0 && !EVERY_ADDRESS.includes(hosts[0]!) && !local.includes(hosts[0]!);
+  if (!everywhere && !gone) return undefined;
+  lines.splice(at + 1, end - at - 1, `    - ${address}`);
+  return lines.join("\n");
+}
+
+/** Every address the server has, as the HexOS container on the server's own network sees them. */
+function localAddresses(): string[] {
+  try {
+    return Object.values(networkInterfaces()).flatMap((entries) => (entries ?? []).map((entry) => entry.address));
+  } catch {
+    return [];
+  }
+}
+
+/** Moves AdGuard Home's DNS back to the server's address when its settings can't work, and restarts it. */
+async function keepDnsAddress(ctx: HookContext, config: ContextMount): Promise<void> {
+  if (!ctx.host || !ctx.restartApp || !(await onHostNetwork(ctx))) return;
+  const settingsPath = `${config.localPath}/AdGuardHome.yaml`;
+  if (!existsSync(settingsPath)) return;
+  const next = withDnsAddress(readFileSync(settingsPath, "utf-8"), ctx.host, localAddresses());
+  if (!next) return;
+  writeFileSync(settingsPath, next);
+  ctx.log("AdGuard Home's DNS is back on the server's address");
+  // AdGuard Home reads its settings file only when it starts
+  await ctx.restartApp();
 }
 
 /** "setup" while AdGuard Home shows its setup page, "ready" once it is set up, undefined while it doesn't answer. */
@@ -158,8 +217,14 @@ export async function configure(ctx: HookContext) {
     await ctx.emitCheckpoint("setup", "AdGuard Home was already set up");
     return;
   }
+  // On the server's own network AdGuard Home listens where it is told, and every address is the mesh client's too
+  const dnsAddress = (await onHostNetwork(ctx)) ? ctx.host : "0.0.0.0";
+  if (!dnsAddress) ctx.fail("HexOS couldn't tell which address this server has on your network");
   if (!ctx.signIn) {
-    await ctx.skipCheckpoint("setup", "Open AdGuard Home to finish its setup page");
+    await ctx.skipCheckpoint(
+      "setup",
+      dnsAddress === "0.0.0.0" ? "Open AdGuard Home to finish its setup page" : `Open AdGuard Home to finish its setup page. For its DNS server, pick this server's address, ${dnsAddress}.`,
+    );
     return;
   }
   const response = await fetch(`${ctx.baseUrl}/control/install/configure`, {
@@ -167,7 +232,7 @@ export async function configure(ctx: HookContext) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       web: { ip: "0.0.0.0", port: ctx.port },
-      dns: { ip: "0.0.0.0", port: 53 },
+      dns: { ip: dnsAddress, port: 53 },
       username: ctx.signIn.username,
       password: ctx.signIn.password,
     }),
@@ -185,6 +250,8 @@ export async function homeAddresses(ctx: HookContext) {
   ]);
   const config = configMount(ctx.mounts);
   if (!config) ctx.fail("HexOS couldn't find AdGuard Home's settings folder");
+  // Before the wait: with its DNS on every address AdGuard Home never comes up
+  await keepDnsAddress(ctx, config);
   const state = await waitForState(ctx);
   if (state === "setup") {
     const message = "AdGuard Home isn't set up yet. Open it, finish its setup page, then run this again.";

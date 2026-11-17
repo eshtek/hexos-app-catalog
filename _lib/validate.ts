@@ -46,7 +46,7 @@ import {
 import { hookSummaryProblems, linkRowProblems } from "./hook_summary";
 import { videoCardProblems } from "./video_card";
 import { instanceRules, linkCopyRules } from "./instances";
-import { homeDnsRules } from "./home_dns";
+import { homeDnsRules, hostIpsRules } from "./home_dns";
 
 type Problem = { file: string; message: string };
 
@@ -1105,7 +1105,7 @@ const runsInCopies = (appId: string) =>
   (parsedScripts.get(appId)?.requirements as { instances?: unknown } | undefined)?.instances === "many";
 for (const [appId, script] of parsedScripts) report(`${appId}.json`, linkCopyRules(appId, script, runsInCopies));
 // An app that answers the home's DNS, and apps that can't share a server (see home_dns.ts)
-for (const [appId, script] of parsedScripts) report(`${appId}.json`, homeDnsRules(appId, script, parsedScripts));
+for (const [appId, script] of parsedScripts) report(`${appId}.json`, [...homeDnsRules(appId, script, parsedScripts), ...hostIpsRules(script)]);
 report("catalog", [...catalogFixedPortClashes(parsedScripts), ...catalogPreferredPortClashes(parsedScripts)]);
 
 const catalogApps = new Set(files.map((f) => f.replace(/\.json$/, "")));

@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "initial"
+    "version": "1.1.0",
+    "changeLog": "Installs on a server that gets its address from the router. AdGuard Home now answers DNS on the server's own address itself"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -27,11 +27,9 @@
         "port_number": "$PORT(30004)"
       },
       "dns_port": {
-        "bind_mode": "published",
-        "port_number": 53,
-        "host_ips": ["$SERVER_LAN_IP"]
+        "bind_mode": ""
       },
-      "host_network": false,
+      "host_network": true,
       "dhcp_enabled": false
     },
     "storage": {
