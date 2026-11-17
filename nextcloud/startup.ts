@@ -25,7 +25,7 @@ const STATE_DIR = "hexos";
 /** Where Nextcloud's image looks for the scripts, and where HexOS mounts its folder. */
 export const START_FOLDER = "/docker-entrypoint-hooks.d/before-starting";
 
-const START_SCRIPT = `#!/bin/sh
+export const START_SCRIPT = `#!/bin/sh
 # Written by HexOS. Runs at each Nextcloud start. It must never stop Nextcloud from starting.
 dir=${START_FOLDER}/${STATE_DIR}
 [ -d "$dir" ] || exit 0
@@ -69,6 +69,67 @@ apply_ollama() {
     occ_try config:app:set integration_openai url --value="$url"
 }
 
+# One of Nextcloud's list settings, a value a line, and nothing when it isn't set.
+list_of() { occ_try config:system:get "$1" 2>/dev/null; }
+
+# Writes a list setting over the one there, index by index, so it is never empty on the way.
+write_list() {
+  key=$1
+  old=$(list_of "$key" | grep -c .)
+  shift
+  i=0
+  for value in "$@"; do
+    occ_try config:system:set "$key" "$i" --value="$value" >/dev/null || return 1
+    i=$((i + 1))
+  done
+  while [ "$i" -lt "$old" ]; do
+    occ_try config:system:delete "$key" "$i" >/dev/null || return 1
+    i=$((i + 1))
+  done
+}
+
+# Where a request from the server itself arrives from: this container's default gateway.
+gateway_of() {
+  php -r 'foreach (file("/proc/net/route") as $l) { $f = preg_split("/\\s+/", trim($l)); if (($f[1] ?? "") === "00000000") { echo long2ip(unpack("V", hex2bin($f[2]))[1]); break; } }'
+}
+
+# Nextcloud answers only at the addresses it trusts, and believes only a proxy it trusts about the
+# address and scheme a visitor used. names= holds the app's Anywhere names. The names and the proxy
+# added last time are taken out first, so a name that is gone stops being trusted.
+apply_anywhere() (
+  set -f
+  names=$(value_of "$1" names)
+  before=$(value_of "$dir/anywhere.applied" names 2>/dev/null)
+  domains=$(list_of trusted_domains)
+  [ -n "$domains" ] || exit 1
+  set --
+  for domain in $domains; do
+    case " $before " in *" $domain "*) ;; *) set -- "$@" "$domain" ;; esac
+  done
+  for name in $names; do
+    case " $* " in *" $name "*) ;; *) set -- "$@" "$name" ;; esac
+  done
+  write_list trusted_domains "$@" || exit 1
+
+  gateway=$(gateway_of)
+  added=$(cat "$dir/anywhere.proxy" 2>/dev/null)
+  set --
+  for proxy in $(list_of trusted_proxies); do
+    [ "$proxy" = "$added" ] || set -- "$@" "$proxy"
+  done
+  rm -f "$dir/anywhere.proxy"
+  if [ -n "$names" ] && [ -n "$gateway" ]; then
+    case " $* " in
+      *" $gateway "*) ;;
+      *)
+        set -- "$@" "$gateway"
+        printf '%s\\n' "$gateway" >"$dir/anywhere.proxy"
+        ;;
+    esac
+  fi
+  write_list trusted_proxies "$@"
+)
+
 {
   for file in "$dir"/*.wanted; do
     [ -f "$file" ] || continue
@@ -80,6 +141,7 @@ apply_ollama() {
       drawio) apply_drawio "$file" ;;
       paperless) apply_paperless "$file" ;;
       ollama) apply_ollama "$file" ;;
+      anywhere) apply_anywhere "$file" ;;
       *) false ;;
     esac
     if [ $? -eq 0 ]; then
@@ -201,17 +263,35 @@ async function connect(ctx: HookContext, link: Link) {
   if (!url) ctx.fail(`${link.name} isn't installed, or HexOS can't find its port`);
   await ctx.emitCheckpoint("locate");
 
+  await apply(ctx, mount, {
+    file: link.file,
+    wanted: `url=${url}\n`,
+    already: `Nextcloud already uses this ${link.name}`,
+    unfinished: `Nextcloud didn't finish connecting to ${link.name}. It tries again each time it starts.`,
+  });
+}
+
+interface Wanted {
+  file: string;
+  wanted: string;
+  /** Said when Nextcloud already has it, and no restart is needed. */
+  already: string;
+  /** Said when Nextcloud restarted and didn't take it. */
+  unfinished: string;
+}
+
+/** Writes what a link wants, restarts Nextcloud so its script applies it, and waits until it has. */
+async function apply(ctx: HookContext, mount: ContextMount, { file, wanted, already, unfinished }: Wanted) {
   writeStartScript(mount);
   const state = `${mount.localPath}/${STATE_DIR}`;
-  const wanted = `url=${url}\n`;
-  const applied = () => readText(`${state}/${link.file}.applied`) === wanted;
-  writeFileSync(`${state}/${link.file}.wanted`, wanted, { mode: 0o640 });
-  own(`${state}/${link.file}.wanted`);
+  const applied = () => readText(`${state}/${file}.applied`) === wanted;
+  writeFileSync(`${state}/${file}.wanted`, wanted, { mode: 0o640 });
+  own(`${state}/${file}.wanted`);
 
   if (applied()) {
-    await ctx.skipCheckpoint("restart", `Nextcloud already uses this ${link.name}`);
+    await ctx.skipCheckpoint("restart", already);
   } else {
-    if (typeof ctx.restartApp !== "function") ctx.fail("This server's HexOS needs an update before it can connect Nextcloud. Try again after it updates.");
+    if (typeof ctx.restartApp !== "function") ctx.fail("This server's HexOS needs an update before it can change Nextcloud's settings. Try again after it updates.");
     await ctx.restartApp();
     await ctx.emitCheckpoint("restart");
     let done = false;
@@ -221,7 +301,7 @@ async function connect(ctx: HookContext, link: Link) {
     }
     if (!done) {
       const log = (readText(`${state}/start.log`) ?? "").trim().split("\n").slice(-4).join(" ").slice(0, 400);
-      ctx.fail(`Nextcloud didn't finish connecting to ${link.name}. It tries again each time it starts.`, log ? [{ label: "Reason", value: log }] : []);
+      ctx.fail(unfinished, log ? [{ label: "Reason", value: log }] : []);
     }
   }
   await ctx.emitCheckpoint("confirm");
@@ -231,3 +311,40 @@ export const collabora = (ctx: HookContext) => connect(ctx, { appId: "collabora"
 export const drawio = (ctx: HookContext) => connect(ctx, { appId: "drawio", name: "Draw.io", file: "drawio" });
 export const paperless = (ctx: HookContext) => connect(ctx, { appId: "paperless-ngx", name: "Paperless", file: "paperless" });
 export const ollama = (ctx: HookContext) => connect(ctx, { appId: "ollama", name: "Ollama", file: "ollama" });
+
+// --- its Anywhere address ------------------------------------------------------
+
+/** A name that is safe in the wanted file, which the start script reads word by word. */
+const HOSTNAME = /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i;
+
+/**
+ * Lets Nextcloud open at its Anywhere addresses, which it otherwise refuses as an untrusted domain.
+ * HexOS runs this again whenever the app's addresses change, and with none left the names come back
+ * out. Nextcloud is restarted only when the list differs from the one it has.
+ */
+export async function anywhere(ctx: HookContext) {
+  await ctx.registerCheckpoints([
+    { id: "names", message: "Reading this app's Anywhere addresses" },
+    { id: "restart", message: "Restarting Nextcloud to use them" },
+    { id: "confirm", message: "Checking Nextcloud took the change" },
+  ]);
+  const read = await ctx.readRemoteAddresses?.();
+  if (!read) ctx.fail("This server's HexOS needs an update before Nextcloud can open at an Anywhere address. Try again after it updates.");
+  const mount = startMount(ctx.mounts);
+  if (!mount) ctx.fail("This Nextcloud can't be told its Anywhere address yet. Update its setup from the app's page, then try again.");
+  const names = read.names.filter((name) => HOSTNAME.test(name)).sort();
+  await ctx.emitCheckpoint("names");
+
+  // A Nextcloud that never had an address has nothing to take back out
+  if (names.length === 0 && readText(`${mount.localPath}/${STATE_DIR}/anywhere.applied`) === undefined) {
+    await ctx.skipCheckpoint("restart", "This app has no Anywhere address");
+    await ctx.skipCheckpoint("confirm");
+    return;
+  }
+  await apply(ctx, mount, {
+    file: "anywhere",
+    wanted: `names=${names.join(" ")}\n`,
+    already: "Nextcloud already uses these addresses",
+    unfinished: "Nextcloud didn't take its Anywhere address. It tries again each time it starts.",
+  });
+}
