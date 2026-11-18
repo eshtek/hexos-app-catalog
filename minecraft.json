@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation, from catalog pull request 103 by Sportarr: every world gets its own folder and port"
+    "version": "1.0.1",
+    "changeLog": "Turns off Java's fast Base64 decoder, which CVE-2026-114938 (Java4Shell) abuses to run code on the server"
   },
   "requirements": {
     "locations": [
@@ -57,6 +57,10 @@
         {
           "name": "MAX_MEMORY",
           "value": "75%"
+        },
+        {
+          "name": "JVM_XX_OPTS",
+          "value": "-XX:-UseBASE64Intrinsics"
         }
       ]
     },
