@@ -2,9 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { consoleState, hasSession } from "../stardew-valley/sign_in_steam";
+import { asksForPassword, consoleState, hasSession, openConsole, run } from "../stardew-valley/sign_in_steam";
 import { farmDate, farmFields, onlineNames, playersLine, usableCode } from "../stardew-valley/widget_farm";
 import { composeScriptProblems } from "./compose";
+import type { HookContext } from "./hook_context";
 
 const script = JSON.parse(readFileSync(join(import.meta.dir, "..", "stardew-valley.json"), "utf8"));
 
@@ -35,7 +36,7 @@ describe("the Stardew Valley script", () => {
 });
 
 // What sdvd/steam-service's `login` writes on its console (tools/steam-service, ConsoleAuthenticator.cs
-// and SteamAuthService.cs), as its TTY shows it
+// and SteamAuthService.cs), as an attached console shows it. Docker's log shows less: see `logged`
 const BANNER = "*****************************************************************\r\n*              Steam Authentication Setup                       *\r\n";
 const PASSWORD = `${BANNER}Steam account: farmer (from STEAM_USERNAME)\r\nSteam Password: `;
 const CHOICE =
@@ -128,5 +129,161 @@ describe("the farm card", () => {
       "Abigail",
     ]);
     expect(playersLine(["A", "B", "C", "D", "E"])).toBe("A, B, and 3 more");
+  });
+});
+
+// What Docker's log holds of something the console wrote: its copier logs a line when the line
+// ends (moby daemon/logger/copier.go), so the prompt the console is waiting at is never in it.
+const logged = (written: string) => written.slice(0, written.lastIndexOf("\n") + 1);
+
+describe("the password prompt, which Docker's log never shows", () => {
+  test("it is read from the account line before it, the last line logged", () => {
+    expect(logged(PASSWORD).endsWith("Steam Password: ")).toBe(false);
+    expect(consoleState(logged(PASSWORD))).toEqual({ kind: "waiting" });
+    expect(asksForPassword(logged(PASSWORD))).toBe(true);
+  });
+
+  test("an answered prompt, a run that ended and an empty log are not it", () => {
+    expect(asksForPassword(logged(`${PASSWORD}********\r\n[SteamAuth:A0] Connecting... +0.0s\r\n`))).toBe(false);
+    expect(asksForPassword(logged(`${PASSWORD}********\r\n[SteamService] Account 0: Login failed +0.1s\r\n`))).toBe(false);
+    expect(asksForPassword("")).toBe(false);
+  });
+});
+
+/**
+ * A Docker socket with one container behind it, the Steam one: its log answers with finished lines
+ * only, and an attach is sent each thing the console writes from then on, as Docker does.
+ */
+function fakeDocker(guard: "app" | "email" | "none") {
+  const socketPath = join(mkdtempSync(join(tmpdir(), "sdv-")), "d.sock");
+  const attached = new Set<{ write(data: string): number }>();
+  let written = PASSWORD;
+  let at: "password" | "choice" | "code" | "done" = "password";
+  const write = (text: string) => {
+    written += text;
+    for (const socket of attached) socket.write(text);
+  };
+  const signedIn = () => {
+    write("[SteamAuth:A0] Logged in as 76561198000000000 +1.2s\r\n");
+    at = "done";
+  };
+  const listener = Bun.listen<{ head: string }>({
+    unix: socketPath,
+    socket: {
+      open(socket) {
+        socket.data = { head: "" };
+      },
+      data(socket, chunk) {
+        socket.data.head += chunk.toString();
+        if (!socket.data.head.includes("\r\n\r\n")) return;
+        const [method, path] = socket.data.head.split(" ");
+        if (method === "GET" && path?.includes("/logs")) {
+          const body = logged(written);
+          socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`);
+          socket.end();
+        } else if (method === "POST" && path?.includes("/containers/steam1/attach")) {
+          socket.write("HTTP/1.1 101 UPGRADED\r\nConnection: Upgrade\r\nUpgrade: tcp\r\n\r\n");
+          attached.add(socket);
+        } else {
+          socket.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+          socket.end();
+        }
+      },
+      close(socket) {
+        attached.delete(socket);
+      },
+    },
+  });
+  return {
+    socketPath,
+    stop: () => listener.stop(true),
+    /** What `login` does with a line typed at its console. */
+    type(text: string) {
+      const line = text.replace(/\r$/, "");
+      if (at === "password") {
+        write(`${"*".repeat(line.length)}\r\n[SteamAuth:A0] Connecting... +0.0s\r\n`);
+        if (guard === "none") return signedIn();
+        write(guard === "app" ? CHOICE : "Enter Steam Guard code sent to f***@example.com: ");
+        at = guard === "app" ? "choice" : "code";
+      } else if (at === "choice") {
+        write(`${line}\r\n`);
+        if (line !== "2") return signedIn();
+        write("Enter Steam Guard code: ");
+        at = "code";
+      } else if (at === "code") {
+        write(`${line}\r\n`);
+        if (line === "R2D2C") return signedIn();
+        write("[Steam] Incorrect code, try again. +0.3s\r\nEnter Steam Guard code from mobile app: ");
+      }
+    },
+  };
+}
+
+function signInWith(docker: ReturnType<typeof fakeDocker>, codes: string[]) {
+  const typed: string[] = [];
+  const asked: Array<string | undefined> = [];
+  let restarts = 0;
+  const ctx = {
+    mounts: [{ hostPath: "/mnt/tank/steam-session", containerPath: "/data/steam-session", localPath: mkdtempSync(join(tmpdir(), "steam-")) }],
+    inputs: { steam_password: "not-a-real-password" },
+    appContainers: async () => [{ id: "steam1", name: "ix-stardew-valley-steam-auth-1", service: "steam-auth", state: "running", addresses: [] }],
+    writeAppStdin: async (text: string) => {
+      typed.push(text);
+      docker.type(text);
+    },
+    askForInputs: async (_inputs: unknown, prompt?: { title?: string }) => {
+      asked.push(prompt?.title);
+      return { code: codes.shift() ?? "" };
+    },
+    restartApp: async () => {
+      restarts++;
+    },
+    log: () => {},
+    sleep: () => new Promise((resolve) => setTimeout(resolve, 1)),
+    fail: (message: string) => {
+      throw new Error(message);
+    },
+  } as unknown as HookContext;
+  return { typed, asked, restarts: () => restarts, done: run(ctx, docker.socketPath).finally(docker.stop) };
+}
+
+describe("signing in at the Steam container's console", () => {
+  test("the console is read as written, a prompt with no line end included", async () => {
+    const docker = fakeDocker("app");
+    const live = await openConsole("steam1", docker.socketPath);
+    docker.type("not-a-real-password\r");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(consoleState(live.text())).toEqual({ kind: "choice" });
+    live.close();
+    await expect(openConsole("another", docker.socketPath)).rejects.toThrow("refused");
+    docker.stop();
+  });
+
+  test("Steam Guard in the app: the password is typed, the owner is asked, approval is waited for", async () => {
+    const run = signInWith(fakeDocker("app"), [""]);
+    await run.done;
+    expect(run.typed).toEqual(["not-a-real-password\r", "1\r"]);
+    expect(run.asked).toEqual(["Approve the sign-in in Steam"]);
+    expect(run.restarts()).toBe(0);
+  });
+
+  test("Steam Guard in the app, with the code typed instead", async () => {
+    const run = signInWith(fakeDocker("app"), ["R2D2C"]);
+    await run.done;
+    expect(run.typed).toEqual(["not-a-real-password\r", "2\r", "R2D2C\r"]);
+  });
+
+  test("Steam Guard by email: the owner is asked for the code, and again after a wrong one", async () => {
+    const run = signInWith(fakeDocker("email"), ["WRONG", "R2D2C"]);
+    await run.done;
+    expect(run.typed).toEqual(["not-a-real-password\r", "WRONG\r", "R2D2C\r"]);
+    expect(run.asked).toEqual(["Enter your Steam Guard code", "Enter your Steam Guard code"]);
+  });
+
+  test("no Steam Guard: nothing is asked", async () => {
+    const run = signInWith(fakeDocker("none"), []);
+    await run.done;
+    expect(run.typed).toEqual(["not-a-real-password\r"]);
+    expect(run.asked).toEqual([]);
   });
 });
