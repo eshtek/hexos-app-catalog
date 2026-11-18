@@ -82,7 +82,12 @@ function* strings(value: unknown, path = ""): Generator<{ path: string; value: s
  * `../` escape resolves somewhere that is not the catalog.
  */
 function checkAssetPath(file: string, field: string, value: string) {
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return; // absolute URL, not our asset
+  // The platform's sync reads every asset as a path in this repository and puts the catalog's own
+  // address in front of it, so an address of another site leaves the app with no picture
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    err(file, `${field}: "${value}" is an address on another site; keep the file in this repository and name its path`);
+    return;
+  }
   if (value.startsWith("/")) {
     err(file, `${field}: "${value}" is an absolute path; asset paths are relative to the repo root`);
     return;
