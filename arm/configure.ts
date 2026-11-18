@@ -168,6 +168,109 @@ def api(link, method, path, body=None):
     return json.loads(text) if text else None
 
 
+RELEASE_GROUP = "MyOwnMedia"
+CHANNELS = {1: "1.0", 2: "2.0", 3: "2.1", 6: "5.1", 7: "6.1", 8: "7.1"}
+VIDEO_CODECS = {"hevc": "HEVC", "h264": "AVC", "mpeg2video": "MPEG-2", "vc1": "VC-1", "mpeg1video": "MPEG-1"}
+
+
+def dolby_vision(head):
+    """Whether a Matroska file's first bytes hold a Dolby Vision configuration record.
+
+    The record is a BlockAddIDType element (41 E7), four bytes long, holding its name. The image's
+    ffprobe (4.4) reports none of it.
+    """
+    return re.search(rb"\x41\xe7\x84(dvcC|dvvC|dvwC)", head) is not None
+
+
+def truehd_atmos(data):
+    """Whether Dolby TrueHD audio in these bytes carries Atmos.
+
+    A TrueHD major sync (F8 72 6F BA) with four substreams and the 16-channel presentation flag is
+    Atmos (FFmpeg's mlp_parse.c). The image's ffprobe reports TrueHD with no profile.
+    """
+    found = [at.start() for at in re.finditer(rb"\xf8\x72\x6f\xba", data)]
+    frames = [(data[at + 16] >> 4, data[at + 17]) for at in found if at + 18 <= len(data)]
+    return bool(frames) and sum(1 for substreams, info in frames if substreams == 4 and info & 0x80) * 2 > len(frames)
+
+
+def audio_tag(stream, atmos=False):
+    codec, profile = stream.get("codec_name") or "", stream.get("profile") or ""
+    channels = CHANNELS.get(int(stream.get("channels") or 0), "")
+    if codec == "truehd":
+        return ".".join(part for part in ("TrueHD", channels, "Atmos" if atmos else "") if part)
+    if codec == "dts":
+        name = "DTS-HD.MA" if "MA" in profile else "DTS-HD.HRA" if "HRA" in profile else "DTS"
+    else:
+        name = {"ac3": "DD", "eac3": "DDP", "flac": "FLAC", "mp2": "MP2", "aac": "AAC"}.get(codec) or ("LPCM" if codec.startswith("pcm_") else codec.upper())
+    return ".".join(part for part in (name, channels) if part)
+
+
+def media_tags(streams, disctype, dv=False, atmos=False):
+    """What a release name says about a rip, in the order release names use: an untouched copy of the disc."""
+    video = next((stream for stream in streams if stream.get("codec_type") == "video"), {})
+    audio = next((stream for stream in streams if stream.get("codec_type") == "audio"), None)
+    width, height = int(video.get("width") or 0), int(video.get("height") or 0)
+    tags = []
+    if width >= 3800 or height >= 2000:
+        tags += ["2160p", "UHD", "BluRay"]
+    elif disctype == "dvd" or (height and height <= 576):
+        tags += ["DVD"]
+    else:
+        tags += ["1080p" if width >= 1900 or height >= 1000 else "720p", "BluRay"]
+    tags.append("REMUX")
+    transfer = video.get("color_transfer")
+    if dv:
+        tags.append("DV")
+    if transfer == "smpte2084":
+        tags.append("HDR")
+    elif transfer == "arib-std-b67":
+        tags.append("HLG")
+    codec = VIDEO_CODECS.get(video.get("codec_name") or "")
+    if codec:
+        tags.append(codec)
+    if audio:
+        tags.append(audio_tag(audio, atmos))
+    return tags
+
+
+def release_title(text):
+    """A title as a release name writes it: its words joined by dots."""
+    text = (text or "").replace("&", "and").replace("-", " ").replace("_", " ")
+    text = re.sub(r"[^\w ]", "", text)
+    return ".".join(text.split())
+
+
+def release_name(title, year, tags, episode=""):
+    """Interstellar.2014.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.5.1-MyOwnMedia"""
+    parts = [release_title(title)]
+    year = re.sub(r"\D", "", str(year or ""))
+    if episode:
+        parts.append(episode)
+    elif len(year) == 4 and year != "0000":
+        parts.append(year)
+    return ".".join(part for part in parts + list(tags) if part) + "-" + RELEASE_GROUP
+
+
+def probe(path):
+    """A rip's streams and tags, as ffprobe and the file's own bytes give them."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_format", "-show_streams", "-of", "json", path],
+        capture_output=True, text=True, timeout=300, check=False,
+    ).stdout
+    info = json.loads(out or "{}")
+    streams = info.get("streams") or []
+    with open(path, "rb") as source:
+        data = source.read(64 * 1024 * 1024)
+    main_audio = next((stream for stream in streams if stream.get("codec_type") == "audio"), {})
+    return {
+        "streams": streams,
+        "title": ((info.get("format") or {}).get("tags") or {}).get("title") or "",
+        "seconds": float((info.get("format") or {}).get("duration") or 0),
+        "dv": dolby_vision(data[: 4 * 1024 * 1024]),
+        "atmos": main_audio.get("codec_name") == "truehd" and truehd_atmos(data),
+    }
+
+
 def remapped(path, ours, theirs):
     ours, theirs = ours.rstrip("/"), theirs.rstrip("/")
     if path != ours and not path.startswith(ours + "/"):
@@ -289,6 +392,17 @@ def main(argv):
 
 if __name__ == "__main__":
     try:
+        if len(sys.argv) == 3 and sys.argv[1] == "--release-name":
+            # For the catalog's tests: the name for streams as ffprobe reports them
+            asked = json.loads(sys.argv[2])
+            print(release_name(asked["title"], asked.get("year"), media_tags(asked["streams"], asked.get("disctype"), asked.get("dv"), asked.get("atmos")), asked.get("episode", "")))
+            sys.exit(0)
+        if len(sys.argv) == 3 and sys.argv[1] == "--detect":
+            # For the catalog's tests: what the file's own bytes say, with no ffprobe
+            with open(sys.argv[2], "rb") as source:
+                raw = source.read()
+            print(json.dumps({"dv": dolby_vision(raw[: 4 * 1024 * 1024]), "atmos": truehd_atmos(raw)}))
+            sys.exit(0)
         main(sys.argv)
     except Exception as error:  # noqa: BLE001
         log("after-rip failed: %r" % error)

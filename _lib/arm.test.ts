@@ -127,6 +127,71 @@ describe("the Radarr link", () => {
 
 const python = Bun.which("python3");
 
+// What ffprobe 4.4.2, the one in ARM's image, reported for two real UHD rips (2026-11-18). It names
+// neither Dolby Vision nor Atmos, which the script reads from the file's bytes instead.
+const INTERSTELLAR = [
+  { codec_type: "video", codec_name: "hevc", profile: "Main 10", width: 3840, height: 2160, color_transfer: "smpte2084", color_primaries: "bt2020" },
+  { codec_type: "audio", codec_name: "dts", profile: "DTS-HD MA", channels: 6, channel_layout: "5.1(side)" },
+  { codec_type: "audio", codec_name: "dts", profile: "DTS", channels: 6, channel_layout: "5.1(side)" },
+];
+const FALLOUT = [
+  { codec_type: "video", codec_name: "hevc", profile: "Main 10", width: 3840, height: 2160, color_transfer: "smpte2084", color_primaries: "bt2020" },
+  { codec_type: "audio", codec_name: "truehd", channels: 8, channel_layout: "7.1" },
+  { codec_type: "audio", codec_name: "ac3", channels: 6, channel_layout: "5.1(side)" },
+];
+
+describe.skipIf(!python)("a rip's release name", () => {
+  const script = join(mkdtempSync(join(tmpdir(), "arm-name-")), "after_rip.py");
+  writeFileSync(script, AFTER_RIP_PY);
+  const name = (asked: Record<string, unknown>) => Bun.spawnSync([python as string, script, "--release-name", JSON.stringify(asked)]).stdout.toString().trim();
+  const detect = (bytes: Uint8Array) => {
+    const file = join(mkdtempSync(join(tmpdir(), "arm-bytes-")), "rip.mkv");
+    writeFileSync(file, bytes);
+    return JSON.parse(Bun.spawnSync([python as string, script, "--detect", file]).stdout.toString());
+  };
+
+  test("a UHD movie with HDR10 and DTS-HD MA", () => {
+    expect(name({ title: "Interstellar", year: "2014", disctype: "bluray", streams: INTERSTELLAR })).toBe(
+      "Interstellar.2014.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.5.1-MyOwnMedia",
+    );
+  });
+
+  test("a UHD episode with Dolby Vision and Atmos", () => {
+    expect(name({ title: "Fallout", episode: "S01E01", disctype: "bluray", streams: FALLOUT, dv: true, atmos: true })).toBe(
+      "Fallout.S01E01.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC.TrueHD.7.1.Atmos-MyOwnMedia",
+    );
+  });
+
+  test("a Blu-ray and a DVD", () => {
+    const bluray = [{ codec_type: "video", codec_name: "h264", width: 1920, height: 1080 }, { codec_type: "audio", codec_name: "dts", profile: "DTS-HD MA", channels: 6 }];
+    const dvd = [{ codec_type: "video", codec_name: "mpeg2video", width: 720, height: 480 }, { codec_type: "audio", codec_name: "ac3", channels: 6 }];
+    expect(name({ title: "Big Buck Bunny", year: "2008", disctype: "bluray", streams: bluray })).toBe("Big.Buck.Bunny.2008.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-MyOwnMedia");
+    expect(name({ title: "Big Buck Bunny", year: "2008", disctype: "dvd", streams: dvd })).toBe("Big.Buck.Bunny.2008.DVD.REMUX.MPEG-2.DD.5.1-MyOwnMedia");
+  });
+
+  test("a title's punctuation and ARM's hyphens become dots", () => {
+    expect(name({ title: "Spider-Man: Into the Spider-Verse & Friends", year: "2018", disctype: "bluray", streams: INTERSTELLAR })).toStartWith(
+      "Spider.Man.Into.the.Spider.Verse.and.Friends.2018.2160p.",
+    );
+  });
+
+  test("Dolby Vision is read from the Matroska record, and Atmos from TrueHD's sync frames", () => {
+    const sync = (substreams: number, info: number) => {
+      const frame = new Uint8Array(32);
+      frame.set([0xf8, 0x72, 0x6f, 0xba], 0);
+      frame[16] = substreams << 4;
+      frame[17] = info;
+      return frame;
+    };
+    const record = new Uint8Array([0x41, 0xe7, 0x84, ...new TextEncoder().encode("dvcC")]);
+    const join2 = (...parts: Uint8Array[]) => new Uint8Array(parts.flatMap((part) => [...part]));
+    expect(detect(join2(record, sync(4, 0x80), sync(4, 0x80)))).toEqual({ dv: true, atmos: true });
+    // TrueHD with no Atmos has three substreams and no 16-channel presentation
+    expect(detect(join2(new Uint8Array(64), sync(3, 0x00), sync(3, 0x00)))).toEqual({ dv: false, atmos: false });
+    expect(detect(new Uint8Array(256))).toEqual({ dv: false, atmos: false });
+  });
+});
+
 // The after-rip script runs inside ARM's container, on its Python. A machine with no python3 can't run it.
 describe.skipIf(!python)("the after-rip script", () => {
   let root: string;
