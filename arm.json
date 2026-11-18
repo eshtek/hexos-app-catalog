@@ -4,7 +4,7 @@
   "metadata": {
     "name": "Automatic Ripping Machine",
     "description": "Put a Blu-ray, DVD or CD in the server's disc drive and it is copied to your library. Movies go to Movies, shows to Shows and music to Music. With Radarr installed, Radarr names and files each movie the way it does your others.",
-    "icon": "https://media.sys.truenas.net/apps/automatic-ripping-machine/icons/icon.png",
+    "icon": "arm/icon.png",
     "version": "2.24.4",
     "categories": ["media"],
     "keywords": ["arm", "rip", "blu-ray", "dvd", "cd", "makemkv", "disc"],
