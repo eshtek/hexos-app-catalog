@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.1",
     "changeLog": "Its card shows who's online, and folds back while nobody is on."

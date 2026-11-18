@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Audiobookshelf opens ready, with your sign-in and your Audiobooks and Podcasts libraries."

@@ -1,7 +1,6 @@
 {
   "version": 6,
   "custom": true,
-  "internal": false,
   "metadata": {
     "name": "Pelican Panel",
     "description": "A website for running game servers: start Minecraft, Valheim, Palworld and hundreds more from ready-made templates, then manage their files, consoles and backups. Its game servers run in Pelican Wings.",

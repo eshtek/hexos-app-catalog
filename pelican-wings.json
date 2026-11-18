@@ -1,7 +1,6 @@
 {
   "version": 6,
   "custom": true,
-  "internal": false,
   "metadata": {
     "name": "Pelican Wings",
     "description": "The part of Pelican that runs your game servers. Each server you create in Pelican Panel runs here in its own container, with its files in this app's folder.",

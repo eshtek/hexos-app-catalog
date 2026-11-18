@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.1",
     "changeLog": "Makes a folder in Downloads for each download client as it installs, so Chaptarr sees what a client you add later downloads"

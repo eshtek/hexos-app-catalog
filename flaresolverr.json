@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "FlareSolverr joins the Media library and connects to Prowlarr, for indexers behind Cloudflare."

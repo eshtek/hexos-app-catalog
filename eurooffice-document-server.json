@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial curation: edits documents inside OpenCloud over https, with nothing to copy"

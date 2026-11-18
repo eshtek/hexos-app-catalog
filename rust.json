@@ -1,7 +1,6 @@
 {
   "version": 6,
   "custom": true,
-  "internal": false,
   "metadata": {
     "name": "Rust",
     "description": "Gather, build and raid with friends on your own Rust server. The first start downloads the game, about 6 GB, so players can join only once that finishes. Restart it after Rust's monthly update, which also starts a fresh map. Players join from the game's F1 console: client.connect, then the address HexOS copies.",
