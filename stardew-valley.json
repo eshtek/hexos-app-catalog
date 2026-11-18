@@ -13,8 +13,8 @@
     "screenshots": ["stardew-valley/screenshot-1.jpg", "stardew-valley/screenshot-2.jpg", "stardew-valley/screenshot-3.jpg", "stardew-valley/screenshot-4.jpg", "stardew-valley/screenshot-5.jpg", "stardew-valley/screenshot-6.jpg", "stardew-valley/screenshot-7.jpg", "stardew-valley/screenshot-8.jpg", "stardew-valley/screenshot-9.jpg"]
   },
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: the JunimoServer dedicated server and its Steam sign-in container run as one app, and the card shows who's on the farm"
+    "version": "1.0.1",
+    "changeLog": "The card stays small while nobody's on the farm, and shows the farm picture when someone is"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -177,6 +177,7 @@
           "app": "stardew-valley"
         }
       ],
+      "background": { "field": "online" },
       "slots": [
         { "type": "stat", "field": "count" },
         { "type": "list", "field": "online", "rows": 1 }
