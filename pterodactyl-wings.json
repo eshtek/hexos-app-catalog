@@ -1,7 +1,6 @@
 {
   "version": 6,
   "custom": true,
-  "internal": false,
   "metadata": {
     "name": "Pterodactyl Wings",
     "description": "The part of Pterodactyl that runs your game servers. Each server you create in Pterodactyl Panel runs here in its own container, with its files in this app's folder.",
