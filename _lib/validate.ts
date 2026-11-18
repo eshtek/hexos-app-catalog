@@ -350,6 +350,14 @@ function validate(file: string, script: Record<string, unknown>) {
     if (req.game_port !== undefined && !(Array.isArray(req.ports) && req.ports.includes(req.game_port))) {
       err(file, `requirements.game_port: "${String(req.game_port)}" is not one of requirements.ports`);
     }
+    // The app works at one address, the answer to this question: HexOS's Launch opens it when it is one of the app's Anywhere addresses
+    if (req.one_address !== undefined) {
+      const questions = Array.isArray(script.installation_questions) ? (script.installation_questions as unknown[]) : [];
+      const question = questions.find((q) => isObject(q) && q.key === req.one_address);
+      if (typeof req.one_address !== "string" || !isObject(question) || question.type !== "text") {
+        err(file, `requirements.one_address: "${String(req.one_address)}" must be the key of a text question`);
+      }
+    }
     // One graphics card for a new install, and the hook that sets the app's video settings for it
     for (const problem of videoCardProblems(script)) err(file, problem);
   }

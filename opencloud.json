@@ -23,7 +23,8 @@
     ],
     "ports": [
       30134
-    ]
+    ],
+    "one_address": "address"
   },
   "ensure_directories_exists": [
     {
@@ -118,7 +119,7 @@
     },
     {
       "question": "Web address",
-      "description": "Leave this as it is unless you've set up OpenCloud for use outside your home. Then enter the full address people will use, including https:// and with no slash at the end, for example https://cloud.yourdomain.tld.",
+      "description": "Leave this as it is. To use OpenCloud away from home, turn on its HexOS Anywhere address and click Use its Anywhere address. Change it only if you run your own proxy: then enter the full address, including https:// and with no slash at the end.",
       "type": "text",
       "key": "address",
       "required": true,
@@ -447,6 +448,63 @@
       "script": "opencloud/connect_office.ts",
       "entrypoint": "onlyoffice",
       "timeout": 600,
+      "retries": 0
+    },
+    {
+      "id": "use-anywhere-address",
+      "title": "Use its Anywhere address",
+      "description": "Moving OpenCloud to its Anywhere address",
+      "summary": "OpenCloud works at one address. This moves it to its Anywhere address, which then works at home too.",
+      "kind": "maintain",
+      "events": [
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "script": "opencloud/anywhere.ts",
+      "entrypoint": "useAnywhere",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "anywhere-address",
+      "title": "Keep its Anywhere address up to date",
+      "description": "Keeping OpenCloud at its Anywhere address",
+      "summary": "After you move OpenCloud to its Anywhere address, HexOS follows a rename. Turning the address off moves it home.",
+      "kind": "maintain",
+      "events": [
+        "userAction"
+      ],
+      "rerun": "converge",
+      "rerunsOn": [
+        "remote-address"
+      ],
+      "surfaces": [
+        "card"
+      ],
+      "script": "opencloud/anywhere.ts",
+      "entrypoint": "follow",
+      "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "use-home-address",
+      "title": "Use its home address",
+      "description": "Moving OpenCloud back to its home address",
+      "summary": "Moves OpenCloud back to its home address, for use at home only. Devices then need its home address again.",
+      "kind": "maintain",
+      "events": [
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "script": "opencloud/anywhere.ts",
+      "entrypoint": "useHome",
+      "timeout": 300,
       "retries": 0
     }
   ]
