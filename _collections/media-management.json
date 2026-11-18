@@ -41,7 +41,7 @@
           "vpnRecommended": true
         },
         {
-          "app": "arm",
+          "app": "ripping-machine",
           "summary": "Discs in the server's drive"
         }
       ]

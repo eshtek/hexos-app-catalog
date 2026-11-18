@@ -39,7 +39,6 @@ const REFUSED_SERVICE_KEYS: Record<string, string> = {
     container_name: 'a fixed container name collides when the app is installed twice',
     network_mode: 'every container stays on the app’s own network',
     networks: 'every container stays on the app’s own network',
-    privileged: 'privileged containers are not allowed',
     devices: 'devices and graphics cards are not supported in apps with several containers',
     cap_add: 'added capabilities are not allowed',
     volumes_from: 'volumes are not allowed',
@@ -261,7 +260,10 @@ function serviceDeployProblems(service: string, deploy: unknown, problems: strin
  * What's wrong with a compose document as an app's values, as sentences; empty when it's allowed.
  * `processed` is true once the box has filled in its macros.
  */
-export function composeDocumentProblems(values: unknown, { processed }: { processed: boolean }): string[] {
+export function composeDocumentProblems(
+    values: unknown,
+    { processed, opticalDrives = false }: { processed: boolean; opticalDrives?: boolean },
+): string[] {
     const problems: string[] = [];
     if (!isComposeDocument(values)) return ['app_values must be a compose document with services'];
     for (const key of Object.keys(values)) {
@@ -279,7 +281,16 @@ export function composeDocumentProblems(values: unknown, { processed }: { proces
             continue;
         }
         for (const key of Object.keys(definition)) {
-            if (REFUSED_SERVICE_KEYS[key]) problems.push(`${service}: ${key} is refused, ${REFUSED_SERVICE_KEYS[key]}`);
+            // The platform lets the catalog's own script run a privileged container when it asks for
+            // the server's optical drives (requirements.optical_drives), and refuses it in every other
+            if (key === 'privileged') {
+                if (!opticalDrives)
+                    problems.push(
+                        `${service}: privileged is refused, a privileged container is only for an app that needs the server’s optical drives (requirements.optical_drives)`,
+                    );
+                else if (definition.privileged !== true) problems.push(`${service}: privileged must be true or left out`);
+            } else if (REFUSED_SERVICE_KEYS[key])
+                problems.push(`${service}: ${key} is refused, ${REFUSED_SERVICE_KEYS[key]}`);
             else if (!SERVICE_KEYS.has(key)) problems.push(`${service}: ${key} is not allowed`);
         }
         if (typeof definition.image !== 'string' || definition.image.trim() === '') {
@@ -415,7 +426,8 @@ export function keepLiveComposeBinds(next: Record<string, unknown>, live: unknow
  */
 export function composeScriptProblems(script: unknown, { processed }: { processed: boolean }): string[] {
     if (!isRecord(script)) return ['the script is not an object'];
-    const problems = composeDocumentProblems(script.app_values, { processed });
+    const asks = (script as { requirements?: { optical_drives?: unknown } }).requirements;
+    const problems = composeDocumentProblems(script.app_values, { processed, opticalDrives: asks?.optical_drives === true });
     for (const bind of bindsOutsideEnsuredFolders(script)) {
         problems.push(`${bind.service}: ${bind.hostPath} is bound but not among the folders the script creates`);
     }

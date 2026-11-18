@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.5.0",
-    "changeLog": "Takes the movies Automatic Ripping Machine rips, and names and files them like your others"
+    "version": "1.5.1",
+    "changeLog": "A movie you rip takes the place of a copy of the same quality, by Radarr's own rules"
   },
   "sign_in": {
     "username": true
@@ -248,12 +248,12 @@
         {
           "role": "visibility",
           "type": "appInstalled",
-          "app": "arm"
+          "app": "ripping-machine"
         },
         {
           "role": "availability",
           "type": "appRunning",
-          "app": "arm"
+          "app": "ripping-machine"
         },
         {
           "role": "availability",
@@ -262,7 +262,7 @@
         }
       ],
       "rerun": "converge",
-      "script": "arm/connect_radarr.ts",
+      "script": "arm/connect_manager.ts",
       "entrypoint": "radarr",
       "timeout": 300,
       "retries": 0
