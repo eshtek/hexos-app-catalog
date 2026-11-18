@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "2.3.1",
-    "changeLog": "Connect to Seerr and Connect to Tautulli move to this Plex server when theirs is gone, after a reinstall or an address change, and leave one on another Plex server alone"
+    "version": "2.4.0",
+    "changeLog": "Plex's TV and phone apps reach the server at its Anywhere address"
   },
   "installation_questions": [
     {
@@ -415,6 +415,21 @@
       "script": "servarr/connect_media_server.ts",
       "entrypoint": "lidarr",
       "timeout": 300,
+      "retries": 0
+    },
+    {
+      "id": "anywhere-address",
+      "title": "Use its Anywhere address in Plex's apps",
+      "description": "Giving Plex's apps the Anywhere address",
+      "summary": "Plex's TV and phone apps reach the server at its Anywhere address. Remote Access and Relay turn off while it has one, and come back after.",
+      "kind": "maintain",
+      "events": ["userAction"],
+      "rerun": "converge",
+      "rerunsOn": ["remote-address"],
+      "surfaces": ["card"],
+      "script": "plex/anywhere.ts",
+      "entrypoint": "anywhere",
+      "timeout": 600,
       "retries": 0
     }
   ],
