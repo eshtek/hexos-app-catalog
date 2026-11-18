@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -102,6 +102,12 @@ describe("before the first start", () => {
     await seedSettings(box.ctx);
     expect(readFileSync(join(box.config, "web.yaml"), "utf8")).toBe("mine");
   });
+});
+
+// fakeOpenCloud replaces the fetch every later test file in the run would use
+const realFetch = globalThis.fetch;
+afterEach(() => {
+  globalThis.fetch = realFetch;
 });
 
 /** An OpenCloud answering over a mocked fetch: passwords by account, and what was asked of its Graph API. */
