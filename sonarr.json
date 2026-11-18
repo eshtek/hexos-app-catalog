@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.4.1",
-    "changeLog": "Makes a folder in Downloads for each download client as it installs, so Sonarr sees what a client you add later downloads"
+    "version": "1.5.0",
+    "changeLog": "Takes the shows Automatic Ripping Machine rips, matched to their episodes"
   },
   "sign_in": {
     "username": true
@@ -13,7 +13,8 @@
       "$LOCATION(Downloads)/qbittorrent",
       "$LOCATION(Downloads)/deluge",
       "$LOCATION(Downloads)/sabnzbd",
-      "$LOCATION(Downloads)/nzbget"
+      "$LOCATION(Downloads)/nzbget",
+      "$LOCATION(Downloads)/arm"
     ],
     "copy_libraries": [
       "Shows"
@@ -61,6 +62,9 @@
     },
     {
       "path": "$LOCATION(Downloads)/nzbget"
+    },
+    {
+      "path": "$LOCATION(Downloads)/arm"
     },
     {
       "path": "$LOCATION(ApplicationsPerformance)/$INSTANCE(sonarr)/config",
@@ -233,6 +237,34 @@
       "script": "servarr/connect_download_client.ts",
       "entrypoint": "nzbget",
       "timeout": 900,
+      "retries": 0
+    },
+    {
+      "id": "connect-arm",
+      "title": "Connect to Automatic Ripping Machine",
+      "description": "Takes each show Automatic Ripping Machine rips, then names and files its episodes.",
+      "kind": "connect",
+      "conditions": [
+        {
+          "role": "visibility",
+          "type": "appInstalled",
+          "app": "ripping-machine"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "ripping-machine"
+        },
+        {
+          "role": "availability",
+          "type": "appRunning",
+          "app": "sonarr"
+        }
+      ],
+      "rerun": "converge",
+      "script": "arm/connect_manager.ts",
+      "entrypoint": "sonarr",
+      "timeout": 300,
       "retries": 0
     }
   ]

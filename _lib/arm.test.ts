@@ -1,127 +1,119 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AFTER_RIP_PY, AFTER_RIP_SCRIPT, applySettings, OMDB_KEY_ENV, omdbKeyFromValues, wantedSettings } from "../arm/configure";
-import { radarrLink, seenAt } from "../arm/connect_radarr";
+import { AFTER_RIP_PY, applySettings, drivesWithoutSdf, OMDB_KEY_ENV, omdbKeyFromValues, wantedSettings, withSdfStop } from "../arm/configure";
+import { downloadsAs, seenAt } from "../arm/connect_manager";
+import { composeScriptProblems } from "./compose";
 
-const script = JSON.parse(readFileSync(new URL("../arm.json", import.meta.url), "utf-8"));
-const collection = JSON.parse(readFileSync(new URL("../_collections/media-management.json", import.meta.url), "utf-8"));
-
-// The lines of ARM 2.24.4's setup/arm.yaml these settings sit on, with a comment between them
-const ARM_YAML = [
-  "# Skip transcoding",
-  "SKIP_TRANSCODE: false",
-  'METADATA_PROVIDER: "omdb"',
-  'COMPLETED_PATH: "/somewhere/else/"',
-  'RIPMETHOD: "backup"',
-  "MAINFEATURE: false",
-  "NOTIFY_TRANSCODE: false",
-  'BASH_SCRIPT: ""',
-  'OMDB_API_KEY: ""',
-  "",
-].join("\n");
+const read = (name: string) => JSON.parse(readFileSync(new URL(`../${name}`, import.meta.url), "utf-8"));
+const script = read("ripping-machine.json");
 
 describe("Automatic Ripping Machine's settings", () => {
-  test("a rip keeps the disc's quality, and ARM runs the after-rip script when a job ends", () => {
-    const next = applySettings(ARM_YAML, wantedSettings("abc12345", ARM_YAML));
+  const ARM_YAML = ["# Skip transcoding", "SKIP_TRANSCODE: false", 'RIPMETHOD: "backup"', "MAINFEATURE: false", 'OMDB_API_KEY: ""', ""].join("\n");
+
+  test("a rip keeps the disc's quality, and ARM's comments and other settings stay", () => {
+    const next = applySettings(ARM_YAML, wantedSettings("abc12345"));
     expect(next).toContain("SKIP_TRANSCODE: true\n");
     expect(next).toContain('RIPMETHOD: "mkv"\n');
-    expect(next).toContain('COMPLETED_PATH: "/home/arm/media/completed/"\n');
-    expect(next).toContain("NOTIFY_TRANSCODE: true\n");
-    expect(next).toContain(`BASH_SCRIPT: "${AFTER_RIP_SCRIPT}"\n`);
     expect(next).toContain('OMDB_API_KEY: "abc12345"\n');
-  });
-
-  test("ARM's comments and the settings HexOS doesn't own stay as they were", () => {
-    const next = applySettings(ARM_YAML, wantedSettings("abc12345", ARM_YAML));
     expect(next).toContain("# Skip transcoding\n");
     expect(next).toContain("MAINFEATURE: false\n");
-    expect(next.split("\n").length).toBe(ARM_YAML.split("\n").length);
-  });
-
-  test("a script the owner set for themselves stays", () => {
-    const theirs = ARM_YAML.replace('BASH_SCRIPT: ""', 'BASH_SCRIPT: "/etc/arm/config/mine.sh"');
-    expect(applySettings(theirs, wantedSettings("", theirs))).toContain('BASH_SCRIPT: "/etc/arm/config/mine.sh"\n');
+    expect(applySettings(next, wantedSettings("abc12345"))).toBe(next);
   });
 
   test("an empty answer leaves a key the owner typed in ARM itself", () => {
     const typed = ARM_YAML.replace('OMDB_API_KEY: ""', 'OMDB_API_KEY: "typedinarm"');
-    expect(applySettings(typed, wantedSettings("", typed))).toContain('OMDB_API_KEY: "typedinarm"\n');
-  });
-
-  test("a second run changes nothing", () => {
-    const once = applySettings(ARM_YAML, wantedSettings("abc12345", ARM_YAML));
-    expect(applySettings(once, wantedSettings("abc12345", once))).toBe(once);
+    expect(applySettings(typed, wantedSettings(""))).toContain('OMDB_API_KEY: "typedinarm"\n');
   });
 
   test("the hook reads the key from the env the script writes the answer to", () => {
-    expect(script.app_values.envs).toContainEqual({ name: OMDB_KEY_ENV, value: "$QUESTION(omdb_api_key)" });
-    expect(omdbKeyFromValues({ envs: [{ name: OMDB_KEY_ENV, value: " abc12345 " }] })).toBe("abc12345");
+    expect(script.app_values.services.ripper.environment[OMDB_KEY_ENV]).toBe("$QUESTION(omdb_api_key)");
+    expect(omdbKeyFromValues({ services: { ripper: { environment: { [OMDB_KEY_ENV]: " abc12345 " } } } })).toBe("abc12345");
     expect(omdbKeyFromValues({})).toBe("");
   });
 });
 
-describe("Automatic Ripping Machine's script", () => {
-  const mount = (path: string) => script.app_values.storage.find((entry: { mount_path: string }) => entry.mount_path === path)?.host_path_config.path;
+// MakeMKV 1.18.4's debug log on a server with two Pioneer BDR-S11 on firmware 1.53 and a VM's
+// emulated drive (2026-11-18). With a disc in a Pioneer the scan hung after "SDF auto".
+const DEBUG_LOG = [
+  "Debug log started at Wed Nov 18 09:41:44 2026 , written by MakeMKV v1.18.4 linux(x64-release)",
+  "001003:0020 DEBUG: Code 0 at KG]XmhY0,A.yRLL3a@B-s>:29393631",
+  "No  SDF v0a6: PIONEER_BD-RW___BDR-S11_1.53_NEDL010153WL",
+  "SDF auto v0a6: PIONEER_BD-RW___BDR-S11_1.53_NEDL010153WL",
+  "No  SDF v0a6: PIONEER_BD-RW___BDR-S11_1.53_NCDL003599WL",
+  "SDF id v0a6: PIONEER_BD-RW___BDR-S11_1.53_NCDL003599WL",
+  "No  SDF v0a6: QEMU_QEMU_DVD-ROM_2.5+",
+  "",
+].join("\n");
 
-  test("rips land in Downloads, and Movies and Shows are where the after-rip script files them", () => {
-    expect(mount("/home/arm/media")).toBe("$LOCATION(Downloads)/arm");
-    expect(mount("/movies")).toBe("$LOCATION(Movies)");
-    expect(mount("/shows")).toBe("$LOCATION(Shows)");
-    expect(AFTER_RIP_PY).toContain('os.environ.get("HEXOS_ARM_MOVIES", "/movies")');
-    expect(AFTER_RIP_PY).toContain('os.environ.get("HEXOS_ARM_SHOWS", "/shows")');
+describe("drives MakeMKV has no LibreDrive data for", () => {
+  test("each is named once, from the debug log", () => {
+    expect(drivesWithoutSdf(DEBUG_LOG)).toEqual(["PIONEER_BD-RW___BDR-S11_1.53_NEDL010153WL", "PIONEER_BD-RW___BDR-S11_1.53_NCDL003599WL", "QEMU_QEMU_DVD-ROM_2.5+"]);
+    expect(drivesWithoutSdf("SDF v0a6: SOME_DRIVE\n")).toEqual([]);
   });
 
-  test("the container is privileged, which is what lets ARM mount a disc and see every drive", () => {
-    expect(script.app_values.privileged).toBe(true);
-    expect(script.app_values.devices).toBeUndefined();
-  });
-
-  test("Radarr makes ARM's folder in Downloads and carries the link to it", () => {
-    const radarr = JSON.parse(readFileSync(new URL("../radarr.json", import.meta.url), "utf-8"));
-    expect(radarr.requirements.shared_folders).toContain("$LOCATION(Downloads)/arm");
-    expect(radarr.ensure_directories_exists).toContainEqual({ path: "$LOCATION(Downloads)/arm" });
-    expect(radarr.hooks.find((hook: { id: string }) => hook.id === "connect-arm")).toMatchObject({ kind: "connect", script: "arm/connect_radarr.ts", entrypoint: "radarr" });
-  });
-
-  test("it is a download client of the Media library collection", () => {
-    const download = collection.groups.find((group: { id: string }) => group.id === "download");
-    expect(download.options.map((option: { app: string }) => option.app)).toContain("arm");
+  test("they go in sdf_Stop beside MakeMKV's key, and a second run changes nothing", () => {
+    const once = withSdfStop('app_Key = "T-key"\n', ["DRIVE_A", "DRIVE_B"]);
+    expect(once).toBe('app_Key = "T-key"\nsdf_Stop = "DRIVE_A DRIVE_B"\n');
+    expect(withSdfStop(once, ["DRIVE_B"])).toBe(once);
+    expect(withSdfStop(once, ["DRIVE_C"])).toBe('app_Key = "T-key"\nsdf_Stop = "DRIVE_A DRIVE_B DRIVE_C"\n');
+    expect(withSdfStop("", [])).toBe("");
+    expect(withSdfStop("", ["DRIVE_A"])).toBe('sdf_Stop = "DRIVE_A"\n');
   });
 });
 
-describe("the Radarr link", () => {
-  const ours = [
-    { hostPath: "/mnt/tank/Downloads/arm", containerPath: "/home/arm/media" },
-    { hostPath: "/mnt/tank/Movies", containerPath: "/movies" },
-  ];
-  const theirs = [
+describe("Automatic Ripping Machine's script", () => {
+  test("the ripper alone is privileged, and the script says it wants the optical drives", () => {
+    expect(script.requirements.optical_drives).toBe(true);
+    expect(script.app_values.services.ripper.privileged).toBe(true);
+    expect(script.app_values.services.dashboard.privileged).toBeUndefined();
+    expect(composeScriptProblems(script, { processed: false })).toEqual([]);
+  });
+
+  test("without that requirement, the same script is refused", () => {
+    const { optical_drives: _asked, ...requirements } = script.requirements;
+    expect(composeScriptProblems({ ...script, requirements }, { processed: false }).join(" ")).toContain("privileged is refused");
+  });
+
+  test("rips land in ARM's own folder in Downloads, which Radarr and Sonarr each make and link to", () => {
+    expect(script.app_values.services.ripper.volumes).toContain("$LOCATION(Downloads)/arm:/home/arm/media");
+    for (const name of ["radarr", "sonarr"]) {
+      const manager = read(`${name}.json`);
+      expect(manager.requirements.shared_folders).toContain("$LOCATION(Downloads)/arm");
+      expect(manager.ensure_directories_exists).toContainEqual({ path: "$LOCATION(Downloads)/arm" });
+      expect(manager.hooks.find((hook: { id: string }) => hook.id === "connect-arm")).toMatchObject({ kind: "connect", script: "arm/connect_manager.ts", entrypoint: name });
+    }
+  });
+
+  test("it is a download client of the Media library collection", () => {
+    const download = read("_collections/media-management.json").groups.find((group: { id: string }) => group.id === "download");
+    expect(download.options.map((option: { app: string }) => option.app)).toContain("ripping-machine");
+  });
+
+  test("the hook's copy of the after-rip script is the file beside it", () => {
+    expect(AFTER_RIP_PY).toBe(readFileSync(new URL("../arm/after_rip.py", import.meta.url), "utf-8"));
+  });
+});
+
+describe("the link to Radarr and Sonarr", () => {
+  const arm = [{ hostPath: "/mnt/tank/Downloads/arm", containerPath: "/home/arm/media" }];
+  const manager = [
     { hostPath: "/mnt/tank/Applications/radarr/config", containerPath: null },
     { hostPath: "/mnt/tank/Downloads", containerPath: "/downloads" },
     { hostPath: "/mnt/tank/Downloads/qbittorrent", containerPath: "/config/Downloads" },
-    { hostPath: "/mnt/tank/Movies", containerPath: "/movies" },
   ];
 
   test("a folder is seen through the mount that holds it most closely", () => {
-    expect(seenAt("/mnt/tank/Downloads/arm", theirs)).toBe("/downloads/arm");
-    expect(seenAt("/mnt/tank/Downloads/qbittorrent/done", theirs)).toBe("/config/Downloads/done");
-    expect(seenAt("/mnt/tank/Downloads2", theirs)).toBeUndefined();
+    expect(seenAt("/mnt/tank/Downloads/arm", manager)).toBe("/downloads/arm");
+    expect(seenAt("/mnt/tank/Downloads/qbittorrent/done", manager)).toBe("/config/Downloads/done");
+    expect(seenAt("/mnt/tank/Downloads2", manager)).toBeUndefined();
   });
 
-  test("the link names each folder as ARM and as Radarr see it", () => {
-    expect(radarrLink(ours, theirs, "http://10.0.0.5:30025", "key")).toEqual({
-      url: "http://10.0.0.5:30025",
-      apiKey: "key",
-      downloads: { arm: "/home/arm/media", radarr: "/downloads/arm" },
-      library: { arm: "/movies", radarr: "/movies" },
-    });
-  });
-
-  test("a Radarr that can't see the rips or the library gets no link", () => {
-    expect(radarrLink(ours, [theirs[3]], "u", "k")).toEqual({ missing: "downloads" });
-    expect(radarrLink(ours, [theirs[1]], "u", "k")).toEqual({ missing: "library" });
+  test("the link names ARM's folder as ARM and as the manager see it, or nothing when the manager can't", () => {
+    expect(downloadsAs(arm, manager)).toEqual({ arm: "/home/arm/media", manager: "/downloads/arm" });
+    expect(downloadsAs(arm, [manager[0]])).toBeUndefined();
   });
 });
 
@@ -132,50 +124,39 @@ const python = Bun.which("python3");
 const INTERSTELLAR = [
   { codec_type: "video", codec_name: "hevc", profile: "Main 10", width: 3840, height: 2160, color_transfer: "smpte2084", color_primaries: "bt2020" },
   { codec_type: "audio", codec_name: "dts", profile: "DTS-HD MA", channels: 6, channel_layout: "5.1(side)" },
-  { codec_type: "audio", codec_name: "dts", profile: "DTS", channels: 6, channel_layout: "5.1(side)" },
 ];
 const FALLOUT = [
   { codec_type: "video", codec_name: "hevc", profile: "Main 10", width: 3840, height: 2160, color_transfer: "smpte2084", color_primaries: "bt2020" },
   { codec_type: "audio", codec_name: "truehd", channels: 8, channel_layout: "7.1" },
-  { codec_type: "audio", codec_name: "ac3", channels: 6, channel_layout: "5.1(side)" },
 ];
+// Fallout season one's episode lengths in minutes, as an episode list gives them
+const SEASON = [74, 65, 56, 50, 46, 49, 59, 58].map((runtime, at) => ({ episodeNumber: at + 1, seasonNumber: 1, runtime }));
 
-describe.skipIf(!python)("a rip's release name", () => {
-  const script = join(mkdtempSync(join(tmpdir(), "arm-name-")), "after_rip.py");
-  writeFileSync(script, AFTER_RIP_PY);
-  const name = (asked: Record<string, unknown>) => Bun.spawnSync([python as string, script, "--release-name", JSON.stringify(asked)]).stdout.toString().trim();
-  const detect = (bytes: Uint8Array) => {
-    const file = join(mkdtempSync(join(tmpdir(), "arm-bytes-")), "rip.mkv");
-    writeFileSync(file, bytes);
-    return JSON.parse(Bun.spawnSync([python as string, script, "--detect", file]).stdout.toString());
-  };
+// The after-rip script runs inside ARM's container, on its Python. A machine with no python3 can't run it.
+describe.skipIf(!python)("the after-rip script", () => {
+  const file = join(import.meta.dir, "..", "arm", "after_rip.py");
+  const ask = (flag: string, asked: unknown) => Bun.spawnSync([python as string, file, flag, JSON.stringify(asked)]).stdout.toString().trim();
+  const name = (asked: Record<string, unknown>) => ask("--release-name", asked);
+  const decide = (asked: Record<string, unknown>) => JSON.parse(ask("--decide", asked));
 
-  test("a UHD movie with HDR10 and DTS-HD MA", () => {
-    expect(name({ title: "Interstellar", year: "2014", disctype: "bluray", streams: INTERSTELLAR })).toBe(
-      "Interstellar.2014.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.5.1-MyOwnMedia",
-    );
-  });
-
-  test("a UHD episode with Dolby Vision and Atmos", () => {
+  test("release names for a UHD movie, a UHD episode, a Blu-ray and a DVD", () => {
+    expect(name({ title: "Interstellar", year: "2014", disctype: "bluray", streams: INTERSTELLAR })).toBe("Interstellar.2014.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.5.1-MyOwnMedia");
     expect(name({ title: "Fallout", episode: "S01E01", disctype: "bluray", streams: FALLOUT, dv: true, atmos: true })).toBe(
       "Fallout.S01E01.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC.TrueHD.7.1.Atmos-MyOwnMedia",
     );
-  });
-
-  test("a Blu-ray and a DVD", () => {
     const bluray = [{ codec_type: "video", codec_name: "h264", width: 1920, height: 1080 }, { codec_type: "audio", codec_name: "dts", profile: "DTS-HD MA", channels: 6 }];
     const dvd = [{ codec_type: "video", codec_name: "mpeg2video", width: 720, height: 480 }, { codec_type: "audio", codec_name: "ac3", channels: 6 }];
     expect(name({ title: "Big Buck Bunny", year: "2008", disctype: "bluray", streams: bluray })).toBe("Big.Buck.Bunny.2008.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-MyOwnMedia");
     expect(name({ title: "Big Buck Bunny", year: "2008", disctype: "dvd", streams: dvd })).toBe("Big.Buck.Bunny.2008.DVD.REMUX.MPEG-2.DD.5.1-MyOwnMedia");
-  });
-
-  test("a title's punctuation and ARM's hyphens become dots", () => {
-    expect(name({ title: "Spider-Man: Into the Spider-Verse & Friends", year: "2018", disctype: "bluray", streams: INTERSTELLAR })).toStartWith(
-      "Spider.Man.Into.the.Spider.Verse.and.Friends.2018.2160p.",
-    );
+    expect(name({ title: "Spider-Man: Into the Spider-Verse & Friends", year: "2018", disctype: "bluray", streams: INTERSTELLAR })).toStartWith("Spider.Man.Into.the.Spider.Verse.and.Friends.2018.");
   });
 
   test("Dolby Vision is read from the Matroska record, and Atmos from TrueHD's sync frames", () => {
+    const detect = (bytes: Uint8Array) => {
+      const sample = join(mkdtempSync(join(tmpdir(), "arm-bytes-")), "rip.mkv");
+      writeFileSync(sample, bytes);
+      return JSON.parse(Bun.spawnSync([python as string, file, "--detect", sample]).stdout.toString());
+    };
     const sync = (substreams: number, info: number) => {
       const frame = new Uint8Array(32);
       frame.set([0xf8, 0x72, 0x6f, 0xba], 0);
@@ -183,214 +164,182 @@ describe.skipIf(!python)("a rip's release name", () => {
       frame[17] = info;
       return frame;
     };
-    const record = new Uint8Array([0x41, 0xe7, 0x84, ...new TextEncoder().encode("dvcC")]);
-    const join2 = (...parts: Uint8Array[]) => new Uint8Array(parts.flatMap((part) => [...part]));
-    expect(detect(join2(record, sync(4, 0x80), sync(4, 0x80)))).toEqual({ dv: true, atmos: true });
-    // TrueHD with no Atmos has three substreams and no 16-channel presentation
-    expect(detect(join2(new Uint8Array(64), sync(3, 0x00), sync(3, 0x00)))).toEqual({ dv: false, atmos: false });
-    expect(detect(new Uint8Array(256))).toEqual({ dv: false, atmos: false });
-  });
-});
-
-// The after-rip script runs inside ARM's container, on its Python. A machine with no python3 can't run it.
-describe.skipIf(!python)("the after-rip script", () => {
-  let root: string;
-  let env: Record<string, string>;
-
-  const addJob = (job: Record<string, string | number | null>) => {
-    const columns = Object.keys(job);
-    const code = [
-      "import sqlite3, sys, json",
-      "db = sqlite3.connect(sys.argv[1])",
-      'db.execute("CREATE TABLE IF NOT EXISTS job (job_id INTEGER PRIMARY KEY, title, title_manual, year, video_type, imdb_id, disctype, label, path)")',
-      "job = json.loads(sys.argv[2])",
-      'db.execute("INSERT INTO job (%s) VALUES (%s)" % (", ".join(job), ", ".join("?" for _ in job)), list(job.values()))',
-      "db.commit()",
-    ].join("\n");
-    const made = Bun.spawnSync([python as string, "-c", code, env.HEXOS_ARM_DB, JSON.stringify(job)]);
-    if (made.exitCode !== 0) throw new Error(`couldn't add job ${columns.join(",")}: ${made.stderr.toString()}`);
-  };
-  const run = (body: string) => Bun.spawnSync([python as string, join(root, "after_rip.py"), "ARM notification", body], { env: { ...process.env, ...env } });
-  // The fake Radarr answers from this process, so a run that calls it can't block the event loop
-  const runAsync = (body: string) => Bun.spawn([python as string, join(root, "after_rip.py"), "ARM notification", body], { env: { ...process.env, ...env } }).exited;
-  const log = () => (existsSync(env.HEXOS_ARM_LOG) ? readFileSync(env.HEXOS_ARM_LOG, "utf-8") : "");
-  const rip = (kind: "movies" | "tv", folder: string, files: Record<string, string>) => {
-    const path = join(root, "completed", kind, folder);
-    for (const [name, text] of Object.entries(files)) {
-      mkdirSync(join(path, name, ".."), { recursive: true });
-      writeFileSync(join(path, name), text);
-    }
-    return path;
-  };
-
-  beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), "arm-after-rip-"));
-    for (const folder of ["completed/movies", "completed/tv", "movies", "shows"]) mkdirSync(join(root, folder), { recursive: true });
-    writeFileSync(join(root, "after_rip.py"), AFTER_RIP_PY);
-    env = {
-      HEXOS_ARM_DB: join(root, "arm.db"),
-      HEXOS_ARM_COMPLETED: join(root, "completed"),
-      HEXOS_ARM_MOVIES: join(root, "movies"),
-      HEXOS_ARM_SHOWS: join(root, "shows"),
-      HEXOS_ARM_RADARR: join(root, "radarr.json"),
-      HEXOS_ARM_LOG: join(root, "after-rip.log"),
-      HEXOS_ARM_POLL_SECONDS: "0.05",
-      HEXOS_ARM_IMPORT_SECONDS: "5",
-    };
-  });
-  afterEach(() => rmSync(root, { recursive: true, force: true }));
-
-  const movie = (path: string) => ({ title: "Big-Buck-Bunny", title_manual: null, year: "2008", video_type: "movie", imdb_id: "tt1254207", disctype: "dvd", label: "BIG_BUCK_BUNNY", path });
-
-  test("with no Radarr, a movie's folder moves to Movies under its title, year and IMDb id", () => {
-    addJob(movie(rip("movies", "Big-Buck-Bunny (2008)", { "Big-Buck-Bunny (2008).mkv": "main feature", "extras/title_t01.mkv": "x" })));
-    expect(run("Big-Buck-Bunny processing complete.").exitCode).toBe(0);
-    const folder = join(root, "movies", "Big Buck Bunny (2008) [imdbid-tt1254207]");
-    expect(readdirSync(folder).sort()).toEqual(["Big Buck Bunny (2008) [imdbid-tt1254207].mkv", "extras"]);
-    expect(readdirSync(join(root, "completed", "movies"))).toEqual([]);
+    const all = (...parts: Uint8Array[]) => new Uint8Array(parts.flatMap((part) => [...part]));
+    expect(detect(all(new Uint8Array([0x41, 0xe7, 0x84, ...new TextEncoder().encode("dvcC")]), sync(4, 0x80), sync(4, 0x80)))).toEqual({ dv: true, atmos: true });
+    expect(detect(all(new Uint8Array(64), sync(3, 0x00), sync(3, 0x00)))).toEqual({ dv: false, atmos: false });
   });
 
-  test("a notice that isn't the end of a job moves nothing", () => {
-    const path = rip("movies", "Big-Buck-Bunny (2008)", { "Big-Buck-Bunny (2008).mkv": "main" });
-    addJob(movie(path));
-    run("Big-Buck-Bunny rip complete. Starting transcode. ");
-    run(" Big-Buck-Bunny processing completed with errors. Title(s) 3 failed to complete. ");
-    expect(readdirSync(path)).toEqual(["Big-Buck-Bunny (2008).mkv"]);
+  test("a disc's titles are matched to episodes by length, whatever order the disc lists them in", () => {
+    // Fallout season one disc one: its titles ran 53:52, 62:36 and 71:33, the reverse of the episodes
+    const found = decide({ lengths: [53.87, 62.6, 71.55], episodes: SEASON, discs: ["Fallout Season One Disc 1", "FALLOUT_S1_D1"] });
+    expect(found).toMatchObject({ episodes: [3, 2, 1], season: 1, show: "Fallout" });
+    expect(decide({ lengths: [71.55, 53.87, 62.6], episodes: SEASON }).episodes).toEqual([1, 3, 2]);
+    expect(decide({ discs: ["FALLOUT_S2_D3"] }).season).toBe(2);
   });
 
-  test("a movie Movies already has stays where ARM put it", () => {
-    const path = rip("movies", "Big-Buck-Bunny (2008)", { "Big-Buck-Bunny (2008).mkv": "second copy" });
-    addJob(movie(path));
-    mkdirSync(join(root, "movies", "Big Buck Bunny (2008) [imdbid-tt1254207]"));
-    run("Big-Buck-Bunny processing complete.");
-    expect(readdirSync(path)).toEqual(["Big-Buck-Bunny (2008).mkv"]);
-    expect(readdirSync(join(root, "movies", "Big Buck Bunny (2008) [imdbid-tt1254207]"))).toEqual([]);
-    expect(log()).toContain("stays in");
+  test("titles too alike in length, or unlike any run of episodes, are matched to nothing", () => {
+    const alike = [45, 45, 44].map((runtime, at) => ({ episodeNumber: at + 1, runtime }));
+    expect(decide({ lengths: [44.1, 44.6, 43.0], episodes: alike }).episodes).toBeNull();
+    expect(decide({ lengths: [120, 121], episodes: SEASON }).episodes).toBeNull();
+    expect(decide({ lengths: [53.87, 62.6, 71.55], episodes: SEASON.slice(0, 2) }).episodes).toBeNull();
   });
 
-  test("a show's files move to its folder in Shows, named by the disc they came from", () => {
-    const show = { title: "Planet-Earth", title_manual: null, year: "2006", video_type: "series", imdb_id: "tt0795176", disctype: "bluray" };
-    addJob({ ...show, label: "PLANET_EARTH_D1", path: rip("tv", "Planet-Earth (2006)", { "title_t00.mkv": "a", "title_t01.mkv": "b" }) });
-    run("Planet-Earth processing complete.");
-    addJob({ ...show, label: "PLANET_EARTH_D2", path: rip("tv", "Planet-Earth (2006)", { "title_t00.mkv": "c" }) });
-    run("Planet-Earth processing complete.");
-    expect(readdirSync(join(root, "shows", "Planet Earth (2006) [imdbid-tt0795176]")).sort()).toEqual([
-      "Planet Earth - PLANET_EARTH_D1 - title_t00.mkv",
-      "Planet Earth - PLANET_EARTH_D1 - title_t01.mkv",
-      "Planet Earth - PLANET_EARTH_D2 - title_t00.mkv",
-    ]);
+  test("a movie is the lookup result with the disc's own title and the rip's length, or none", () => {
+    const candidates = [
+      { tmdbId: 1, title: "Interstellar Civil War: Shadows of the Empire", runtime: 97 },
+      { tmdbId: 157336, title: "Interstellar", runtime: 169 },
+      { tmdbId: 3, title: "Interstellar", runtime: 12 },
+    ];
+    // ARM's own guess was the first of these; the file's title and length say the second
+    expect(decide({ candidates, titles: ["Interstellar", "Interstellar-Civil-War--Shadows-of-the-Empire"], minutes: 168.9 }).movie).toBe(157336);
+    expect(decide({ candidates: candidates.slice(0, 1), titles: ["Interstellar"], minutes: 168.9 }).movie).toBeNull();
+    expect(decide({ candidates: [{ tmdbId: 9, title: "Twins", runtime: 100 }, { tmdbId: 10, title: "Twins", runtime: 102 }], titles: ["Twins"], minutes: 101 }).movie).toBeNull();
+    // One result of that title is taken whatever its length: an extended cut runs long
+    expect(decide({ candidates: [{ tmdbId: 120, title: "The Fellowship of the Ring", runtime: 179 }], titles: ["The Fellowship of the Ring"], minutes: 228 }).movie).toBe(120);
   });
 
-  test("a rip ARM couldn't name stays in Downloads", () => {
-    const path = join(root, "completed", "unidentified", "BIG_BUCK_BUNNY");
-    mkdirSync(path, { recursive: true });
-    writeFileSync(join(path, "title_t00.mkv"), "x");
-    addJob({ ...movie(path), video_type: "unknown", imdb_id: null });
-    run("Big-Buck-Bunny processing complete.");
-    expect(readdirSync(path)).toEqual(["title_t00.mkv"]);
-  });
-
-  describe("with Radarr linked", () => {
+  describe("with ARM, Radarr and Sonarr answering", () => {
+    let root: string;
+    let env: Record<string, string>;
     let server: ReturnType<typeof Bun.serve>;
     let calls: { method: string; path: string; body?: unknown }[];
-    let radarr: { library: unknown[]; imports: boolean };
+    let job: Record<string, unknown>;
+    let imports: boolean;
+
+    const run = () => Bun.spawn([python as string, file], { env: { ...process.env, ...env } }).exited;
+    const log = () => (existsSync(env.HEXOS_ARM_LOG) ? readFileSync(env.HEXOS_ARM_LOG, "utf-8") : "");
+    const rip = (folder: string, files: Record<string, number>) => {
+      mkdirSync(join(root, folder), { recursive: true });
+      for (const [title, megabytes] of Object.entries(files)) writeFileSync(join(root, folder, title), "x".repeat(megabytes));
+      return join(root, folder);
+    };
 
     beforeEach(() => {
+      root = mkdtempSync(join(tmpdir(), "arm-after-rip-"));
       calls = [];
-      radarr = { library: [], imports: true };
-      const filed = { id: 7, title: "Big Buck Bunny", tmdbId: 10378, path: "/movies/Big Buck Bunny (2008) [tmdbid-10378]" };
+      imports = true;
+      mkdirSync(join(root, "links"));
+      mkdirSync(join(root, "bin"));
+      // ffprobe answers from a file beside each video: its length, and the title the disc gave it
+      writeFileSync(
+        join(root, "bin", "ffprobe"),
+        `#!${python}\nimport json, sys\npath = sys.argv[-1]\ntry:\n    meta = json.load(open(path + ".json"))\nexcept OSError:\n    meta = {}\nprint(json.dumps({"streams": meta.get("streams", []), "format": {"duration": str(meta.get("seconds", 0)), "tags": {"title": meta.get("title", "")}}}))\n`,
+      );
+      chmodSync(join(root, "bin", "ffprobe"), 0o755);
       server = Bun.serve({
         port: 0,
         async fetch(request) {
           const url = new URL(request.url);
-          const path = url.pathname.replace("/api/v3", "");
+          const path = url.pathname.replace("/api/v3", "").replace("/api/v1", "");
           const body = request.method === "POST" ? await request.json() : undefined;
           calls.push({ method: request.method, path: path + url.search, body });
+          if (path === "/jobs/7/detail") return Response.json({ job });
           if (request.headers.get("x-api-key") !== "secret") return new Response("no", { status: 401 });
-          if (path === "/movie/lookup/imdb") return Response.json({ title: "Big Buck Bunny", tmdbId: 10378, imdbId: "tt1254207", year: 2008 });
-          if (path === "/movie" && request.method === "GET") return Response.json(radarr.library);
+          if (path === "/movie/lookup") return Response.json([{ title: "Interstellar Civil War: Shadows of the Empire", tmdbId: 1, runtime: 97, year: 2017 }, { title: "Interstellar", tmdbId: 157336, runtime: 169, year: 2014 }]);
+          if (path === "/movie/lookup/imdb") return Response.json({ title: "Interstellar Civil War: Shadows of the Empire", tmdbId: 1, runtime: 97, year: 2017 });
+          if (path === "/movie" && request.method === "GET") return Response.json([]);
           if (path === "/qualityprofile") return Response.json([{ id: 4, name: "Any" }]);
-          if (path === "/movie" && request.method === "POST") return Response.json({ ...filed, hasFile: false });
-          if (path === "/manualimport") {
-            const folder = url.searchParams.get("folder") as string;
-            return Response.json([{ path: `${folder}/Big-Buck-Bunny (2008).mkv`, quality: { quality: { id: 0, name: "Unknown" } }, languages: [{ id: 1, name: "English" }] }]);
-          }
-          if (path === "/qualitydefinition") return Response.json([{ quality: { id: 2, name: "DVD" } }, { quality: { id: 30, name: "Remux-1080p" } }]);
+          if (path === "/movie" || path === "/series") return Response.json({ id: 9, title: path === "/series" ? "Fallout" : "Interstellar" });
+          if (path === "/series/lookup") return Response.json([{ title: "Fallout", tvdbId: 416744, year: 2024 }]);
+          if (path === "/episode") return Response.json(SEASON);
           if (path === "/command" && request.method === "POST") {
-            // Radarr moves the file into the folder it names
-            if (radarr.imports) {
-              const target = join(root, "movies", "Big Buck Bunny (2008) [tmdbid-10378]");
-              mkdirSync(target);
-              rmSync(join(root, "completed", "movies", "Big-Buck-Bunny (2008)", "Big-Buck-Bunny (2008).mkv"));
-              writeFileSync(join(target, "Big Buck Bunny (2008) [tmdbid-10378] - [DVD][AC3 2.0][MPEG2].mkv"), "main");
-            }
+            // The manager moves what it imports out of the folder it was pointed at
+            const folder = join(root, (body as { path: string }).path.replace("/downloads/arm/", ""));
+            if (imports) for (const entry of readdirSync(folder)) rmSync(join(folder, entry));
             return Response.json({ id: 99, status: "queued" });
           }
-          if (path === "/command/99") return Response.json({ id: 99, status: radarr.imports ? "completed" : "failed" });
-          if (path === "/movie/7") return Response.json({ ...filed, hasFile: radarr.imports });
+          if (path === "/command/99") return Response.json({ id: 99, status: "completed" });
           return new Response("not found", { status: 404 });
         },
       });
-      writeFileSync(
-        env.HEXOS_ARM_RADARR,
-        JSON.stringify({
-          url: `http://127.0.0.1:${server.port}`,
-          apiKey: "secret",
-          downloads: { arm: join(root, "completed", ".."), radarr: "/downloads/arm" },
-          library: { arm: join(root, "movies"), radarr: "/movies" },
-        }),
-      );
+      env = {
+        ARM_JOB_ID: "7",
+        PATH: `${join(root, "bin")}:${process.env.PATH}`,
+        HEXOS_ARM_API: `http://127.0.0.1:${server.port}/api/v1`,
+        HEXOS_ARM_LINKS: join(root, "links"),
+        HEXOS_ARM_COMPLETED: join(root, "completed"),
+        HEXOS_ARM_LOG: join(root, "after-rip.log"),
+        HEXOS_ARM_POLL_SECONDS: "0.05",
+        HEXOS_ARM_IMPORT_SECONDS: "5",
+        HEXOS_ARM_JOB_SECONDS: "5",
+      };
     });
-    afterEach(() => server.stop(true));
-
-    test("Radarr is given the movie, told its quality, and the extras follow it", async () => {
-      addJob(movie(rip("movies", "Big-Buck-Bunny (2008)", { "Big-Buck-Bunny (2008).mkv": "main", "extras/title_t01.mkv": "x" })));
-      expect(await runAsync("Big-Buck-Bunny processing complete.")).toBe(0);
-
-      const added = calls.find((call) => call.method === "POST" && call.path === "/movie")?.body as Record<string, unknown>;
-      expect(added).toMatchObject({ tmdbId: 10378, rootFolderPath: "/movies", qualityProfileId: 4, monitored: false, addOptions: { searchForMovie: false } });
-      const command = calls.find((call) => call.method === "POST" && call.path === "/command")?.body as { name: string; importMode: string; files: Record<string, unknown>[] };
-      expect(command).toMatchObject({ name: "ManualImport", importMode: "move" });
-      expect(command.files).toEqual([
-        {
-          path: "/downloads/arm/completed/movies/Big-Buck-Bunny (2008)/Big-Buck-Bunny (2008).mkv",
-          movieId: 7,
-          quality: { quality: { id: 2, name: "DVD" }, revision: { version: 1, real: 0, isRepack: false } },
-          languages: [{ id: 1, name: "English" }],
-          releaseGroup: "",
-        },
-      ]);
-      expect(readdirSync(join(root, "movies", "Big Buck Bunny (2008) [tmdbid-10378]")).sort()).toEqual([
-        "Big Buck Bunny (2008) [tmdbid-10378] - [DVD][AC3 2.0][MPEG2].mkv",
-        "extras",
-      ]);
-      expect(readdirSync(join(root, "completed", "movies"))).toEqual([]);
-    });
-
-    test("a movie Radarr already has a file for stays in Downloads", async () => {
-      radarr.library = [{ id: 7, title: "Big Buck Bunny", hasFile: true }];
-      const path = rip("movies", "Big-Buck-Bunny (2008)", { "Big-Buck-Bunny (2008).mkv": "main" });
-      addJob(movie(path));
-      await runAsync("Big-Buck-Bunny processing complete.");
-      expect(calls.some((call) => call.path === "/command")).toBe(false);
-      expect(readdirSync(path)).toEqual(["Big-Buck-Bunny (2008).mkv"]);
-      expect(readdirSync(join(root, "movies"))).toEqual([]);
-    });
-
-    test("an import Radarr started and didn't finish leaves the rip in Downloads", async () => {
-      radarr.imports = false;
-      const path = rip("movies", "Big-Buck-Bunny (2008)", { "Big-Buck-Bunny (2008).mkv": "main" });
-      addJob(movie(path));
-      await runAsync("Big-Buck-Bunny processing complete.");
-      expect(readdirSync(path)).toEqual(["Big-Buck-Bunny (2008).mkv"]);
-      expect(readdirSync(join(root, "movies"))).toEqual([]);
-    });
-
-    test("a Radarr that doesn't answer sends the movie to Movies instead", async () => {
+    afterEach(() => {
       server.stop(true);
-      addJob(movie(rip("movies", "Big-Buck-Bunny (2008)", { "Big-Buck-Bunny (2008).mkv": "main" })));
-      await runAsync("Big-Buck-Bunny processing complete.");
-      expect(readdirSync(join(root, "movies"))).toEqual(["Big Buck Bunny (2008) [imdbid-tt1254207]"]);
+      rmSync(root, { recursive: true, force: true });
+    });
+
+    const link = (name: string) =>
+      writeFileSync(join(root, "links", `${name}.json`), JSON.stringify({ url: `http://127.0.0.1:${server.port}`, apiKey: "secret", downloads: { arm: root, manager: "/downloads/arm" }, rootFolder: "/library" }));
+    const describeFile = (path: string, meta: Record<string, unknown>) => writeFileSync(`${path}.json`, JSON.stringify(meta));
+
+    test("a movie ARM named wrongly is named by the disc's own title, and Radarr is told to import its folder", async () => {
+      const path = rip("completed/movies/Interstellar Civil War (2017)", { "A1_t00.mkv": 50 });
+      describeFile(join(path, "A1_t00.mkv"), { title: "Interstellar", seconds: 10134, streams: INTERSTELLAR });
+      job = { status: "success", path, title: "Interstellar-Civil-War--Shadows-of-the-Empire", year: "2017", video_type: "movie", imdb_id: "tt5056352", disctype: "bluray" };
+      link("radarr");
+      imports = false;
+      expect(await run()).toBe(0);
+
+      const named = "Interstellar.2014.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.5.1-MyOwnMedia";
+      expect(readdirSync(join(root, "completed", "movies", named))).toEqual([`${named}.mkv`]);
+      expect(calls.find((call) => call.method === "POST" && call.path === "/movie")?.body).toMatchObject({ tmdbId: 157336, rootFolderPath: "/library", monitored: false });
+      expect(calls.find((call) => call.path === "/command")?.body).toEqual({ name: "DownloadedMoviesScan", path: `/downloads/arm/completed/movies/${named}`, importMode: "Move" });
+      // Radarr kept the copy it had, so the rip is still there under its name
+      expect(log()).toContain("Radarr left it in Downloads");
+    });
+
+    test("a movie Radarr can't confirm stays where ARM put it", async () => {
+      const path = rip("completed/movies/Mystery Disc", { "A1_t00.mkv": 50 });
+      describeFile(join(path, "A1_t00.mkv"), { title: "DISC_VOLUME_1", seconds: 6000, streams: INTERSTELLAR });
+      job = { status: "success", path, title: "Mystery-Disc", video_type: "movie", disctype: "bluray" };
+      link("radarr");
+      await run();
+      expect(readdirSync(path)).toContain("A1_t00.mkv");
+      expect(calls.some((call) => call.path === "/command")).toBe(false);
+      expect(log()).toContain("couldn't confirm");
+    });
+
+    test("with no Radarr, a movie is still named as a release and left in Downloads", async () => {
+      const path = rip("completed/movies/Interstellar (2014)", { "A1_t00.mkv": 50 });
+      describeFile(join(path, "A1_t00.mkv"), { title: "Interstellar", seconds: 10134, streams: INTERSTELLAR });
+      job = { status: "success", path, title: "Interstellar", year: "2014", video_type: "movie", disctype: "bluray" };
+      await run();
+      expect(readdirSync(join(root, "completed", "movies"))).toContain("Interstellar.2014.2160p.UHD.BluRay.REMUX.HDR.HEVC.DTS-HD.MA.5.1-MyOwnMedia");
+    });
+
+    test("a show's titles lose their duplicates, are named by episode and go to Sonarr", async () => {
+      // Fallout season one disc one as it ripped: three episodes in reverse, and four repeats of them
+      const lengths: Record<string, [number, number]> = { t00: [3232, 25], t01: [3756, 29], t02: [4293, 33], t03: [4293, 31], t04: [4293, 34], t05: [3232, 25], t06: [3756, 29] };
+      const path = rip("completed/tv/Fallout", Object.fromEntries(Object.entries(lengths).map(([title, [, size]]) => [`${title}.mkv`, size])));
+      for (const [title, [seconds]] of Object.entries(lengths)) describeFile(join(path, `${title}.mkv`), { title: "Fallout Season One Disc 1", seconds, streams: FALLOUT });
+      job = { status: "success", path, title: "Fallout--The-Ghoul-Log", video_type: "series", disctype: "bluray", label: "FALLOUT_S1_D1" };
+      link("sonarr");
+      imports = false;
+      expect(await run()).toBe(0);
+
+      const folder = join(root, "completed", "tv", "Fallout.S01.MyOwnMedia");
+      expect(readdirSync(folder).sort()).toEqual(["E01", "E02", "E03"].map((episode) => `Fallout.S01${episode}.2160p.UHD.BluRay.REMUX.HDR.HEVC.TrueHD.7.1-MyOwnMedia.mkv`));
+      expect(calls.find((call) => call.path === "/command")?.body).toEqual({ name: "DownloadedEpisodesScan", path: "/downloads/arm/completed/tv/Fallout.S01.MyOwnMedia", importMode: "Move" });
+      // The four repeats stay where ARM put them: nothing is deleted
+      expect(readdirSync(path).filter((entry) => entry.endsWith(".mkv")).length).toBe(4);
+    });
+
+    test("a show with no Sonarr connected stays where ARM put it", async () => {
+      const path = rip("completed/tv/Fallout", { "t00.mkv": 25 });
+      describeFile(join(path, "t00.mkv"), { title: "Fallout Season One Disc 1", seconds: 3232, streams: FALLOUT });
+      job = { status: "success", path, title: "Fallout", video_type: "series", disctype: "bluray" };
+      await run();
+      expect(readdirSync(path)).toContain("t00.mkv");
+      expect(log()).toContain("Sonarr isn't connected");
+    });
+
+    test("a job that failed is left alone", async () => {
+      const path = rip("completed/movies/Broken", { "A1_t00.mkv": 5 });
+      job = { status: "fail", path, title: "Broken", video_type: "movie" };
+      await run();
+      expect(readdirSync(path)).toContain("A1_t00.mkv");
+      expect(calls.length).toBe(1);
     });
   });
 });
