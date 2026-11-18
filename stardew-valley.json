@@ -9,7 +9,8 @@
     "categories": ["games"],
     "keywords": ["stardew valley", "stardew", "junimoserver", "game server", "dedicated server", "multiplayer", "farm", "steam"],
     "homepage": "https://docs.junimoserver.com/",
-    "sources": ["https://github.com/stardew-valley-dedicated-server/server"]
+    "sources": ["https://github.com/stardew-valley-dedicated-server/server"],
+    "screenshots": ["stardew-valley/screenshot-1.jpg", "stardew-valley/screenshot-2.jpg", "stardew-valley/screenshot-3.jpg", "stardew-valley/screenshot-4.jpg", "stardew-valley/screenshot-5.jpg", "stardew-valley/screenshot-6.jpg", "stardew-valley/screenshot-7.jpg", "stardew-valley/screenshot-8.jpg", "stardew-valley/screenshot-9.jpg"]
   },
   "script": {
     "version": "1.0.0",

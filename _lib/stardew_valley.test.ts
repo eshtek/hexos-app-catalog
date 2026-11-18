@@ -102,10 +102,14 @@ describe("the farm card", () => {
 
   test("one entry while anyone's on: the farm, who's there and the day", () => {
     const fields = farmFields(status, ["Abigail", "Sam"]);
+    const entry = (fields.online as { entries: { image?: string }[] }).entries[0];
     expect(fields.online).toEqual({
       type: "list",
-      entries: [{ title: "Junimo Farm", subtitle: "Abigail and Sam", subtitles: ["Summer 12, Year 2"] }],
+      entries: [{ title: "Junimo Farm", subtitle: "Abigail and Sam", subtitles: ["Summer 12, Year 2"], image: entry.image }],
     });
+    // The farm picture, within the platform's cap on an image field
+    expect(entry.image).toStartWith("data:image/webp;base64,");
+    expect(entry.image!.length).toBeLessThanOrEqual(60_000);
     expect(fields.count).toEqual({ type: "stat", label: "Players", value: "2/8" });
   });
 
