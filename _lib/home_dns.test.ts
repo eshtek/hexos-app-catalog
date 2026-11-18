@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { homeDnsRules } from "./home_dns";
+import { homeDnsRules, hostIpsRules } from "./home_dns";
 import type { Script } from "./ports";
 
 const HOOK = { id: "home-addresses", rerun: "converge", rerunsOn: ["home-addresses"] };
@@ -86,18 +86,67 @@ describe("the two DNS apps", () => {
     for (const [id, script] of scripts) expect(homeDnsRules(id, script, scripts)).toEqual([]);
   });
 
-  test("each publishes port 53 on the server's own address alone, leaving the mesh address to NetBird", () => {
+  test("each runs on the server's own network and publishes nothing on one address", () => {
     for (const id of scripts.keys()) {
-      const { network } = read(id).app_values;
-      expect(network.dns_port).toEqual({ bind_mode: "published", port_number: 53, host_ips: ["$SERVER_LAN_IP"] });
-      expect(network.host_network).toBe(false);
+      const script = read(id);
+      expect(script.app_values.network.host_network).toBe(true);
+      expect(JSON.stringify(script)).not.toContain("host_ips");
+      expect(JSON.stringify(script)).not.toContain("$SERVER_LAN_IP");
+      expect(hostIpsRules(script)).toEqual([]);
+      // The platform reads port 53 from here, since an app on the host network publishes none
+      expect(script.requirements.ports).toContain(53);
     }
+    expect(read("adguard-home").app_values.network.dns_port).toEqual({ bind_mode: "" });
+    expect(read("pihole").app_values.network.dns_port).toBeUndefined();
   });
 
   test("Pi-hole runs as the apps user and can't set the server's clock", () => {
     const envs = Object.fromEntries(read("pihole").app_values.pihole!.additional_envs.map((env) => [env.name, env.value]));
     expect(envs).toMatchObject({ PIHOLE_UID: "568", PIHOLE_GID: "568", FTLCONF_ntp_sync_active: "false" });
-    // A forced setting is one the owner can't change in Pi-hole, so the names never ride on one
-    expect(Object.keys(envs).filter((name) => /dnsmasq|dns_hosts/i.test(name))).toEqual([]);
+  });
+
+  test("Pi-hole reads the file that keeps it off every address, written before its first start", () => {
+    const script = read("pihole") as ReturnType<typeof read> & { hooks: Array<{ id: string; events: string[]; optional?: boolean }> };
+    const envs = Object.fromEntries(script.app_values.pihole!.additional_envs.map((env) => [env.name, env.value]));
+    expect(envs.FTLCONF_misc_etc_dnsmasq_d).toBe("true");
+    // TrueNAS's app sets these two itself, and refuses the install when a script sets them again
+    expect(envs.FTLCONF_dns_listeningMode).toBeUndefined();
+    expect(envs.FTLCONF_webserver_api_password).toBeUndefined();
+    // A forced setting is one the owner can't change in Pi-hole, and the Anywhere hook writes this one
+    expect(envs.FTLCONF_misc_dnsmasq_lines).toBeUndefined();
+    const seed = script.hooks.find((hook) => hook.id === "seed-listen");
+    expect(seed?.events).toEqual(["onBeforeInstall"]);
+    // Without the file Pi-hole answers nowhere, so the install doesn't go on without it
+    expect(seed?.optional).toBeUndefined();
+  });
+});
+
+describe("host_ips", () => {
+  const publishing = (hostIps: unknown) => ({ app_values: { network: { dns_port: { bind_mode: "published", port_number: 53, host_ips: hostIps } } } });
+
+  test("the server's own address is refused, however it is written", () => {
+    for (const address of ["$SERVER_LAN_IP", "192.168.1.20", "fd00::20", "$QUESTION(address)"]) {
+      const [finding, ...rest] = hostIpsRules(publishing([address]));
+      expect(rest).toEqual([]);
+      expect(finding?.level).toBe("error");
+      expect(finding?.message).toStartWith(`app_values.network.dns_port.host_ips: "${address}" is one address`);
+      expect(finding?.message).toContain("gets its address from the router");
+    }
+  });
+
+  test("every address, an empty list and no list at all pass", () => {
+    expect(hostIpsRules(publishing(["0.0.0.0", "::"]))).toEqual([]);
+    expect(hostIpsRules(publishing([]))).toEqual([]);
+    expect(hostIpsRules({ app_values: { network: { web_port: { bind_mode: "published", port_number: 80 } } } })).toEqual([]);
+    expect(hostIpsRules({})).toEqual([]);
+  });
+
+  test("one address beside every address is still refused", () => {
+    expect(hostIpsRules(publishing(["0.0.0.0", "10.0.0.5"]))).toHaveLength(1);
+  });
+
+  test("a list anywhere in app_values is found", () => {
+    const script = { app_values: { network: { additional_ports: [{ port_number: 1 }, { port_number: 2, host_ips: ["10.0.0.5"] }] }, ports: [{ host_ips: ["10.0.0.6"] }] } };
+    expect(hostIpsRules(script).map((finding) => finding.message.split(":")[0])).toEqual(["app_values.network.additional_ports[1].host_ips", "app_values.ports[0].host_ips"]);
   });
 });

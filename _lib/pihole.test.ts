@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { lineChanges, linesFor, probeFor, tomlArray, withPassword } from "../pihole/configure";
+import { interfaceOf, lineChanges, linesFor, listenFile, probeFor, tomlArray, withPassword } from "../pihole/configure";
 
 // Pi-hole answers the box's Anywhere names with the box's own address on the owner's network, and
 // every other record type for them with nothing. HexOS only ever touches the lines it made itself.
@@ -168,4 +168,51 @@ test("the password goes into the app's values and leaves the rest alone", () => 
   const values: Record<string, unknown> = { pihole: { web_password: "old", additional_envs: [{ name: "PIHOLE_UID", value: "568" }] }, network: { host_network: false } };
   withPassword(values, "chosen-by-owner");
   expect(values).toEqual({ pihole: { web_password: "chosen-by-owner", additional_envs: [{ name: "PIHOLE_UID", value: "568" }] }, network: { host_network: false } });
+});
+
+// On the server's own network Pi-hole would listen on every address and lose port 53 to the mesh
+// client. The file HexOS writes before its first start keeps it on the server's own connection.
+
+const CONNECTIONS = {
+  lo: [{ address: "127.0.0.1" }, { address: "::1" }],
+  enp6s18: [{ address: BOX }, { address: "fe80::be24:11ff:fe0d:ec12" }],
+  hexos0: [{ address: "100.67.242.239" }],
+  docker0: undefined,
+};
+
+test("the server's connection is the one that holds its address", () => {
+  expect(interfaceOf(CONNECTIONS, BOX)).toBe("enp6s18");
+  expect(interfaceOf(CONNECTIONS, "100.67.242.239")).toBe("hexos0");
+  expect(interfaceOf(CONNECTIONS, "192.168.1.99")).toBeUndefined();
+});
+
+test("the file names the server's connection, so Pi-hole follows it to a new address", () => {
+  expect(listenFile("enp6s18", BOX)).toBe(
+    ["# Kept by HexOS. Pi-hole answers DNS on this server's own address and nowhere else.", "interface=enp6s18", "bind-dynamic", ""].join("\n"),
+  );
+});
+
+test("a server whose connection has no name gets its address and Pi-hole's own loopback instead", () => {
+  expect(listenFile(undefined, BOX)?.split("\n").slice(1)).toEqual([`listen-address=${BOX}`, "listen-address=127.0.0.1", "bind-dynamic", ""]);
+});
+
+test("either way Pi-hole binds address by address, never every address at once", () => {
+  for (const file of [listenFile("enp6s18", BOX), listenFile(undefined, BOX)]) {
+    const lines = file!.split("\n");
+    expect(lines).toContain("bind-dynamic");
+    // dnsmasq refuses the two together, and bind-interfaces stops Pi-hole when the file goes stale
+    expect(lines).not.toContain("bind-interfaces");
+    expect(lines.some((line) => line.includes("0.0.0.0") || line === "listen-address=::")).toBe(false);
+  }
+});
+
+test("a connection name that could end its line early, or the loopback, falls back to the address", () => {
+  for (const name of ["enp6s18\nbind-interfaces", "a b", "lo", "", "x".repeat(16)]) {
+    expect(listenFile(name, BOX)).toBe(listenFile(undefined, BOX));
+  }
+});
+
+test("with no usable name and no address there is no file to write", () => {
+  expect(listenFile(undefined, undefined)).toBeUndefined();
+  expect(listenFile("a b", "192.168.1.20\nserver=1.2.3.4")).toBeUndefined();
 });

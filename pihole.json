@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "initial"
+    "version": "1.1.0",
+    "changeLog": "Installs on a server that gets its address from the router. Pi-hole now answers DNS on the server's own network connection itself"
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -26,6 +26,7 @@
       "additional_envs": [
         { "name": "PIHOLE_UID", "value": "568" },
         { "name": "PIHOLE_GID", "value": "568" },
+        { "name": "FTLCONF_misc_etc_dnsmasq_d", "value": "true" },
         { "name": "FTLCONF_ntp_ipv4_active", "value": "false" },
         { "name": "FTLCONF_ntp_ipv6_active", "value": "false" },
         { "name": "FTLCONF_ntp_sync_active", "value": "false" }
@@ -36,12 +37,7 @@
         "bind_mode": "published",
         "port_number": "$PORT(20720)"
       },
-      "dns_port": {
-        "bind_mode": "published",
-        "port_number": 53,
-        "host_ips": ["$SERVER_LAN_IP"]
-      },
-      "host_network": false
+      "host_network": true
     },
     "storage": {
       "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/pihole/config)",
@@ -55,6 +51,15 @@
     }
   },
   "hooks": [
+    {
+      "id": "seed-listen",
+      "title": "Keep Pi-hole on this server's address",
+      "description": "Keeps Pi-hole's DNS on this server's own address, before its first start",
+      "events": ["onBeforeInstall"],
+      "script": "pihole/configure.ts",
+      "entrypoint": "seedListen",
+      "timeout": 60
+    },
     {
       "id": "configure-pihole",
       "title": "Pre-configure Pi-hole",

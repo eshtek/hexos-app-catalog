@@ -1,7 +1,8 @@
 // Type imports only: each script is compiled standalone, so runtime imports of sibling files wouldn't resolve.
 import { Resolver } from "node:dns/promises";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chownSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
+import { networkInterfaces } from "node:os";
 
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
@@ -11,6 +12,18 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * a password changed inside Pi-hole lasts only until Pi-hole's next start. The script installs
  * Pi-hole with a password nobody knows, and Pre-configure Pi-hole puts the owner's chosen one in
  * those values (`ctx.updateAppValues`), which restarts Pi-hole once.
+ *
+ * Pi-hole runs on the server's own network, because TrueNAS only publishes a port on one address
+ * when that address is set by hand, and most servers get theirs from the router. There TrueNAS's app
+ * always starts Pi-hole listening on every address (`FTLCONF_dns_listeningMode=all`, which an extra
+ * env can't replace), and Pi-hole 6.9 then finds port 53 taken by the mesh client and answers
+ * nowhere. So before Pi-hole's first start, Keep Pi-hole on this server's address writes a file
+ * into `/etc/dnsmasq.d`, which Pi-hole reads with `FTLCONF_misc_etc_dnsmasq_d=true`. The file names
+ * the server's network connection (`interface=`), so Pi-hole follows the server to a new address
+ * from the router, and `bind-dynamic`, so it binds that connection's addresses and its own loopback
+ * one by one and starts even when the file has gone stale. Pi-hole needs the loopback address to
+ * look up the names of the devices it shows. A server whose connection can't be named gets its
+ * address in the file instead. Use Anywhere addresses at home puts the file right again when it runs.
  *
  * Use Anywhere addresses at home keeps three dnsmasq lines per Anywhere name the box answers on
  * the standard web ports, the same three HexOS's own DNS service writes. `host-record` answers the
@@ -29,11 +42,69 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
 const SETTING = "misc.dnsmasq_lines";
+const LISTEN_FILE = "hexos-listen.conf";
+/** The apps user, which the script makes Pi-hole's own (PIHOLE_UID). */
+const APPS_ID = 568;
+/** What Linux allows in a connection's name, so one can never end its line early. */
+const INTERFACE = /^[A-Za-z0-9_.:@-]{1,15}$/;
 /** One label after another, in the letters a web address can hold, so a name can never end a line early. */
 const NAME = /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 function configMount(mounts: ContextMount[]): ContextMount | undefined {
   return mounts.find((m) => m.containerPath === "/etc/pihole") ?? mounts.find((m) => /\/pihole(-\d+)?\/config$/.test(m.hostPath));
+}
+
+function dnsmasqMount(mounts: ContextMount[]): ContextMount | undefined {
+  return mounts.find((m) => m.containerPath === "/etc/dnsmasq.d") ?? mounts.find((m) => /\/pihole(-\d+)?\/dnsmasq$/.test(m.hostPath));
+}
+
+/** The name of the network connection that holds an address, among the server's connections. */
+export function interfaceOf(interfaces: Record<string, Array<{ address: string }> | undefined>, address: string): string | undefined {
+  return Object.entries(interfaces).find(([, entries]) => entries?.some((entry) => entry.address === address))?.[0];
+}
+
+/**
+ * The file that keeps Pi-hole's DNS off every address but the server's own: by the connection's
+ * name when there is one, by the address otherwise. Undefined when neither can be written safely.
+ */
+export function listenFile(name: string | undefined, address: string | undefined): string | undefined {
+  const head = "# Kept by HexOS. Pi-hole answers DNS on this server's own address and nowhere else.";
+  if (name && INTERFACE.test(name) && name !== "lo") return [head, `interface=${name}`, "bind-dynamic", ""].join("\n");
+  if (address && isIP(address)) return [head, `listen-address=${address}`, "listen-address=127.0.0.1", "bind-dynamic", ""].join("\n");
+  return undefined;
+}
+
+/** Writes the file when it isn't already right, and says whether it changed. */
+function keepListenFile(ctx: HookContext): boolean {
+  const folder = dnsmasqMount(ctx.mounts);
+  if (!folder) ctx.fail("HexOS couldn't find Pi-hole's dnsmasq folder");
+  const name = ((): string | undefined => {
+    try {
+      return ctx.host ? interfaceOf(networkInterfaces(), ctx.host) : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const wanted = listenFile(name, ctx.host);
+  if (!wanted) ctx.fail("HexOS couldn't tell which address this server has on your network");
+  const path = `${folder.localPath}/${LISTEN_FILE}`;
+  const current = ((): string | undefined => {
+    try {
+      return readFileSync(path, "utf-8");
+    } catch {
+      return undefined;
+    }
+  })();
+  if (current === wanted) return false;
+  writeFileSync(path, wanted, { mode: 0o640 });
+  chownSync(path, APPS_ID, APPS_ID);
+  return true;
+}
+
+/** Whether the app runs on the server's own network. A box that can't say installed it that way. */
+async function onHostNetwork(ctx: HookContext): Promise<boolean> {
+  const values = await ctx.getAppValues?.().catch(() => undefined);
+  return values === undefined || (values.network as { host_network?: unknown } | undefined)?.host_network !== false;
 }
 
 /** True once Pi-hole's web page answers at all: its sign-in check says 200 or 401. */
@@ -218,6 +289,12 @@ function readOurs(path: string): string[] {
   }
 }
 
+export async function seedListen(ctx: HookContext) {
+  await ctx.registerCheckpoints([{ id: "listen", message: "Keeping Pi-hole's DNS on this server's own address" }]);
+  keepListenFile(ctx);
+  await ctx.emitCheckpoint("listen");
+}
+
 export async function configure(ctx: HookContext) {
   await ctx.registerCheckpoints([
     { id: "start", message: "Waiting for Pi-hole to start" },
@@ -254,6 +331,8 @@ export async function homeAddresses(ctx: HookContext) {
   ]);
   const config = configMount(ctx.mounts);
   if (!config) ctx.fail("HexOS couldn't find Pi-hole's settings folder");
+  // A file gone missing or stale leaves Pi-hole answering nowhere on the network, and it reads the file only at its start
+  if ((await onHostNetwork(ctx)) && keepListenFile(ctx)) await ctx.restartApp?.();
   await waitForPihole(ctx);
   await ctx.emitCheckpoint("start");
   const home = await ctx.readHomeAddresses?.();
