@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.0",
     "changeLog": "Initial curation: runs as root, so it starts in about a minute instead of 15 or more"

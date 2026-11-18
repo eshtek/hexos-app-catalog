@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.1",
     "changeLog": "ONLYOFFICE may fetch documents from this server's own address, which version 10 refuses until it is named"

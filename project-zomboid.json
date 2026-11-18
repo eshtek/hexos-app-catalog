@@ -1,7 +1,6 @@
 {
   "version": 6,
   "custom": true,
-  "internal": false,
   "metadata": {
     "name": "Project Zomboid",
     "description": "Survive the zombie apocalypse with friends on your own Project Zomboid server. Each player makes their own account the first time they join. Players join with the address HexOS copies, in the game's Join menu.",

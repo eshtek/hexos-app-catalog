@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,6 +36,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // The spy replaces the fetch every later test file in the run would use
+  mock.restore();
   rmSync(folder, { recursive: true, force: true });
 });
 

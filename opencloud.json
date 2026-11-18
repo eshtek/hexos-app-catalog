@@ -1,6 +1,5 @@
 {
   "version": 6,
-  "internal": true,
   "script": {
     "version": "1.0.3",
     "changeLog": "OpenCloud can connect to Collabora too, which serves https once OpenCloud is on the server"
