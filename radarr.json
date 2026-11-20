@@ -1,7 +1,7 @@
 {
   "version": 6,
   "script": {
-    "version": "1.5.1",
+    "version": "1.5.2",
     "changeLog": "A movie you rip takes the place of a copy of the same quality, by Radarr's own rules"
   },
   "sign_in": {
