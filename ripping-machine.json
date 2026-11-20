@@ -12,8 +12,8 @@
     "sources": ["https://github.com/uprightbass360/automatic-ripping-machine-neu", "https://github.com/uprightbass360/automatic-ripping-machine-ui"]
   },
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Rips a disc you insert, and hands each movie and episode to Radarr and Sonarr"
+    "version": "1.0.1",
+    "changeLog": "Setup now finds the disc drives that need MakeMKV's workaround on a new install"
   },
   "installation_questions": [
     {

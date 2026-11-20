@@ -433,6 +433,9 @@ def main():
         return
     try:
         kind = job.get("video_type_manual") or job.get("video_type")
+        # ARM leaves a disc it found no match for as "unknown". One that names its season is a show.
+        if kind not in ("movie", "series") and season_of(job.get("title"), job.get("label")):
+            kind = "series"
         if kind == "movie":
             place_movie(job)
         elif kind == "series":
@@ -632,11 +635,13 @@ async function ripperJson<T>(ripper: string, path: string): Promise<T> {
 }
 
 const DOCKER_SOCKET = "/var/run/docker.sock";
-const DEBUG_LOG = "/tmp/hexos-makemkv-debug.log";
+// MakeMKV writes its debug log here whatever path --debug names (1.18.3, seen 2026-11-18)
+const DEBUG_LOG = "/home/arm/MakeMKV_log.txt";
 
 /**
- * Runs MakeMKV's drive scan once in the ripper with its debug log on, and returns the log. The
- * scan is stopped after 25 seconds: with a disc in a drive that needs the workaround it would
+ * Runs MakeMKV's drive scan once in the ripper with its debug log on, and returns the log. ARM's
+ * own script fetches MakeMKV's key first: on a new install there is none until the first rip, and
+ * without one MakeMKV stops before it looks at a drive. The scan is stopped after 25 seconds: with a disc in a drive that needs the workaround it would
  * hang, and the drive's line is in the log before it does.
  */
 async function makemkvDebugLog(ctx: HookContext): Promise<string> {
@@ -658,10 +663,10 @@ async function makemkvDebugLog(ctx: HookContext): Promise<string> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ Detach: false, Tty: true }),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(120000),
     } as RequestInit);
     return started.text();
   };
-  await run(["sh", "-c", `rm -f ${DEBUG_LOG}; cd /home/arm && timeout -s KILL 25 makemkvcon -r --debug=${DEBUG_LOG} --cache=1 info disc:9999 >/dev/null 2>&1; true`]);
+  await run(["sh", "-c", `rm -f ${DEBUG_LOG}; cd /home/arm && (timeout 60 bash /opt/arm/scripts/update_key.sh; timeout -s KILL 25 makemkvcon -r --debug --cache=1 info disc:9999) >/dev/null 2>&1; true`]);
   return run(["sh", "-c", `cat ${DEBUG_LOG} 2>/dev/null; rm -f ${DEBUG_LOG}`]);
 }

@@ -325,6 +325,25 @@ describe.skipIf(!python)("the after-rip script", () => {
       expect(readdirSync(path).filter((entry) => entry.endsWith(".mkv")).length).toBe(4);
     });
 
+    test("a disc ARM couldn't identify is still a show when it names its season", async () => {
+      const lengths: Record<string, number> = { t00: 3232, t01: 3756, t02: 4293 };
+      const path = rip("completed/unidentified/Fallout Season One Disc 1 (2025)", Object.fromEntries(Object.keys(lengths).map((title, at) => [`${title}.mkv`, 25 + at])));
+      for (const [title, seconds] of Object.entries(lengths)) describeFile(join(path, `${title}.mkv`), { title: "Fallout Season One Disc 1", seconds, streams: FALLOUT });
+      job = { status: "success", path, title: "Fallout Season One Disc 1", video_type: "unknown", disctype: "bluray", label: "FALLOUT_S1_D1" };
+      link("sonarr");
+      expect(await run()).toBe(0);
+      expect(calls.find((call) => call.path === "/command")?.body).toMatchObject({ name: "DownloadedEpisodesScan" });
+    });
+
+    test("a disc ARM couldn't identify that names no season stays where ARM put it", async () => {
+      const path = rip("completed/unidentified/Mystery", { "t00.mkv": 25 });
+      job = { status: "success", path, title: "Mystery", video_type: "unknown", disctype: "bluray", label: "DISC_1" };
+      link("sonarr");
+      await run();
+      expect(readdirSync(path)).toContain("t00.mkv");
+      expect(log()).toContain("couldn't tell whether it is a movie or a show");
+    });
+
     test("a show with no Sonarr connected stays where ARM put it", async () => {
       const path = rip("completed/tv/Fallout", { "t00.mkv": 25 });
       describeFile(join(path, "t00.mkv"), { title: "Fallout Season One Disc 1", seconds: 3232, streams: FALLOUT });
