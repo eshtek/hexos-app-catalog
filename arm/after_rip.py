@@ -406,6 +406,9 @@ def main():
         return
     try:
         kind = job.get("video_type_manual") or job.get("video_type")
+        # ARM leaves a disc it found no match for as "unknown". One that names its season is a show.
+        if kind not in ("movie", "series") and season_of(job.get("title"), job.get("label")):
+            kind = "series"
         if kind == "movie":
             place_movie(job)
         elif kind == "series":
