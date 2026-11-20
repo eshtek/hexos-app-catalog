@@ -1,0 +1,57 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script."
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GB", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30140, 30141]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik" },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/templates", "owner": { "user": "apps" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/certs", "owner": { "user": "apps" }, "snapshot": { "id": "certs" } }
+  ],
+  "app_values": {
+    "authentik": {
+      "postgres_image_selector": "postgres_18_image",
+      "db_password": "$RANDOM_STRING(16)",
+      "secret_key": "$RANDOM_STRING(50)",
+      "mount_docker_socket": false,
+      "setup_email": false,
+      "additional_envs": []
+    },
+    "run_as": {
+      "user": 568,
+      "group": 568
+    },
+    "network": {
+      "http_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30140)"
+      },
+      "https_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30141)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/data)",
+      "templates": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/templates)",
+      "certs": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/certs)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 2,
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  }
+}
