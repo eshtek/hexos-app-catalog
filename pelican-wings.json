@@ -12,8 +12,8 @@
     "sources": ["https://github.com/pelican-dev/wings"]
   },
   "script": {
-    "version": "1.0.1",
-    "changeLog": "Runs ghcr.io/pelican/wings v1.0.0-rc.2."
+    "version": "1.0.2",
+    "changeLog": "Runs ghcr.io/pelican/wings v1.0.0-rc.3."
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -48,7 +48,7 @@
   "app_values": {
     "image": {
       "repository": "ghcr.io/pelican/wings",
-      "tag": "v1.0.0-rc.2@sha256:45a970378805c1fb9ba25c8f933c25f2339e5a7a87d9925721b89459abe66c7b",
+      "tag": "v1.0.0-rc.3@sha256:046c61f8df5c1363decc89f7777cb78f9b7b5230770b19d4588ab143a85589b4",
       "pull_policy": "missing"
     },
     "restart_policy": "unless-stopped",
