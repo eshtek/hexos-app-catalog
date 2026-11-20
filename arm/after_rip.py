@@ -15,6 +15,7 @@ a clear name, and the log says why.
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -28,6 +29,9 @@ LOG = os.environ.get("HEXOS_ARM_LOG", "/home/arm/logs/hexos-after-rip.log")
 JOB_SECONDS = int(os.environ.get("HEXOS_ARM_JOB_SECONDS", str(2 * 3600)))
 IMPORT_SECONDS = int(os.environ.get("HEXOS_ARM_IMPORT_SECONDS", str(6 * 3600)))
 POLL_SECONDS = float(os.environ.get("HEXOS_ARM_POLL_SECONDS", "10"))
+# Plex and Jellyfin both list what is in this folder under the movie, and Radarr ignores it
+EXTRAS_FOLDER = "Featurettes"
+EPISODE_SECONDS = 600
 VIDEO = (".mkv", ".mp4", ".m4v")
 RELEASE_GROUP = "MyOwnMedia"
 CHANNELS = {1: "1.0", 2: "2.0", 3: "2.1", 6: "5.1", 7: "6.1", 8: "7.1"}
@@ -242,6 +246,15 @@ def show_of(text):
 # --- talking to ARM, Radarr and Sonarr -------------------------------------------------------
 
 
+def bonus_of(*texts):
+    """The movie a bonus disc belongs to: "INTERSTELLAR_BONUS_DISC" is "INTERSTELLAR". None for any other disc."""
+    for text in texts:
+        found = re.match(r"(.+?)[ _.-]+(?:bonus|extras?|special[ _.-]*features?|supplements?)(?:[ _.-]*(?:dis[ck]|material|content|features?))?(?:[ _.-]*\d+)?$", (text or "").strip(), re.I)
+        if found:
+            return found.group(1).replace("_", " ").strip()
+    return None
+
+
 def fetch(url, method="GET", body=None, headers=None, timeout=60):
     request = urllib.request.Request(url, method=method, data=None if body is None else json.dumps(body).encode(), headers={"Content-Type": "application/json", **(headers or {})})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -287,6 +300,41 @@ def seen_by(link, path):
     if path != ours and not path.startswith(ours + "/"):
         raise Held("%s is outside the folder %s can see" % (path, link["url"]))
     return theirs + path[len(ours):]
+
+
+def in_library(link, path):
+    """A folder in the manager's library as ARM sees it, or None when ARM has no way to it."""
+    library = link.get("library") or {}
+    ours, theirs = (library.get("arm") or "").rstrip("/"), (library.get("manager") or "").rstrip("/")
+    if not ours or not theirs or not (path == theirs or path.startswith(theirs + "/")):
+        return None
+    return ours + path[len(theirs):]
+
+
+def file_extras(link, movie, extras):
+    """Moves a disc's extras into the movie's own folder, where Plex and Jellyfin list them under the movie.
+
+    Both read a "Featurettes" folder beside the movie file, and Radarr leaves that folder alone.
+    Returns how many were filed. Nothing is overwritten, and with no way to the library they stay put.
+    """
+    if not extras:
+        return 0
+    known = manager(link, "GET", "/movie/%d" % movie["id"]) or {}
+    folder = in_library(link, (known.get("path") or "").rstrip("/"))
+    if not folder or not os.path.isdir(folder):
+        log("%d extra(s) of %s stay in Downloads: the movie has no folder in the library yet" % (len(extras), movie.get("title")))
+        return 0
+    target = os.path.join(folder, EXTRAS_FOLDER)
+    os.makedirs(target, exist_ok=True)
+    for item in extras:
+        stem, ending = os.path.splitext(os.path.basename(item["path"]))
+        place, at = os.path.join(target, stem + ending), 1
+        while os.path.lexists(place):
+            at += 1
+            place = os.path.join(target, "%s (%d)%s" % (stem, at, ending))
+        shutil.move(item["path"], place)
+    log("Filed %d extra(s) under %s" % (len(extras), os.path.join(known.get("path") or "", EXTRAS_FOLDER)))
+    return len(extras)
 
 
 def run_command(link, name, path):
@@ -353,18 +401,38 @@ def place_movie(job):
         profiles = manager(link, "GET", "/qualityprofile")
         manager(link, "POST", "/movie", dict(movie, rootFolderPath=link["rootFolder"], qualityProfileId=profiles[0]["id"], monitored=False, minimumAvailability="released", addOptions={"searchForMovie": False}))
     status = run_command(link, "DownloadedMoviesScan", folder)
+    known = (manager(link, "GET", "/movie?tmdbId=%d" % movie["tmdbId"]) or [None])[0]
+    if known:
+        file_extras(link, known, [item for item in files if item is not main])
     remove_if_empty(folder)
     remove_if_empty(job["path"])
     log("Radarr's import of %s: %s%s" % (name, status, "" if not os.path.isdir(folder) else ". Radarr left it in Downloads: it keeps the copy it has"))
+
+
+def place_bonus(job, base):
+    """A bonus disc holds no movie. Its titles go under the movie it names, once that movie is in the library."""
+    files = [probe(path) for path in videos_in(job["path"])]
+    if not files:
+        raise Held("the rip has no video file")
+    link = read_link("radarr")
+    if not link:
+        raise Held("Radarr isn't connected, and a bonus disc needs its movie's folder")
+    named = [movie for movie in manager(link, "GET", "/movie") or [] if plain(movie.get("title")) == plain(base) or plain(movie.get("originalTitle")) == plain(base)]
+    if len(named) != 1:
+        raise Held("%s in your library is called %r. Rip or add the movie first" % ("no movie" if not named else "more than one movie", base))
+    if not file_extras(link, named[0], files):
+        raise Held("%r has no folder in the library yet. Rip or add the movie first" % named[0].get("title"))
+    remove_if_empty(job["path"])
 
 
 # --- a show ----------------------------------------------------------------------------------
 
 
 def place_show(job):
-    files = unique_titles([probe(path) for path in videos_in(job["path"])])
+    # A title under ten minutes is an extra, not an episode. It stays where ARM put it.
+    files = unique_titles([item for item in (probe(path) for path in videos_in(job["path"])) if item["seconds"] >= EPISODE_SECONDS])
     if not files:
-        raise Held("the rip has no video file")
+        raise Held("the rip has no title long enough to be an episode")
     link = read_link("sonarr")
     if not link:
         raise Held("Sonarr isn't connected, and a disc's titles carry no episode numbers")
@@ -406,6 +474,10 @@ def main():
         return
     try:
         kind = job.get("video_type_manual") or job.get("video_type")
+        base = bonus_of(job.get("label"), job.get("title"))
+        if base and kind != "series":
+            place_bonus(job, base)
+            return
         # ARM leaves a disc it found no match for as "unknown". One that names its season is a show.
         if kind not in ("movie", "series") and season_of(job.get("title"), job.get("label")):
             kind = "series"

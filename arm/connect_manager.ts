@@ -16,6 +16,8 @@ export interface ManagerLink {
   apiKey: string;
   downloads: { arm: string; manager: string };
   rootFolder: string;
+  /** The manager's library folder as each sees it, when ARM has a way to it: a disc's extras are filed there. */
+  library?: { arm: string; manager: string };
 }
 
 type Mount = Pick<ContextMount, "hostPath" | "containerPath">;
@@ -36,6 +38,15 @@ export const downloadsAs = (arm: Mount[], manager: Mount[]): ManagerLink["downlo
   const media = arm.find((mount) => mount.containerPath === "/home/arm/media");
   const seen = media && seenAt(media.hostPath, manager);
   return seen ? { arm: "/home/arm/media", manager: seen } : undefined;
+};
+
+/** The manager's library folder as ARM sees it, or undefined when ARM mounts no folder that holds it. */
+export const libraryAs = (rootFolder: string, manager: Mount[], arm: Mount[]): ManagerLink["library"] | undefined => {
+  const held = manager
+    .filter((mount) => mount.containerPath && (rootFolder === trimmed(mount.containerPath) || rootFolder.startsWith(`${trimmed(mount.containerPath)}/`)))
+    .sort((a, b) => trimmed(b.containerPath as string).length - trimmed(a.containerPath as string).length)[0];
+  const seen = held && seenAt(`${trimmed(held.hostPath)}${rootFolder.slice(trimmed(held.containerPath as string).length)}`, arm);
+  return seen ? { arm: seen, manager: rootFolder } : undefined;
 };
 
 /**
@@ -88,7 +99,8 @@ async function connect(ctx: HookContext, id: keyof typeof MANAGERS) {
   const rootFolder = roots.map((root) => trimmed(root.path ?? "")).find(Boolean);
   if (!rootFolder) ctx.fail(`${manager.name} has no ${manager.library} folder yet. Run ${manager.setup}, then run this again.`);
 
-  const link: ManagerLink = { url: ctx.baseUrl, apiKey, downloads, rootFolder };
+  const library = libraryAs(rootFolder, ctx.mounts, arm);
+  const link: ManagerLink = { url: ctx.baseUrl, apiKey, downloads, rootFolder, ...(library ? { library } : {}) };
   const folder = `${config.localPath}/hexos`;
   mkdirSync(folder, { recursive: true, mode: 0o750 });
   chownSync(folder, APPS_UID, APPS_UID);

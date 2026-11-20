@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { AFTER_RIP_PY, applySettings, drivesWithoutSdf, OMDB_KEY_ENV, omdbKeyFromValues, wantedSettings, withSdfStop } from "../arm/configure";
-import { downloadsAs, seenAt } from "../arm/connect_manager";
+import { downloadsAs, libraryAs, seenAt } from "../arm/connect_manager";
 import { composeScriptProblems } from "./compose";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../${name}`, import.meta.url), "utf-8"));
@@ -111,6 +111,13 @@ describe("the link to Radarr and Sonarr", () => {
     expect(seenAt("/mnt/tank/Downloads2", manager)).toBeUndefined();
   });
 
+  test("the library is named as each sees it only when ARM mounts a folder that holds it", () => {
+    const radarr = [...manager, { hostPath: "/mnt/tank/Movies", containerPath: "/movies" }];
+    expect(libraryAs("/movies", radarr, [...arm, { hostPath: "/mnt/tank/Movies", containerPath: "/library/movies" }])).toEqual({ arm: "/library/movies", manager: "/movies" });
+    expect(libraryAs("/movies/4K", radarr, [...arm, { hostPath: "/mnt/tank/Movies", containerPath: "/library/movies" }])).toEqual({ arm: "/library/movies/4K", manager: "/movies/4K" });
+    expect(libraryAs("/movies", radarr, arm)).toBeUndefined();
+  });
+
   test("the link names ARM's folder as ARM and as the manager see it, or nothing when the manager can't", () => {
     expect(downloadsAs(arm, manager)).toEqual({ arm: "/home/arm/media", manager: "/downloads/arm" });
     expect(downloadsAs(arm, [manager[0]])).toBeUndefined();
@@ -205,6 +212,7 @@ describe.skipIf(!python)("the after-rip script", () => {
     let calls: { method: string; path: string; body?: unknown }[];
     let job: Record<string, unknown>;
     let imports: boolean;
+    let library: { id: number; tmdbId: number; title: string; path: string }[];
 
     const run = () => Bun.spawn([python as string, file], { env: { ...process.env, ...env } }).exited;
     const log = () => (existsSync(env.HEXOS_ARM_LOG) ? readFileSync(env.HEXOS_ARM_LOG, "utf-8") : "");
@@ -218,6 +226,7 @@ describe.skipIf(!python)("the after-rip script", () => {
       root = mkdtempSync(join(tmpdir(), "arm-after-rip-"));
       calls = [];
       imports = true;
+      library = [];
       mkdirSync(join(root, "links"));
       mkdirSync(join(root, "bin"));
       // ffprobe answers from a file beside each video: its length, and the title the disc gave it
@@ -237,7 +246,8 @@ describe.skipIf(!python)("the after-rip script", () => {
           if (request.headers.get("x-api-key") !== "secret") return new Response("no", { status: 401 });
           if (path === "/movie/lookup") return Response.json([{ title: "Interstellar Civil War: Shadows of the Empire", tmdbId: 1, runtime: 97, year: 2017 }, { title: "Interstellar", tmdbId: 157336, runtime: 169, year: 2014 }]);
           if (path === "/movie/lookup/imdb") return Response.json({ title: "Interstellar Civil War: Shadows of the Empire", tmdbId: 1, runtime: 97, year: 2017 });
-          if (path === "/movie" && request.method === "GET") return Response.json([]);
+          if (path === "/movie" && request.method === "GET") return Response.json(url.searchParams.has("tmdbId") ? library.filter((movie) => String(movie.tmdbId) === url.searchParams.get("tmdbId")) : library);
+          if (/^\/movie\/\d+$/.test(path)) return Response.json(library.find((movie) => `/movie/${movie.id}` === path) ?? {});
           if (path === "/qualityprofile") return Response.json([{ id: 4, name: "Any" }]);
           if (path === "/movie" || path === "/series") return Response.json({ id: 9, title: path === "/series" ? "Fallout" : "Interstellar" });
           if (path === "/series/lookup") return Response.json([{ title: "Fallout", tvdbId: 416744, year: 2024 }]);
@@ -269,8 +279,8 @@ describe.skipIf(!python)("the after-rip script", () => {
       rmSync(root, { recursive: true, force: true });
     });
 
-    const link = (name: string) =>
-      writeFileSync(join(root, "links", `${name}.json`), JSON.stringify({ url: `http://127.0.0.1:${server.port}`, apiKey: "secret", downloads: { arm: root, manager: "/downloads/arm" }, rootFolder: "/library" }));
+    const link = (name: string, more: Record<string, unknown> = {}) =>
+      writeFileSync(join(root, "links", `${name}.json`), JSON.stringify({ url: `http://127.0.0.1:${server.port}`, apiKey: "secret", downloads: { arm: root, manager: "/downloads/arm" }, rootFolder: "/library", ...more }));
     const describeFile = (path: string, meta: Record<string, unknown>) => writeFileSync(`${path}.json`, JSON.stringify(meta));
 
     test("a movie ARM named wrongly is named by the disc's own title, and Radarr is told to import its folder", async () => {
@@ -342,6 +352,63 @@ describe.skipIf(!python)("the after-rip script", () => {
       await run();
       expect(readdirSync(path)).toContain("t00.mkv");
       expect(log()).toContain("couldn't tell whether it is a movie or a show");
+    });
+
+    test("a movie's other titles are filed under the movie as extras, once ARM has a way to the library", async () => {
+      const path = rip("completed/movies/Interstellar (2014)", { "A1_t00.mkv": 50, "A1_t01.mkv": 5, "A1_t02.mkv": 4 });
+      describeFile(join(path, "A1_t00.mkv"), { title: "Interstellar", seconds: 10134, streams: INTERSTELLAR });
+      describeFile(join(path, "A1_t01.mkv"), { title: "Interstellar", seconds: 583, streams: INTERSTELLAR });
+      describeFile(join(path, "A1_t02.mkv"), { title: "Interstellar", seconds: 469, streams: INTERSTELLAR });
+      job = { status: "success", path, title: "Interstellar", year: "2014", video_type: "movie", disctype: "bluray" };
+      mkdirSync(join(root, "library", "Interstellar (2014)"), { recursive: true });
+      link("radarr", { library: { arm: join(root, "library"), manager: "/movies" } });
+      library = [{ id: 9, tmdbId: 157336, title: "Interstellar", path: "/movies/Interstellar (2014)" }];
+      expect(await run()).toBe(0);
+      expect(readdirSync(join(root, "library", "Interstellar (2014)", "Featurettes")).sort()).toEqual(["A1_t01.mkv", "A1_t02.mkv"]);
+      expect(log()).toContain("Filed 2 extra(s) under /movies/Interstellar (2014)/Featurettes");
+    });
+
+    test("with no way to the library, a movie's extras stay in Downloads", async () => {
+      const path = rip("completed/movies/Interstellar (2014)", { "A1_t00.mkv": 50, "A1_t01.mkv": 5 });
+      describeFile(join(path, "A1_t00.mkv"), { title: "Interstellar", seconds: 10134, streams: INTERSTELLAR });
+      describeFile(join(path, "A1_t01.mkv"), { title: "Interstellar", seconds: 583, streams: INTERSTELLAR });
+      job = { status: "success", path, title: "Interstellar", year: "2014", video_type: "movie", disctype: "bluray" };
+      link("radarr");
+      library = [{ id: 9, tmdbId: 157336, title: "Interstellar", path: "/movies/Interstellar (2014)" }];
+      await run();
+      expect(readdirSync(path).filter((entry) => entry.endsWith(".mkv"))).toEqual(["A1_t01.mkv"]);
+    });
+
+    test("a bonus disc's titles go under the movie it names, and never to Radarr as a movie", async () => {
+      const path = rip("completed/movies/Inside Interstellar (2015)", { "B1_t00.mkv": 5, "B1_t01.mkv": 4 });
+      job = { status: "success", path, title: "Inside 'Interstellar'", year: "2015", video_type: "movie", disctype: "bluray", label: "INTERSTELLAR_BONUS_DISC" };
+      mkdirSync(join(root, "library", "Interstellar (2014)"), { recursive: true });
+      link("radarr", { library: { arm: join(root, "library"), manager: "/movies" } });
+      library = [{ id: 9, tmdbId: 157336, title: "Interstellar", path: "/movies/Interstellar (2014)" }, { id: 10, tmdbId: 2, title: "Inception", path: "/movies/Inception (2010)" }];
+      expect(await run()).toBe(0);
+      expect(readdirSync(join(root, "library", "Interstellar (2014)", "Featurettes")).sort()).toEqual(["B1_t00.mkv", "B1_t01.mkv"]);
+      expect(calls.some((call) => call.path === "/command" || (call.method === "POST" && call.path === "/movie"))).toBe(false);
+    });
+
+    test("a bonus disc whose movie isn't in the library yet stays where ARM put it", async () => {
+      const path = rip("completed/movies/Inside Interstellar (2015)", { "B1_t00.mkv": 5 });
+      job = { status: "success", path, title: "Inside 'Interstellar'", video_type: "movie", disctype: "bluray", label: "INTERSTELLAR_BONUS_DISC" };
+      link("radarr", { library: { arm: join(root, "library"), manager: "/movies" } });
+      await run();
+      expect(readdirSync(path)).toEqual(["B1_t00.mkv"]);
+      expect(log()).toContain("Rip or add the movie first");
+    });
+
+    test("a show disc's short extras are left out, so its episodes still match", async () => {
+      const lengths: Record<string, number> = { t00: 3232, t01: 3756, t02: 4293, t03: 240, t04: 95 };
+      const path = rip("completed/tv/Fallout", Object.fromEntries(Object.keys(lengths).map((title, at) => [`${title}.mkv`, 25 + at])));
+      for (const [title, seconds] of Object.entries(lengths)) describeFile(join(path, `${title}.mkv`), { title: "Fallout Season One Disc 1", seconds, streams: FALLOUT });
+      job = { status: "success", path, title: "Fallout", video_type: "series", disctype: "bluray", label: "FALLOUT_S1_D1" };
+      link("sonarr");
+      imports = false;
+      expect(await run()).toBe(0);
+      expect(readdirSync(join(root, "completed", "tv", "Fallout.S01.MyOwnMedia")).length).toBe(3);
+      expect(readdirSync(path).filter((entry) => entry.endsWith(".mkv")).sort()).toEqual(["t03.mkv", "t04.mkv"]);
     });
 
     test("a show with no Sonarr connected stays where ARM put it", async () => {

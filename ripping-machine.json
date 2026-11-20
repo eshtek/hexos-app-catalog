@@ -12,8 +12,8 @@
     "sources": ["https://github.com/uprightbass360/automatic-ripping-machine-neu", "https://github.com/uprightbass360/automatic-ripping-machine-ui"]
   },
   "script": {
-    "version": "1.0.1",
-    "changeLog": "Setup now finds the disc drives that need MakeMKV's workaround on a new install"
+    "version": "1.0.2",
+    "changeLog": "A show disc's short extras no longer stop its episodes being matched"
   },
   "installation_questions": [
     {
