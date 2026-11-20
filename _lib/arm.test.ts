@@ -184,6 +184,21 @@ describe.skipIf(!python)("the after-rip script", () => {
     expect(decide({ discs: ["FALLOUT_S2_D3"] }).season).toBe(2);
   });
 
+  test("when two runs of episodes fit about as well, the disc's own number picks the run", () => {
+    // Fallout season one disc two as it ripped (2026-11-20): 57:47, 42:26 and 45:46. Episodes 3 to 5
+    // and 4 to 6 both fit by length, and disc two of three-episode discs starts at episode 4.
+    // The season's episode lengths as that server's Sonarr gave them
+    const season = [75, 66, 57, 49, 45, 61, 61, 62].map((runtime, at) => ({ episodeNumber: at + 1, seasonNumber: 1, runtime }));
+    const lengths = [57.78, 42.43, 45.77];
+    expect(decide({ lengths, episodes: season }).episodes).toBeNull();
+    expect(decide({ lengths, episodes: season, discs: ["Fallout Season One Disc 2"] }).episodes).toEqual([6, 5, 4]);
+    expect(decide({ lengths, episodes: season, discs: ["FALLOUT_S1_D2"] }).episodes).toEqual([6, 5, 4]);
+    // A disc number that points at neither close run settles nothing
+    expect(decide({ lengths, episodes: season, discs: ["Fallout Season One Disc 3"] }).episodes).toBeNull();
+    // Disc one still matches on length alone
+    expect(decide({ lengths: [53.87, 62.6, 71.55], episodes: season, discs: ["Fallout Season One Disc 1"] }).episodes).toEqual([3, 2, 1]);
+  });
+
   test("titles too alike in length, or unlike any run of episodes, are matched to nothing", () => {
     const alike = [45, 45, 44].map((runtime, at) => ({ episodeNumber: at + 1, runtime }));
     expect(decide({ lengths: [44.1, 44.6, 43.0], episodes: alike }).episodes).toBeNull();

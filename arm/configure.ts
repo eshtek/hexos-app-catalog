@@ -221,12 +221,14 @@ def unique_titles(found):
     return kept
 
 
-def match_episodes(minutes, episodes):
+def match_episodes(minutes, episodes, disc=None):
     """Which episode each title is, by length: a list of episode numbers in the titles' order, or None.
 
     A disc holds episodes that follow one another, so every run of that many episodes is tried, the
     longest title against the longest episode. The best run has to be close in every title, clearly
-    better than the next run, and unchanged by swapping two titles, or nothing is matched.
+    better than the next run, and unchanged by swapping two titles, or nothing is matched. When two
+    runs are close, a disc that says its number settles it: disc 2 of a season holding three episodes
+    a disc starts at episode 4, so the run that starts there is taken when it is one of the close ones.
     """
     episodes = sorted((episode for episode in episodes if episode.get("runtime")), key=lambda episode: episode["episodeNumber"])
     count = len(minutes)
@@ -244,7 +246,11 @@ def match_episodes(minutes, episodes):
     runs.sort(key=lambda entry: entry[0])
     cost, _start, run = runs[0]
     if len(runs) > 1 and runs[1][0] - cost < 2 * count:
-        return None
+        close = [entry for entry in runs if entry[0] - cost < 2 * count]
+        expected = [entry for entry in close if disc and episodes[entry[1]]["episodeNumber"] == (disc - 1) * count + 1]
+        if not expected:
+            return None
+        cost, _start, run = expected[0]
     # Two titles, or two episodes, alike in length can't be told apart
     for rank in range(count - 1):
         if run[rank + 1]["runtime"] - run[rank]["runtime"] < 2 or minutes[order[rank + 1]] - minutes[order[rank]] < 1:
@@ -262,6 +268,15 @@ def season_of(*texts):
         if found:
             value = found.group(1).lower()
             return WORDS.get(value) or int(value)
+    return None
+
+
+def disc_of(*texts):
+    """The number a disc says it is: "Season One Disc 2", "FALLOUT_S1_D2"."""
+    for text in texts:
+        found = re.search(r"dis[ck][ _.-]*(\d{1,2})\b", text or "", re.I) or re.search(r"(?<![a-z0-9])s\d{1,2}[ _.-]*d(\d{1,2})(?![a-z0-9])", text or "", re.I)
+        if found:
+            return int(found.group(1))
     return None
 
 
@@ -477,7 +492,7 @@ def place_show(job):
         profiles = manager(link, "GET", "/qualityprofile")
         series = manager(link, "POST", "/series", dict(series, rootFolderPath=link["rootFolder"], qualityProfileId=profiles[0]["id"], monitored=False, seasonFolder=True, addOptions={"searchForMissingEpisodes": False, "monitor": "none"}))
     episodes = [episode for episode in manager(link, "GET", "/episode?seriesId=%d&seasonNumber=%d" % (series["id"], int(season))) or [] if episode.get("seasonNumber") == int(season)]
-    numbers = match_episodes([item["seconds"] / 60 for item in files], episodes)
+    numbers = match_episodes([item["seconds"] / 60 for item in files], episodes, disc_of(disc, job.get("label")))
     if not numbers:
         raise Held("the titles' lengths don't settle which episodes of season %s they are" % season)
 
@@ -534,7 +549,7 @@ if __name__ == "__main__":
             asked = json.loads(sys.argv[2])
             print(json.dumps({
                 "movie": (pick_movie(asked["candidates"], asked["titles"], asked["minutes"]) or {}).get("tmdbId") if "candidates" in asked else None,
-                "episodes": match_episodes(asked["lengths"], asked["episodes"]) if "lengths" in asked else None,
+                "episodes": match_episodes(asked["lengths"], asked["episodes"], disc_of(*asked.get("discs", []))) if "lengths" in asked else None,
                 "season": season_of(*asked.get("discs", [])),
                 "show": show_of(asked["discs"][0]) if asked.get("discs") else None,
             }))
