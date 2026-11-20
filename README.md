@@ -13,7 +13,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [AFFiNE](affine.json) | Knowledge base software |
 | [ARK: Survival Evolved](ark-survival-evolved.json) | Dinosaur survival game server |
 | [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
-| [Automatic Ripping Machine](arm.json) | Copies a disc in the server's drive to Movies, Shows or Music |
+| [Automatic Ripping Machine](ripping-machine.json) | Rips a disc in the server's drive, and hands it to Radarr and Sonarr |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
 | [Bindarr](bindarr.json) | Trading card collection manager ([notes](bindarr/README.md)) |
@@ -337,6 +337,8 @@ A link that passes a setting of the box on into its app says so in `rerunsOn`, a
 `"remote-address"` is for an app that checks the address it is opened at. When an owner turns on, renames or turns off the app's Anywhere address, the box runs the hook again, and the hook reads the app's names with `ctx.readRemoteAddresses?.()`. The list is empty once the app has no address, so the hook takes its setting back out. Nextcloud's `anywhere-address` adds the names to its trusted domains this way. A link reads the other app's names with `ctx.readRemoteAddresses?.("collabora")`, and runs again when that app's address changes.
 
 A server from before `"remote-address"` doesn't know the word and drops the whole hook that says it. So the trigger goes in a hook of its own, with `"userAction"` as its only event, and no other hook may list it in `requiresHooks`. `bun run validate` refuses anything else. Added to `configure-nextcloud`, it would have taken Nextcloud's setup step away from those servers.
+
+An app that works at one address only, the answer to one of its questions, names that question in `requirements.one_address`. OpenCloud names `address`, its Web address (the chart's OC_URL). HexOS's Launch opens the app's Anywhere address at home too while that answer is one of the app's Anywhere addresses; otherwise Launch is as before. It is read from the catalog's current script, so it needs no new `script.version`, and `bun run validate` refuses one that isn't the key of a text question. Moving such an app is a trade for the owner, since its home address stops working, so OpenCloud's hooks never move it on their own: Use its Anywhere address is the owner's click, Keep its Anywhere address up to date (`rerunsOn: ["remote-address"]`) follows only an address HexOS set or one the owner typed in that is one of the app's names, and Use its home address moves it back. What HexOS set is kept in `hexos/anywhere.json` in OpenCloud's data folder, because a script update writes `additional_envs` back whole.
 
 Some apps only have to believe the gateway that the visitor came over https, which takes one env. `anywhere/proxy_setting.ts` holds that env for Paperless-ngx and Firefly III, each with an entrypoint of its own. The hook adds the env while the app has an Anywhere address and takes it back out once it has none. It is never written into `app_values`, because both apps warn against it when no proxy is in front. `HEXOS_ANYWHERE_ENVS` names the env HexOS added, so an env the owner set themselves is left as it is.
 

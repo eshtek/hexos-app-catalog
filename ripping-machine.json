@@ -1,0 +1,112 @@
+{
+  "version": 7,
+  "custom": true,
+  "metadata": {
+    "name": "Automatic Ripping Machine",
+    "description": "Put a Blu-ray, DVD or CD in the server's disc drive and it is copied to your server. With Radarr and Sonarr connected, each movie and episode is named, filed in your library and ready to watch. A disc you ripped takes the place of a copy of the same quality you already had.",
+    "icon": "arm/icon.png",
+    "version": "19.1.0",
+    "categories": ["media"],
+    "keywords": ["arm", "rip", "blu-ray", "uhd", "dvd", "cd", "makemkv", "disc"],
+    "homepage": "https://github.com/uprightbass360/automatic-ripping-machine-neu",
+    "sources": ["https://github.com/uprightbass360/automatic-ripping-machine-neu", "https://github.com/uprightbass360/automatic-ripping-machine-ui"]
+  },
+  "script": {
+    "version": "1.0.2",
+    "changeLog": "A show disc's short extras no longer stop its episodes being matched"
+  },
+  "installation_questions": [
+    {
+      "question": "OMDb API key",
+      "description": "Only for a server with no Radarr or Sonarr: it names each disc. Free at omdbapi.com.",
+      "type": "password",
+      "key": "omdb_api_key",
+      "required": false,
+      "default": ""
+    }
+  ],
+  "requirements": {
+    "optical_drives": true,
+    "locations": ["ApplicationsPerformance", "Downloads"],
+    "specifications": ["2CORE", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30173]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(Downloads)", "network_share": true },
+    { "path": "$LOCATION(ApplicationsPerformance)/ripping-machine/config", "owner": { "user": "apps", "group": "apps" }, "snapshot": { "id": "config" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/ripping-machine/db", "owner": { "user": "apps", "group": "apps" }, "snapshot": { "id": "db" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/ripping-machine/logs", "owner": { "user": "apps", "group": "apps" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/ripping-machine/makemkv", "owner": { "user": "apps", "group": "apps" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/ripping-machine/dashboard", "owner": { "user": "apps", "group": "apps" } },
+    { "path": "$LOCATION(Downloads)/arm", "owner": { "user": "apps", "group": "apps" } }
+  ],
+  "app_values": {
+    "services": {
+      "ripper": {
+        "image": "uprightbass360/automatic-ripping-machine:19.1.0@sha256:59cc298d2cd1087ba198cf518083911882397973e968d2693b7f7f350b333566",
+        "restart": "unless-stopped",
+        "privileged": true,
+        "environment": {
+          "ARM_UID": 568,
+          "ARM_GID": 568,
+          "ARM_COMMUNITY_KEYDB": "true",
+          "ARM_TRANSCODER_ENABLED": "false",
+          "MOVIES_SUBDIR": "movies",
+          "TV_SUBDIR": "tv",
+          "AUDIO_SUBDIR": "music",
+          "UNIDENTIFIED_SUBDIR": "unidentified",
+          "HEXOS_OMDB_API_KEY": "$QUESTION(omdb_api_key)"
+        },
+        "volumes": [
+          "$LOCATION(ApplicationsPerformance)/ripping-machine/config:/etc/arm/config",
+          "$LOCATION(ApplicationsPerformance)/ripping-machine/db:/home/arm/db",
+          "$LOCATION(ApplicationsPerformance)/ripping-machine/logs:/home/arm/logs",
+          "$LOCATION(ApplicationsPerformance)/ripping-machine/makemkv:/home/arm/.MakeMKV",
+          "$LOCATION(Downloads)/arm:/home/arm/media"
+        ],
+        "deploy": { "resources": { "limits": { "cpus": "$CPUS(50%, 4)", "memory": "$MEMORY(25%, 4096)" } } }
+      },
+      "dashboard": {
+        "image": "uprightbass360/arm-ui:19.1.1@sha256:7e622232f7846f12823b2d7bdab671fff1a7eefbc33ba40824384f0fe3677f08",
+        "restart": "unless-stopped",
+        "environment": {
+          "ARM_UI_ARM_URL": "http://ripper:8080",
+          "ARM_UI_TRANSCODER_ENABLED": "false",
+          "ARM_UI_THEMES_PATH": "/data/themes",
+          "ARM_UI_IMAGE_CACHE_PATH": "/data/cache/images"
+        },
+        "volumes": ["$LOCATION(ApplicationsPerformance)/ripping-machine/dashboard:/data"],
+        "ports": [{ "target": 8888, "published": "$PORT(30173)" }],
+        "depends_on": { "ripper": { "condition": "service_healthy" } }
+      }
+    },
+    "x-portals": [{ "name": "Web UI", "scheme": "http", "host": "0.0.0.0", "port": "$PORT(30173)", "path": "/" }]
+  },
+  "hooks": [
+    {
+      "id": "prepare-folders",
+      "title": "Prepare Automatic Ripping Machine's folders",
+      "description": "Preparing folders",
+      "events": ["onBeforeInstall", "onBeforeUpgrade"],
+      "script": "arm/configure.ts",
+      "entrypoint": "prepare",
+      "timeout": 60
+    },
+    {
+      "id": "configure-arm",
+      "title": "Pre-configure Automatic Ripping Machine",
+      "description": "Setting up Automatic Ripping Machine",
+      "summary": "Sets rips to keep the disc's quality and go to Radarr and Sonarr. Run it again after you add a disc drive. It keeps your other settings.",
+      "events": ["onAfterInstall", "userAction"],
+      "rerun": "converge",
+      "surfaces": ["card"],
+      "optional": true,
+      "script": "arm/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 900,
+      "retries": 0
+    }
+  ]
+}

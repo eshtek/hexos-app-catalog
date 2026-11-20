@@ -100,6 +100,15 @@ describe("the farm card", () => {
     expect(farmDate({ ...status, season: undefined })).toBeNull();
   });
 
+  test("the card's background is the list its picture rides on, so an empty farm leaves the card small", () => {
+    // The deck opens a card with a background only while that list has entries, and draws the
+    // entry's picture behind it (hexos-platform, widgetHasContent). Without it, "0/10" opens the card
+    const widget = script.widgets.find((entry: { id: string }) => entry.id === "farm");
+    expect(widget.background).toEqual({ field: "online" });
+    expect(widget.slots).toContainEqual({ type: "list", field: "online", rows: 1 });
+    expect((farmFields({ ...status, playerCount: 0 }, []).online as { entries: unknown[] }).entries).toEqual([]);
+  });
+
   test("one entry while anyone's on: the farm, who's there and the day", () => {
     const fields = farmFields(status, ["Abigail", "Sam"]);
     const entry = (fields.online as { entries: { image?: string }[] }).entries[0];
