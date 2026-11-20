@@ -15,3 +15,5 @@ Files for your household, on your own server, in your browser. Open it with Laun
 **Search** finds file names. "Search inside documents" also finds words inside files. It's off unless you turn it on, since it uses about 1 GB more memory.
 
 **Web apps.** Choose extra apps like Draw.io or Maps while installing, or later on the Settings tab.
+
+**Away from home.** OpenCloud works at one address only. To use it away from home, turn on its HexOS Anywhere address, then click Use its Anywhere address on its card. OpenCloud then opens at that address everywhere, at home too, and Launch opens it. Phones and computers you set up with the home address need the new address. Turn off Require sign-in for OpenCloud, or its apps can't sign in; OpenCloud still asks for its own password. For documents away from home, turn on the Anywhere address of your office app too and click Use its Anywhere address again. Use its home address moves OpenCloud back home, which you need if HexOS Anywhere stops, for example when your license ends.
