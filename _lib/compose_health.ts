@@ -42,6 +42,13 @@ export function composeDurationSeconds(value: unknown): number | null {
   return Number.isFinite(total) && total <= MAX_DURATION_SECONDS ? total : null;
 }
 
+/**
+ * The longest start period allowed. TrueNAS stops a compose `up` after 1200 s (middleware
+ * `compose_utils.py`), and HexOS fails an install whose queued steps have waited about 15 minutes,
+ * so the check must be able to call a broken start unhealthy well inside both.
+ */
+export const MAX_START_PERIOD_SECONDS = 12 * 60;
+
 /** The services some other service waits on with `condition: service_healthy`. */
 export function healthGatedServices(appValues: unknown): string[] {
   if (!isRecord(appValues) || !isRecord(appValues.services)) return [];
@@ -74,9 +81,17 @@ export function healthGateProblems(appValues: unknown): string[] {
       continue;
     }
     const seconds = composeDurationSeconds(healthcheck?.start_period);
+    if (seconds !== null && seconds > MAX_START_PERIOD_SECONDS) {
+      problems.push(
+        `${service}: healthcheck.start_period is longer than 12 minutes: TrueNAS gives up on a compose start after ` +
+          "20 minutes and HexOS fails an install whose steps wait about 15, so a longer period never runs out " +
+          "and a broken start would fail without saying why",
+      );
+      continue;
+    }
     if (seconds === null || seconds <= 0) {
       problems.push(
-        `${service}: another service waits for it to be healthy, so set healthcheck.start_period (for example "20m"): ` +
+        `${service}: another service waits for it to be healthy, so set healthcheck.start_period (for example "10m"): ` +
           "on hard drives a first start can take minutes longer than the image's own health check allows, " +
           "because each image file the container changes is copied up with a full ZFS sync",
       );

@@ -48,7 +48,7 @@
         "image": "uprightbass360/automatic-ripping-machine:19.1.0@sha256:59cc298d2cd1087ba198cf518083911882397973e968d2693b7f7f350b333566",
         "restart": "unless-stopped",
         "privileged": true,
-        "healthcheck": { "start_period": "20m" },
+        "healthcheck": { "start_period": "10m" },
         "environment": {
           "ARM_UID": 568,
           "ARM_GID": 568,
