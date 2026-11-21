@@ -12,8 +12,8 @@
     "sources": ["https://github.com/uprightbass360/automatic-ripping-machine-neu", "https://github.com/uprightbass360/automatic-ripping-machine-ui"]
   },
   "script": {
-    "version": "1.0.2",
-    "changeLog": "A show disc's short extras no longer stop its episodes being matched"
+    "version": "1.0.3",
+    "changeLog": "Gives the first start more time on servers whose apps are on hard drives"
   },
   "installation_questions": [
     {
@@ -48,6 +48,7 @@
         "image": "uprightbass360/automatic-ripping-machine:19.1.0@sha256:59cc298d2cd1087ba198cf518083911882397973e968d2693b7f7f350b333566",
         "restart": "unless-stopped",
         "privileged": true,
+        "healthcheck": { "start_period": "20m" },
         "environment": {
           "ARM_UID": 568,
           "ARM_GID": 568,
