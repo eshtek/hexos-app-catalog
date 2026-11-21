@@ -46,7 +46,15 @@ describe("a service another one waits on to be healthy", () => {
   });
 
   test("passes with a start period, keeping the image's own check", () => {
-    expect(healthGateProblems(gated({ healthcheck: { start_period: "20m" } }))).toEqual([]);
+    expect(healthGateProblems(gated({ healthcheck: { start_period: "10m" } }))).toEqual([]);
+    expect(healthGateProblems(gated({ healthcheck: { start_period: "12m" } }))).toEqual([]);
+  });
+
+  test("can't have a start period that outlasts TrueNAS's and HexOS's own limits", () => {
+    expect(healthGateProblems(gated({ healthcheck: { start_period: "12m1s" } }))).toEqual([
+      expect.stringContaining("longer than 12 minutes"),
+    ]);
+    expect(healthGateProblems(gated({ healthcheck: { start_period: "20m" } }))).toHaveLength(1);
   });
 
   test("can't have its check disabled, a start period or not", () => {
@@ -82,9 +90,9 @@ describe("the catalog's own version-7 scripts", () => {
     });
   }
 
-  test("Automatic Ripping Machine's ripper waits 20 minutes before its check counts", () => {
+  test("Automatic Ripping Machine's ripper waits 10 minutes before its check counts", () => {
     const arm = read("ripping-machine.json");
-    expect(arm.app_values.services.ripper.healthcheck).toEqual({ start_period: "20m" });
+    expect(arm.app_values.services.ripper.healthcheck).toEqual({ start_period: "10m" });
     expect(arm.app_values.services.dashboard.depends_on.ripper.condition).toBe("service_healthy");
   });
 });
