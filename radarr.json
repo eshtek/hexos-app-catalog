@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.5.2",
-    "changeLog": "A movie you rip takes the place of a copy of the same quality, by Radarr's own rules"
+    "version": "1.5.3",
+    "changeLog": "Gives Automatic Ripping Machine its own folder access when download paths were customized"
   },
   "sign_in": {
     "username": true
@@ -85,7 +85,8 @@
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
         "$MOUNTED_HOST_PATH($LOCATION(Movies), /movies)",
-        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)"
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/arm, /arm-rips)"
       ]
     },
     "resources": {

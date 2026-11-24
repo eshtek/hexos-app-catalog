@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { AFTER_RIP_PY, applySettings, drivesWithoutSdf, OMDB_KEY_ENV, omdbKeyFromValues, wantedSettings, withSdfStop } from "../arm/configure";
-import { downloadsAs, libraryAs, seenAt } from "../arm/connect_manager";
+import { downloadsAs, libraryAs, seenAt, unshadowedDownloads, radarr } from "../arm/connect_manager";
 import { composeScriptProblems } from "./compose";
 
 const read = (name: string) => JSON.parse(readFileSync(new URL(`../${name}`, import.meta.url), "utf-8"));
@@ -94,6 +94,86 @@ describe("Automatic Ripping Machine's script", () => {
 
   test("the hook's copy of the after-rip script is the file beside it", () => {
     expect(AFTER_RIP_PY).toBe(readFileSync(new URL("../arm/after_rip.py", import.meta.url), "utf-8"));
+  });
+});
+
+describe("manager catalogs keep ARM separate from custom downloader mounts", () => {
+  const arm = [{ hostPath: "/mnt/tank/Downloads/arm", containerPath: "/home/arm/media" }];
+  for (const name of ["radarr", "sonarr"]) {
+    test(`${name} can reach rips when both download paths point at qbittorrent`, () => {
+      const mounts = read(`${name}.json`).app_values.storage.additional_storage.map((macro: string) => {
+        const match = /^\$MOUNTED_HOST_PATH\((.*), (.*)\)$/.exec(macro)!;
+        return { hostPath: match[1].replace("$LOCATION(Downloads)", "/mnt/tank/Downloads"), containerPath: match[2] };
+      });
+      for (const mount of mounts) {
+        if (["/downloads", "/config/Downloads"].includes(mount.containerPath)) mount.hostPath = "/mnt/tank/Downloads/qbittorrent";
+      }
+      expect(downloadsAs(arm, mounts.filter((mount: { containerPath: string }) => mount.containerPath !== "/arm-rips"))).toBeUndefined();
+      expect(downloadsAs(arm, mounts)).toEqual({ arm: "/home/arm/media", manager: "/arm-rips" });
+      expect(mounts.filter((mount: { containerPath: string }) => mount.containerPath === "/arm-rips")).toHaveLength(1);
+    });
+  }
+});
+
+describe("ARM download paths cannot be shadowed by other mounts", () => {
+  const mount = (path: string, mount_path: string) => ({ type: "host_path", mount_path, host_path_config: { path } });
+  const root = mount("/mnt/tank/Downloads/arm", "/arm-rips");
+  const safe = (...entries: unknown[]) => unshadowedDownloads({ storage: { additional_storage: entries } }, "/mnt/tank/Downloads/arm", "/arm-rips");
+  test("the dedicated path and a matching child refer to the same files", () => {
+    expect(safe(root)).toBe(true);
+    expect(safe(root, mount("/mnt/tank/Downloads/arm/completed", "/arm-rips/completed"))).toBe(true);
+    expect(safe(root, mount("/unrelated", "/arm-rips2"))).toBe(true);
+  });
+  test("different or unknown exact and child sources are refused", () => {
+    expect(safe(mount("/wrong", "/arm-rips"))).toBe(false);
+    expect(safe(root, mount("/wrong", "/arm-rips"))).toBe(false);
+    expect(safe(root, mount("/wrong", "/arm-rips/completed"))).toBe(false);
+    expect(safe(root, mount("/wrong", "/unrelated/../arm-rips/completed"))).toBe(false);
+    for (const type of ["ix_volume", "tmpfs", "nfs", "cifs"]) expect(safe(root, { type, mount_path: "/arm-rips/completed" })).toBe(false);
+    expect(safe()).toBe(false);
+  });
+  test("ACL mounts are checked using the effective source", () => {
+    expect(safe({ ...root, host_path_config: { path: "/wrong", acl_enable: true, acl: { path: "/mnt/tank/Downloads/arm" } } })).toBe(true);
+    expect(safe({ ...root, host_path_config: { path: "/mnt/tank/Downloads/arm", acl_enable: true, acl: { path: "/wrong" } } })).toBe(false);
+  });
+  test("a deeper safe bind overrides its ancestor, but an intervening wrong bind is refused", () => {
+    const values = { storage: { additional_storage: [mount("/mnt/tank/Downloads", "/downloads"), mount("/wrong", "/downloads/arm")] } };
+    expect(unshadowedDownloads(values, "/mnt/tank/Downloads/arm", "/downloads/arm")).toBe(false);
+    values.storage.additional_storage.push(mount("/mnt/tank/Downloads/arm/completed", "/downloads/arm/completed"));
+    expect(unshadowedDownloads(values, "/mnt/tank/Downloads/arm/completed", "/downloads/arm/completed")).toBe(true);
+  });
+});
+
+describe("an unsafe ARM connection stops before changing the saved link", () => {
+  test("a hidden child mount or unreadable live storage cannot pass the folder checkpoint", async () => {
+    const root = mkdtempSync(join(tmpdir(), "arm-mapping-"));
+    mkdirSync(join(root, "hexos"));
+    writeFileSync(join(root, "config.xml"), "<Config><ApiKey>fixture-key</ApiKey></Config>");
+    writeFileSync(join(root, "hexos/radarr.json"), "existing-link");
+    let restarted = false;
+    const checkpoints: string[] = [];
+    const ctx = {
+      mounts: [{ hostPath: root, localPath: root, containerPath: "/config" }, { hostPath: "/rips", localPath: "/rips", containerPath: "/arm-rips" }],
+      baseUrl: "http://unused.invalid",
+      getInstalledAppMounts: async () => [{ hostPath: root, localPath: root, containerPath: "/etc/arm/config" }, { hostPath: "/rips", localPath: "/rips", containerPath: "/home/arm/media" }],
+      registerCheckpoints: async () => {},
+      emitCheckpoint: async (id: string) => { checkpoints.push(id); },
+      restartApp: async () => { restarted = true; },
+      fail: (message: string): never => { throw new Error(message); },
+    };
+    try {
+      await expect(radarr(ctx as never)).rejects.toThrow("Update HexOS");
+      await expect(radarr({ ...ctx, getAppValues: async () => { throw new Error("unavailable"); } } as never)).rejects.toThrow("couldn't read");
+      await expect(radarr({ ...ctx, getAppValues: async () => ({ storage: { additional_storage: [
+        { type: "host_path", mount_path: "/arm-rips", host_path_config: { path: "/rips" } },
+        { type: "tmpfs", mount_path: "/arm-rips/completed" },
+      ] } }) } as never)).rejects.toThrow("conflicting folder mapping");
+      expect(restarted).toBe(false);
+      expect(checkpoints).toEqual([]);
+      expect(readFileSync(join(root, "hexos/radarr.json"), "utf8")).toBe("existing-link");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
