@@ -116,12 +116,10 @@ export async function anywhere(ctx: HookContext) {
     mkdirSync(`${config.localPath}/hexos`, { recursive: true, mode: 0o700 });
     writeFileSync(note, JSON.stringify(plan.keep), { mode: 0o600 });
   }
-  for (const [name, value] of Object.entries(plan.set)) {
-    const response = await fetch(`${ctx.baseUrl}/:/prefs?X-Plex-Token=${encodeURIComponent(token)}&${name}=${value ? 1 : 0}`, {
-      method: "PUT",
-      signal: AbortSignal.timeout(10000),
-    }).catch(() => undefined);
-    if (!response?.ok) ctx.fail("Plex didn't take its Remote Access and Relay settings. Run this again.");
+  for (const [name, value] of Object.entries(plan.set) as Array<[keyof Switches, boolean]>) {
+    if (!(await setSwitch(ctx, token, name, value))) {
+      ctx.fail("Plex didn't take its Remote Access and Relay settings. Run this again.", [{ label: "Setting", value: name }]);
+    }
   }
   if (!plan.keep) rmSync(note, { force: true });
   if (Object.keys(plan.set).length > 0) await ctx.emitCheckpoint("switches");
@@ -136,7 +134,33 @@ function readText(path: string): string | undefined {
   }
 }
 
-async function readSwitches(ctx: HookContext, token: string): Promise<Switches> {
+/**
+ * Sets one switch and reads it back. A Plex signed in to an account can take well over 10 seconds to
+ * answer a change of Remote Access, above all just after it restarted, and it applies the change
+ * anyway: a run that went by the answer alone failed while the switch was already off (2026-11-24).
+ * So the value Plex reads back counts, not whether it answered in time.
+ */
+export async function setSwitch(
+  ctx: Pick<HookContext, "baseUrl" | "sleep">,
+  token: string,
+  name: keyof Switches,
+  value: boolean,
+  { attempts = 4, waitMs = 5000, timeoutMs = 30000 } = {},
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const response = await fetch(`${ctx.baseUrl}/:/prefs?X-Plex-Token=${encodeURIComponent(token)}&${name}=${value ? 1 : 0}`, {
+      method: "PUT",
+      signal: AbortSignal.timeout(timeoutMs),
+    }).catch(() => undefined);
+    if (response?.ok) return true;
+    await ctx.sleep(waitMs);
+    const now = await readSwitches(ctx, token).catch(() => undefined);
+    if (now?.[name] === value) return true;
+  }
+  return false;
+}
+
+async function readSwitches(ctx: Pick<HookContext, "baseUrl">, token: string): Promise<Switches> {
   const response = await fetch(`${ctx.baseUrl}/:/prefs?X-Plex-Token=${encodeURIComponent(token)}`, {
     headers: { Accept: "application/json" },
     signal: AbortSignal.timeout(10000),
