@@ -419,8 +419,8 @@
     },
     {
       "id": "anywhere-address",
-      "title": "Use its Anywhere address in Plex's apps",
-      "description": "Giving Plex's apps the Anywhere address",
+      "title": "Enable Anywhere for Plex",
+      "description": "Enabling Anywhere for Plex",
       "summary": "Plex's TV and phone apps reach the server at its Anywhere address. Remote Access and Relay turn off while it has one, and come back after.",
       "kind": "maintain",
       "events": ["userAction"],
