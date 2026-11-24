@@ -1,8 +1,11 @@
 {
-  "version": 4,
+  "version": 6,
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial Install Script"
+    "version": "1.1.0",
+    "changeLog": "Navidrome opens ready, with your sign-in."
+  },
+  "sign_in": {
+    "username": true
   },
   "installation_questions": [
     {
@@ -175,11 +178,15 @@
       "Music"
     ],
     "specifications": [
-      "2CORE", "1GB"],
+      "2CORE",
+      "1GB"
+    ],
     "permissions": [
       "READ_WRITE_LOCATIONS"
     ],
-    "ports": [30043]
+    "ports": [
+      30043
+    ]
   },
   "ensure_directories_exists": [
     {
@@ -193,7 +200,15 @@
       "path": "$LOCATION(Music)",
       "network_share": true
     },
-    { "path": "$LOCATION(ApplicationsPerformance)/navidrome/data", "owner": { "user": "apps" }, "snapshot": { "id": "config" } }
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/navidrome/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "config"
+      }
+    }
   ],
   "app_values": {
     "navidrome": {
@@ -223,5 +238,26 @@
         "memory": "$MEMORY(10%, 4096)"
       }
     }
-  }
+  },
+  "hooks": [
+    {
+      "id": "configure-navidrome",
+      "title": "Pre-configure Navidrome",
+      "description": "Setting up Navidrome",
+      "summary": "Makes your account at install. Running it again from here changes nothing.",
+      "events": [
+        "onAfterInstall",
+        "userAction"
+      ],
+      "rerun": "converge",
+      "surfaces": [
+        "card"
+      ],
+      "optional": true,
+      "script": "navidrome/configure.ts",
+      "entrypoint": "configure",
+      "timeout": 600,
+      "retries": 0
+    }
+  ]
 }

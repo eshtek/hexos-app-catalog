@@ -172,6 +172,13 @@
           }
         },
         {
+          "app": "navidrome",
+          "summary": "Music player",
+          "requires": [
+            "lidarr"
+          ]
+        },
+        {
           "app": "audiobookshelf",
           "summary": "Audiobook player",
           "requires": [
