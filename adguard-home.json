@@ -60,8 +60,8 @@
     },
     {
       "id": "home-addresses",
-      "title": "Use Anywhere addresses at home",
-      "description": "Sends devices on your network straight to this server when they open an Anywhere address",
+      "title": "Enable Anywhere for AdGuard Home",
+      "description": "Enabling Anywhere for AdGuard Home",
       "summary": "Devices that use AdGuard Home reach your Anywhere addresses at this server itself, without leaving your network. HexOS keeps the list up to date.",
       "kind": "maintain",
       "events": ["onAfterInstall", "userAction"],

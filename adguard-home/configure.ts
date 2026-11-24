@@ -13,11 +13,11 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * AdGuard Home runs on the server's own network, because TrueNAS only publishes a port on one
  * address when that address is set by hand, and most servers get theirs from the router. So AdGuard
  * Home has to pick its own DNS address, and it gets the server's: on every address it would fight
- * the mesh client for port 53 and never start (v0.107.80 ends with "address already in use"). Use
- * Anywhere addresses at home puts that right too, when AdGuard Home's settings name every address
+ * the mesh client for port 53 and never start (v0.107.80 ends with "address already in use"). Enable Anywhere for
+ * AdGuard Home puts that right too, when AdGuard Home's settings name every address
  * or one the server no longer has.
  *
- * Use Anywhere addresses at home keeps one DNS rewrite per Anywhere name the box answers on the
+ * Enable Anywhere for AdGuard Home keeps one DNS rewrite per Anywhere name the box answers on the
  * standard web ports, each pointing at the box's own address, so a device on the owner's network
  * that asks AdGuard Home reaches the box without going through the relay. The box runs it again
  * when the names change (`rerunsOn: home-addresses`), when nobody is there to type a password, so
@@ -263,6 +263,6 @@ export async function homeAddresses(ctx: HookContext) {
   const count = await syncRewrites(ctx, config, account);
   await ctx.emitCheckpoint(
     "addresses",
-    count > 0 ? `AdGuard Home sends ${count} Anywhere ${count === 1 ? "address" : "addresses"} straight to this server` : "This server isn't answering Anywhere addresses on your network yet",
+    count > 0 ? `Devices at home now reach ${count} Anywhere ${count === 1 ? "address" : "addresses"} without going out to the internet` : "This server isn't answering Anywhere addresses on your network yet",
   );
 }

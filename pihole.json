@@ -76,8 +76,8 @@
     },
     {
       "id": "home-addresses",
-      "title": "Use Anywhere addresses at home",
-      "description": "Sends devices on your network straight to this server when they open an Anywhere address",
+      "title": "Enable Anywhere for Pi-hole",
+      "description": "Enabling Anywhere for Pi-hole",
       "summary": "Devices that use Pi-hole reach your Anywhere addresses at this server itself, without leaving your network. HexOS keeps the list up to date.",
       "kind": "maintain",
       "events": ["onAfterInstall", "userAction"],
