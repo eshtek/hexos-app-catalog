@@ -6,6 +6,7 @@
 // Run: bun run validate
 
 import { composeScriptProblems } from "./compose";
+import { healthGateProblems } from "./compose_health";
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import {
   BARE_MACROS,
@@ -271,6 +272,7 @@ function validate(file: string, script: Record<string, unknown>) {
   // --- v7: an app with several containers, whose app_values is a compose document ---
   if (version === 7) {
     for (const problem of composeScriptProblems(script, { processed: false })) err(file, `app_values: ${problem}`);
+    for (const problem of healthGateProblems(script.app_values)) err(file, `app_values: ${problem}`);
     if (script.custom !== true) err(file, "a version-7 script is a custom app: set custom to true");
   }
 

@@ -1,5 +1,7 @@
 import { chownSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
+import { posix } from "node:path";
+
 import type { ContextMount, HookContext } from "../_lib/hook_context";
 
 /** The user ARM runs its rips as (ARM_UID in its script). */
@@ -32,6 +34,35 @@ export const seenAt = (hostPath: string, mounts: Mount[]): string | undefined =>
     .sort((a, b) => trimmed(b.hostPath).length - trimmed(a.hostPath).length)[0];
   return holding ? `${trimmed(holding.containerPath as string)}${wanted.slice(trimmed(holding.hostPath).length)}` : undefined;
 };
+
+const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+const within = (path: string, parent: string) => path === parent || path.startsWith(`${parent}/`);
+
+/** A nested container mount can hide a folder even when its parent covers ARM on the host. */
+export function unshadowedDownloads(values: Record<string, unknown>, host: string, container: string): boolean {
+  if (!record(values.storage) && !Array.isArray(values.storage)) return false;
+  const canonical = (path: string) => trimmed(posix.normalize(path));
+  if (!host.startsWith("/") || !container.startsWith("/")) return false;
+  const mounts: Array<{ at: string; source?: string }> = [];
+  const collect = (value: unknown) => {
+    if (Array.isArray(value)) return value.forEach(collect);
+    if (!record(value)) return;
+    if (typeof value.mount_path === "string") {
+      const config = record(value.host_path_config) ? value.host_path_config : {};
+      const source = config.acl_enable ? (record(config.acl) ? config.acl.path : undefined) : config.path;
+      mounts.push({ at: canonical(value.mount_path), source: value.type === "host_path" && typeof source === "string" ? canonical(source) : undefined });
+    } else {
+      Object.values(value).forEach(collect);
+    }
+  };
+  collect(values.storage);
+  const target = canonical(container);
+  const wanted = canonical(host);
+  const parents = mounts.filter((mount) => within(target, mount.at));
+  const depth = Math.max(...parents.map((mount) => mount.at.length));
+  if (!parents.length || parents.filter((mount) => mount.at.length === depth).some((mount) => !mount.source || `${mount.source}${target.slice(mount.at.length)}` !== wanted)) return false;
+  return mounts.filter((mount) => mount.at !== target && within(mount.at, target)).every((mount) => mount.source === `${wanted}${mount.at.slice(target.length)}`);
+}
 
 /** Where the manager sees the folder ARM rips into, or undefined when it has no mount that holds it. */
 export const downloadsAs = (arm: Mount[], manager: Mount[]): ManagerLink["downloads"] | undefined => {
@@ -71,7 +102,12 @@ async function connect(ctx: HookContext, id: keyof typeof MANAGERS) {
   const config = arm.find((mount) => mount.containerPath === "/etc/arm/config") ?? arm.find((mount) => /\/ripping-machine(-\d+)?\/config$/.test(mount.hostPath));
   if (!config) ctx.fail("HexOS couldn't find Automatic Ripping Machine's settings folder. Start it, then run this again.");
   const downloads = downloadsAs(arm, ctx.mounts);
-  if (!downloads) ctx.fail(`${manager.name} can't reach the folder Automatic Ripping Machine rips into. Update ${manager.name} in HexOS, then run this again.`);
+  if (!downloads) ctx.fail(`${manager.name} can't reach the folder Automatic Ripping Machine rips into. Use Reset App Curation for ${manager.name} with the folder and volume reset option off, then run this again. Curation resets other managed settings.`);
+
+  if (!ctx.getAppValues) ctx.fail("HexOS cannot check the app's folder mappings. Update HexOS, then run this again.");
+  const values = await ctx.getAppValues().catch(() => ctx.fail("HexOS couldn't read the app's folder mappings. Try again after the app finishes starting."));
+  const media = arm.find((mount) => mount.containerPath === "/home/arm/media")!;
+  if (!unshadowedDownloads(values, media.hostPath, downloads.manager)) ctx.fail(`${manager.name} has a conflicting folder mapping for Automatic Ripping Machine. Contact HexOS support before changing its folders.`);
 
   const api = async <T>(path: string): Promise<T> => {
     const response = await fetch(`${ctx.baseUrl}/api/v3${path}`, { headers: { "X-Api-Key": apiKey }, signal: AbortSignal.timeout(15000) });
