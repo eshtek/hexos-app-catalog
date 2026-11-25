@@ -39,6 +39,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |
+| [Jdownloader2](jdownloader2.json) | Free, Java-based download manager |
 | [Jellyfin](jellyfin.json) | Free media server |
 | [Jellystat](jellystat.json) | Statistics App for Jellyfin |
 | [Kavita](kavita.json) | Reader for ebooks, comics and manga |
@@ -375,6 +376,20 @@ An existing Jellystat account must authenticate; the connector only creates an a
 Nevu offers Connect to Plex, in Media library and on its card. Nevu's one setting is the Plex address in its own TrueNAS values, which the install fills with Plex's usual port, so the link sets it to where Plex answers now (`ctx.updateAppValues`) and leaves it alone when it already matches. Nevu has no account of its own: its sign-in page sends the owner to plex.tv and looks for this server among that Plex account's servers. When nobody has signed in to Plex yet, the link still sets the address and then ends with `ctx.skip`, telling the owner to sign in to Plex first.
 
 Run the mocked API and password-hash compatibility tests with `bun test _lib/`, then the catalog validator with `bun _lib/validate.ts`. The hook tests make no network requests.
+
+## JDownloader 2
+
+JDownloader2 runs **headless** â€” there is no built-in web desktop (noVNC) or local GUI. You control it remotely through **MyJDownloader**.
+
+### Requirements
+A **free MyJDownloader account is required.** Create one at https://my.jdownloader.org, then enter that account's email and password during install. On first start the app registers itself as a device under the name you set ("Device name").
+
+### Accessing it
+- **Browser:** sign in at https://my.jdownloader.org and select your device.
+- **Mobile:** the official MyJDownloader app (Android / iOS).
+- **Direct (LAN):** clients can connect directly over the published port for faster local control, without going through the relay.
+
+Finished downloads are saved to your **Downloads** share.
 
 ## Custom apps and their images
 

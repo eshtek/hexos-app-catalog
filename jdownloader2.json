@@ -1,0 +1,72 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script"
+  },
+  "installation_questions": [
+    {
+      "question": "MyJDownloader email",
+      "description": "Your my.jdownloader.org account email. JDownloader registers with this account so you can control it from my.jdownloader.org or the mobile app.",
+      "type": "text",
+      "key": "myjd_user",
+      "required": true
+    },
+    {
+      "question": "MyJDownloader password",
+      "description": "Your my.jdownloader.org account password. Must be at least 6 characters and avoid special characters.",
+      "type": "password",
+      "key": "myjd_password",
+      "required": true
+    },
+    {
+      "question": "Device name",
+      "description": "The name this instance shows under on the MyJDownloader portal.",
+      "type": "text",
+      "key": "myjd_name",
+      "required": true,
+      "default": "HexOS-JDownloader"
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "Downloads"],
+    "specifications": ["2CORE", "1GB", "256MBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30102]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(Downloads)", "network_share": true },
+    { "path": "$LOCATION(ApplicationsPerformance)/jdownloader2/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } }
+  ],
+  "app_values": {
+    "jdownloader2": {
+      "myjd_name": "$QUESTION(myjd_name)",
+      "myjd_user": "$QUESTION(myjd_user)",
+      "myjd_password": "$QUESTION(myjd_password)",
+      "additional_envs": []
+    },
+    "run_as": {
+      "user": 568,
+      "group": 568
+    },
+    "network": {
+      "host_network": false,
+      "direct_connection_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30102)"
+      }
+    },
+    "storage": {
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/jdownloader2/config)",
+      "downloads": "$HOST_PATH($LOCATION(Downloads))",
+      "additional_storage": []
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(25%, 2)",
+        "memory": "$MEMORY(10%, 1024)"
+      }
+    }
+  }
+}
