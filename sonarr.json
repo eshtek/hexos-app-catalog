@@ -1,8 +1,8 @@
 {
   "version": 6,
   "script": {
-    "version": "1.5.0",
-    "changeLog": "Takes the shows Automatic Ripping Machine rips, matched to their episodes"
+    "version": "1.5.1",
+    "changeLog": "Gives Automatic Ripping Machine its own folder access when download paths were customized"
   },
   "sign_in": {
     "username": true
@@ -85,7 +85,8 @@
       "additional_storage": [
         "$MOUNTED_HOST_PATH($LOCATION(Downloads)/qbittorrent, /config/Downloads)",
         "$MOUNTED_HOST_PATH($LOCATION(Shows), /shows)",
-        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)"
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads), /downloads)",
+        "$MOUNTED_HOST_PATH($LOCATION(Downloads)/arm, /arm-rips)"
       ]
     },
     "resources": {

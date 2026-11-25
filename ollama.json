@@ -146,22 +146,6 @@
   },
   "hooks": [
     {
-      "id": "choose-model",
-      "title": "Choose a model",
-      "description": "Pick a model your graphics card can run.",
-      "events": [
-        "userAction"
-      ],
-      "surfaces": [
-        "card"
-      ],
-      "rerun": "converge",
-      "script": "ollama/models.ts",
-      "entrypoint": "choose",
-      "timeout": 300,
-      "retries": 0
-    },
-    {
       "id": "download-model",
       "title": "Download your model",
       "description": "Downloads the model you chose. If it stopped, it picks up where it left off.",
@@ -175,22 +159,6 @@
       "script": "ollama/models.ts",
       "entrypoint": "download",
       "timeout": 43200,
-      "retries": 0
-    },
-    {
-      "id": "remove-model",
-      "title": "Remove a model",
-      "description": "Deletes a model from your server, after you confirm.",
-      "events": [
-        "userAction"
-      ],
-      "surfaces": [
-        "card"
-      ],
-      "rerun": "converge",
-      "script": "ollama/models.ts",
-      "entrypoint": "remove",
-      "timeout": 300,
       "retries": 0
     }
   ]
