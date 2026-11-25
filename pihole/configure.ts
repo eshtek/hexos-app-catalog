@@ -23,9 +23,9 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * from the router, and `bind-dynamic`, so it binds that connection's addresses and its own loopback
  * one by one and starts even when the file has gone stale. Pi-hole needs the loopback address to
  * look up the names of the devices it shows. A server whose connection can't be named gets its
- * address in the file instead. Use Anywhere addresses at home puts the file right again when it runs.
+ * address in the file instead. Enable Anywhere for Pi-hole puts the file right again when it runs.
  *
- * Use Anywhere addresses at home keeps three dnsmasq lines per Anywhere name the box answers on
+ * Enable Anywhere for Pi-hole keeps three dnsmasq lines per Anywhere name the box answers on
  * the standard web ports, the same three HexOS's own DNS service writes. `host-record` answers the
  * name with the box's address. `local` makes Pi-hole answer every other record type for the name
  * with nothing instead of asking upstream, where an AAAA or HTTPS record would send the device back
@@ -365,6 +365,6 @@ export async function homeAddresses(ctx: HookContext) {
   const count = changes.ours.length / 3;
   await ctx.emitCheckpoint(
     "addresses",
-    count > 0 ? `Pi-hole sends ${count} Anywhere ${count === 1 ? "address" : "addresses"} straight to this server` : "This server isn't answering Anywhere addresses on your network yet",
+    count > 0 ? `Devices at home now reach ${count} Anywhere ${count === 1 ? "address" : "addresses"} without going out to the internet` : "This server isn't answering Anywhere addresses on your network yet",
   );
 }

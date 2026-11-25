@@ -357,8 +357,8 @@
     },
     {
       "id": "anywhere-address",
-      "title": "Open at its Anywhere address",
-      "description": "Letting Nextcloud open at its Anywhere address",
+      "title": "Enable Anywhere for Nextcloud",
+      "description": "Enabling Anywhere for Nextcloud",
       "summary": "Nextcloud opens at its Anywhere address instead of refusing it as untrusted. HexOS runs this again when the address changes.",
       "kind": "maintain",
       "events": [

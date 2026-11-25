@@ -419,9 +419,9 @@
     },
     {
       "id": "anywhere-address",
-      "title": "Use its Anywhere address in Plex's apps",
-      "description": "Giving Plex's apps the Anywhere address",
-      "summary": "Plex's TV and phone apps reach the server at its Anywhere address. Remote Access and Relay turn off while it has one, and come back after.",
+      "title": "Enable Anywhere for Plex",
+      "description": "Enabling Anywhere for Plex",
+      "summary": "To comply with Plex's terms of service, remote streams through Plex also require you to hold a Plex Pass license or subscription.",
       "kind": "maintain",
       "events": ["userAction"],
       "rerun": "converge",
