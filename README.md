@@ -13,6 +13,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [AFFiNE](affine.json) | Knowledge base software |
 | [ARK: Survival Evolved](ark-survival-evolved.json) | Dinosaur survival game server |
 | [Audiobookshelf](audiobookshelf.json) | Audiobook and podcast server |
+| [Authentik](authentik.json) | Open-source Single Sign-On (SSO) platform |
 | [Automatic Ripping Machine](ripping-machine.json) | Rips a disc in the server's drive, and hands it to Radarr and Sonarr |
 | [Bazarr](bazarr.json) | Subtitle management for Sonarr & Radarr |
 | [BentoPDF](bentopdf.json) | PDF editing toolkit |
