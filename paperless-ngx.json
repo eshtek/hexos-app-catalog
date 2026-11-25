@@ -89,8 +89,8 @@
     "hooks": [
         {
             "id": "anywhere-address",
-            "title": "Sign in at its Anywhere address",
-            "description": "Letting Paperless-ngx accept sign-ins at its Anywhere address",
+            "title": "Enable Anywhere for Paperless-ngx",
+            "description": "Enabling Anywhere for Paperless-ngx",
             "summary": "Paperless-ngx accepts sign-ins at its Anywhere address instead of refusing them. HexOS runs this again when the address changes.",
             "kind": "maintain",
             "events": ["userAction"],

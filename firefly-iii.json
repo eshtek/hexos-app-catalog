@@ -57,8 +57,8 @@
     "hooks": [
         {
             "id": "anywhere-address",
-            "title": "Open at its Anywhere address",
-            "description": "Letting Firefly III use https at its Anywhere address",
+            "title": "Enable Anywhere for Firefly III",
+            "description": "Enabling Anywhere for Firefly III",
             "summary": "Firefly III's pages and links use https at its Anywhere address. HexOS runs this again when the address changes.",
             "kind": "maintain",
             "events": ["userAction"],

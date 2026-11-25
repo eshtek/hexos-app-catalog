@@ -9,9 +9,9 @@ import type { ContextMount, HookContext } from "../_lib/hook_context";
  * So its Anywhere address only works once the Web address is that address, and then its home address
  * stops working. That is a trade the owner makes, so HexOS never moves it on its own:
  *
- * - "Use its Anywhere address" (useAnywhere) is the owner's click. It sets the Web address, and the
+ * - "Enable Anywhere for OpenCloud" (useAnywhere) is the owner's click. It sets the Web address, and the
  *   linked office's address when the office has an Anywhere address too, in one update.
- * - "Keep its Anywhere address up to date" (follow) runs again when the names change. It only follows
+ * - "Keep Anywhere working for OpenCloud" (follow) runs again when the names change. It only follows
  *   an OpenCloud the owner moved, by the click or by typing the Anywhere address in the Web address.
  * - "Use its home address" (useHome) moves it back. A paused licence leaves the names on the box with
  *   no relay behind them, so follow never fires then, and this is the way home.
@@ -190,7 +190,7 @@ export function planFollow(
       if (officeTarget && same(current.officeUrl, officeTarget)) adopted.officeUrl = officeTarget;
       return { state: adopted, message: `OpenCloud already opens at ${target}. HexOS keeps it up to date from now on.` };
     }
-    return { skip: "OpenCloud keeps the address it has. Use its Anywhere address moves it" };
+    return { skip: "OpenCloud keeps the address it has. Enable Anywhere for OpenCloud moves it" };
   }
   if (!same(current.appUrl, state.url)) {
     // The owner typed another Web address: it is theirs now, and HexOS forgets what it set

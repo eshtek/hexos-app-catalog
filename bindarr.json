@@ -5,7 +5,7 @@
     "name": "Bindarr",
     "description": "Keep track of your Pokémon, Magic: The Gathering, Lorcana and Riftbound cards. See what they're worth, which binder page each one is on, and which deck it's in.",
     "icon": "bindarr/icon.svg",
-    "version": "1.10.2",
+    "version": "1.10.3",
     "categories": ["productivity"],
     "keywords": ["trading cards", "tcg", "pokemon", "magic the gathering", "lorcana", "riftbound", "collection", "binder"],
     "homepage": "https://thenotoriousjeremy.github.io/bindarr/",
@@ -13,8 +13,8 @@
     "screenshots": []
   },
   "script": {
-    "version": "1.0.2",
-    "changeLog": "Runs ghcr.io/thenotoriousjeremy/bindarr 1.10.2."
+    "version": "1.0.3",
+    "changeLog": "Runs ghcr.io/thenotoriousjeremy/bindarr 1.10.3."
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -41,7 +41,7 @@
   "app_values": {
     "image": {
       "repository": "ghcr.io/thenotoriousjeremy/bindarr",
-      "tag": "1.10.2@sha256:a41d3529cbf58305ac2d6aede6993f0bda32ddcf9c4d775dd1a33de56361aec8",
+      "tag": "1.10.3@sha256:bba55e95be49f5ad2281e8c6ef2958b7074c376e236363752332cffcbeaec985",
       "pull_policy": "missing"
     },
     "restart_policy": "unless-stopped",
