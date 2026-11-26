@@ -57,7 +57,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Nevu](nevu.json) | Front-end interface for Plex, in Media library as a Plex companion |
 | [Nextcloud](nextcloud.json) | File sync and collaboration |
 | [Nginx Proxy Manager](nginx-proxy-manager.json) | Gives your apps their own web addresses, with HTTPS |
-| [ntfy](ntfy.json) | Push notifications for your phone and desktop |
+| [ntfy](ntfy.json) | Push notifications for your phone and desktop ([notes](ntfy/README.md)) |
 | [NZBGet](nzbget.json) | Usenet downloader, lightweight |
 | [ONLYOFFICE](onlyoffice-document-server.json) | Office documents in the browser |
 | [OpenCloud](opencloud.json) | File sync and sharing, a folder per person |
