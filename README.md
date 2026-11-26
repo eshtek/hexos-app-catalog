@@ -39,6 +39,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |
+| [Jdownloader2](jdownloader2.json) | Free, Java-based download manager ([notes](jdownloader2/README.md)) |
 | [Jellyfin](jellyfin.json) | Free media server |
 | [Jellystat](jellystat.json) | Statistics App for Jellyfin |
 | [Kavita](kavita.json) | Reader for ebooks, comics and manga |
