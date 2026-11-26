@@ -1,0 +1,124 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.2.0",
+    "updateCompatibility": ">=1.0.0",
+    "changeLog": "Auto-generates db_password, secret_key and a bootstrap API token (no prompts); adds an onAfterInstall hook that waits for Authentik to finish starting (DB migrations) and hands the dashboard widget the generated API token so its counts work automatically."
+  },
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["2CORE", "2GB", "4GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30140, 30141]
+  },
+  "installation_questions": [
+    {
+      "question": "Admin email",
+      "description": "Email address for the initial Authentik admin account (akadmin). Set on first boot so you can skip the manual setup flow.",
+      "placeholder": "admin@example.com",
+      "type": "text",
+      "key": "admin_email",
+      "required": true,
+      "installonly": true,
+      "group": "Admin account"
+    },
+    {
+      "question": "Admin password",
+      "description": "Password for the initial admin account (akadmin). Leave the generated value or set your own - note it down, there is no post-install screen that shows it.",
+      "type": "password",
+      "key": "admin_password",
+      "required": true,
+      "installonly": true,
+      "default": "$RANDOM_STRING(24)",
+      "group": "Admin account"
+    }
+  ],
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik" },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/postgres_data", "owner": { "user": "netdata", "group": "docker" }, "snapshot": { "id": "db" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/templates", "owner": { "user": "apps" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/authentik/certs", "owner": { "user": "apps" }, "snapshot": { "id": "certs" } }
+  ],
+  "app_values": {
+    "authentik": {
+      "postgres_image_selector": "postgres_18_image",
+      "db_password": "$RANDOM_STRING(16)",
+      "secret_key": "$RANDOM_STRING(50)",
+      "mount_docker_socket": false,
+      "setup_email": false,
+      "additional_envs": [
+        { "name": "AUTHENTIK_BOOTSTRAP_EMAIL", "value": "$QUESTION(admin_email)" },
+        { "name": "AUTHENTIK_BOOTSTRAP_PASSWORD", "value": "$QUESTION(admin_password)" },
+        { "name": "AUTHENTIK_BOOTSTRAP_TOKEN", "value": "$RANDOM_STRING(60)" },
+        { "name": "AUTHENTIK_ERROR_REPORTING__ENABLED", "value": "false" },
+        { "name": "AUTHENTIK_DISABLE_STARTUP_ANALYTICS", "value": "true" }
+      ]
+    },
+    "run_as": {
+      "user": 568,
+      "group": 568
+    },
+    "network": {
+      "http_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30140)"
+      },
+      "https_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30141)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/data)",
+      "templates": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/templates)",
+      "certs": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/certs)",
+      "postgres_data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/authentik/postgres_data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(25%, 2)",
+        "memory": "$MEMORY(10%, 4096)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "post-install-setup",
+      "title": "Finish Authentik setup",
+      "description": "Waiting for Authentik to finish starting",
+      "events": ["onAfterInstall"],
+      "optional": true,
+      "script": "authentik/post_install.ts",
+      "entrypoint": "run",
+      "timeout": 600
+    }
+  ],
+  "widgetsSchema": 3,
+  "widgets": [
+    {
+      "id": "authentik-status",
+      "title": "Authentik",
+      "description": "Live ready state, plus user / application / sign-in-failure counts from the bootstrap API token.",
+      "refresh": 60,
+      "timeout": 10,
+      "conditions": [
+        { "role": "availability", "type": "appRunning", "app": "authentik" }
+      ],
+      "slots": [
+        { "type": "stat", "field": "status" },
+        { "type": "stat", "field": "users" },
+        { "type": "stat", "field": "applications" }
+      ],
+      "slides": [
+        {
+          "title": "Security",
+          "slots": [{ "type": "stat", "field": "failed" }]
+        }
+      ],
+      "script": "authentik/widget_status.ts",
+      "entrypoint": "run"
+    }
+  ]
+}
