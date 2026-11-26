@@ -86,8 +86,8 @@
   "hooks": [
     {
       "id": "anywhere-address",
-      "title": "Sign in at its Anywhere address",
-      "description": "Letting SparkyFitness accept sign-ins at its Anywhere address",
+      "title": "Enable Anywhere for SparkyFitness",
+      "description": "Enabling Anywhere for SparkyFitness",
       "summary": "SparkyFitness accepts sign-ins at its Anywhere address instead of refusing them. HexOS runs this again when the address changes.",
       "kind": "maintain",
       "events": [

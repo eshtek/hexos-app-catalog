@@ -119,7 +119,7 @@
     },
     {
       "question": "Web address",
-      "description": "Leave this as it is. To use OpenCloud away from home, turn on its HexOS Anywhere address and click Use its Anywhere address. Change it only if you run your own proxy: then enter the full address, including https:// and with no slash at the end.",
+      "description": "Leave this as it is. To use OpenCloud away from home, turn on its HexOS Anywhere address and click Enable Anywhere for OpenCloud. Change it only if you run your own proxy: then enter the full address, including https:// and with no slash at the end.",
       "type": "text",
       "key": "address",
       "required": true,
@@ -452,8 +452,8 @@
     },
     {
       "id": "use-anywhere-address",
-      "title": "Use its Anywhere address",
-      "description": "Moving OpenCloud to its Anywhere address",
+      "title": "Enable Anywhere for OpenCloud",
+      "description": "Enabling Anywhere for OpenCloud",
       "summary": "OpenCloud works at one address. This moves it to its Anywhere address, which then works at home too.",
       "kind": "maintain",
       "events": [
@@ -470,8 +470,8 @@
     },
     {
       "id": "anywhere-address",
-      "title": "Keep its Anywhere address up to date",
-      "description": "Keeping OpenCloud at its Anywhere address",
+      "title": "Keep Anywhere working for OpenCloud",
+      "description": "Keeping Anywhere working for OpenCloud",
       "summary": "After you move OpenCloud to its Anywhere address, HexOS follows a rename. Turning the address off moves it home.",
       "kind": "maintain",
       "events": [
