@@ -1,0 +1,54 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script."
+  },
+  "installation_questions": [
+    {
+      "question": "Base URL",
+      "description": "The URL clients use to reach ntfy, including the scheme and port - e.g. http://$SERVER_LAN_IP:30184. ntfy needs this for the web app, attachments and publishing. If you put ntfy behind HexOS anywhere, set its external URL here instead (e.g. https://ntfy.xxxxxxxx.relay.hexos.com).",
+      "type": "text",
+      "key": "base_url",
+      "required": true,
+      "default": "http://$SERVER_LAN_IP:$PORT(30184)"
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance"],
+    "specifications": ["1CORE", "256MB", "512MBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30184]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(ApplicationsPerformance)/ntfy/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } },
+    { "path": "$LOCATION(ApplicationsPerformance)/ntfy/config", "owner": { "user": "apps" }, "snapshot": { "id": "config" } }
+  ],
+  "app_values": {
+    "ntfy": {
+      "base_url": "$QUESTION(base_url)",
+      "additional_envs": []
+    },
+    "run_as": {
+      "user": 568,
+      "group": 568
+    },
+    "network": {
+      "http_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30184)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/ntfy/data)",
+      "config": "$HOST_PATH($LOCATION(ApplicationsPerformance)/ntfy/config)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(25%, 1)",
+        "memory": "$MEMORY(5%, 512)"
+      }
+    }
+  }
+}
