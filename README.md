@@ -36,6 +36,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Frigate](frigate.json) | Camera recorder with object detection |
 | [Forgejo](forgejo.json) | Self-hosted Git server |
 | [FreshRSS](freshrss.json) | RSS feed reader |
+| [Gatus](gatus.json) | Health-check dashboard and status page for your services |
 | [Handbrake](handbrake.json) | Video transcoder |
 | [Home Assistant](home-assistant.json) | Home automation platform |
 | [Immich](immich.json) | Self-hosted photo & video management |

@@ -1,0 +1,67 @@
+{
+  "version": 6,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial release, built against TrueNAS's own Community-train Gatus chart (v1.1.24), with a card button that scans for other installed apps and adds each one found as a monitored endpoint"
+  },
+  "requirements": {
+    "locations": [
+      "ApplicationsPerformance"
+    ],
+    "specifications": [
+      "2CORE",
+      "1GB"
+    ],
+    "permissions": [
+      "READ_WRITE_LOCATIONS"
+    ],
+    "ports": [
+      30287
+    ]
+  },
+  "ensure_directories_exists": [
+    {
+      "path": "$LOCATION(ApplicationsPerformance)"
+    },
+    {
+      "path": "$LOCATION(ApplicationsPerformance)/gatus/data",
+      "owner": {
+        "user": "apps"
+      },
+      "snapshot": {
+        "id": "data"
+      }
+    }
+  ],
+  "app_values": {
+    "network": {
+      "web_port": {
+        "bind_mode": "published",
+        "port_number": "$PORT(30287)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/gatus/data)"
+    },
+    "resources": {
+      "limits": {
+        "cpus": 1,
+        "memory": 512
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "detect-apps",
+      "title": "Detect installed apps",
+      "description": "Scans for other apps installed on this server and adds each one it finds as a monitored endpoint in Gatus. Safe to re-run any time — it only touches its own config file.",
+      "kind": "custom",
+      "surfaces": [
+        "card"
+      ],
+      "rerun": "converge",
+      "script": "gatus/detect_apps.ts",
+      "entrypoint": "run"
+    }
+  ]
+}
