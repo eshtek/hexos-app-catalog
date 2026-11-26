@@ -12,8 +12,8 @@
     "sources": ["https://github.com/indifferentbroccoli/projectzomboid-server-docker"]
   },
   "script": {
-    "version": "1.0.0",
-    "changeLog": "Initial curation: a Project Zomboid server that players join on the server's own address, one folder and set of ports per copy"
+    "version": "1.0.1",
+    "changeLog": "Runs indifferentbroccoli/projectzomboid-server-docker v1.3.0."
   },
   "requirements": {
     "locations": ["ApplicationsPerformance"],
@@ -56,7 +56,7 @@
   "app_values": {
     "image": {
       "repository": "indifferentbroccoli/projectzomboid-server-docker",
-      "tag": "v1.2.0@sha256:0bfd0599c0cf3edf66ba40937ce3ae2a7c5de92073dc99d1c7e9a01fa581414e",
+      "tag": "v1.3.0@sha256:4b13032b103fb6fa9b68a1af5d856a45e9220ef853f159887f61665cd112558b",
       "pull_policy": "missing"
     },
     "restart_policy": "unless-stopped",
