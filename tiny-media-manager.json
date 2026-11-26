@@ -1,0 +1,78 @@
+{
+  "version": 5,
+  "script": {
+    "version": "1.0.0",
+    "changeLog": "Initial script"
+  },
+  "installation_questions": [
+    {
+      "question": "noVNC password",
+      "description": "Optional. Protects the web UI (noVNC desktop) Tiny Media Manager runs in. Leaving blank will allow passwordless login.",
+      "type": "password",
+      "key": "password",
+      "required": false,
+      "default": ""
+    },
+    {
+      "question": "tinyMediaManager license code",
+      "description": "Optional. Paste your tinyMediaManager (PRO) license code to activate it on first boot. Leave blank to run the free version - you can still register later via Info -> Register inside the app.",
+      "type": "text",
+      "key": "license",
+      "required": false,
+      "default": ""
+    }
+  ],
+  "requirements": {
+    "locations": ["ApplicationsPerformance", "Movies", "Shows"],
+    "specifications": ["2CORE", "1GB", "2GBRAM"],
+    "permissions": ["READ_WRITE_LOCATIONS"],
+    "ports": [30101]
+  },
+  "ensure_directories_exists": [
+    { "path": "$LOCATION(ApplicationsPerformance)" },
+    { "path": "$LOCATION(Movies)", "network_share": true },
+    { "path": "$LOCATION(Shows)", "network_share": true },
+    { "path": "$LOCATION(ApplicationsPerformance)/tiny-media-manager/data", "owner": { "user": "apps" }, "snapshot": { "id": "data" } }
+  ],
+  "app_values": {
+    "tiny_media_manager": {
+      "password": "$QUESTION(password)",
+      "additional_envs": [
+        { "name": "HEXOS_TMM_LICENSE", "value": "$QUESTION(license)" }
+      ]
+    },
+    "run_as": {
+      "user": 568,
+      "group": 568
+    },
+    "network": {
+      "web_port": {
+        "port_number": "$PORT(30101)"
+      }
+    },
+    "storage": {
+      "data": "$HOST_PATH($LOCATION(ApplicationsPerformance)/tiny-media-manager/data)",
+      "additional_storage": [
+        "$MOUNTED_HOST_PATH($LOCATION(Movies), /media/Movies)",
+        "$MOUNTED_HOST_PATH($LOCATION(Shows), /media/Shows)"
+      ]
+    },
+    "resources": {
+      "limits": {
+        "cpus": "$CPUS(25%, 2)",
+        "memory": "$MEMORY(10%, 2048)"
+      }
+    }
+  },
+  "hooks": [
+    {
+      "id": "set-license",
+      "event": "onAfterInstall",
+      "script": "tiny-media-manager/set_license.ts",
+      "entrypoint": "run",
+      "timeout": 120,
+      "description": "Applying your tinyMediaManager license",
+      "optional": true
+    }
+  ]
+}
