@@ -105,6 +105,7 @@ Install scripts are JSON configurations that automate app deployment on HexOS â€
 | [Terraria](terraria.json) | 2D sandbox adventure game server |
 | [Terraria TShock](terraria-tshock.json) | Terraria server with admin tools and plugins |
 | [The Lounge](the-lounge.json) | Always-connected web IRC client ([notes](the-lounge/README.md)) |
+| [Tiny Media Manager](tiny-media-manager.json) | Metadata manager and scraper for your movie and TV library ([notes](tiny-media-manager/README.md)) |
 | [tModLoader](tmodloader.json) | Modded Terraria server with a dashboard for Workshop mods |
 | [Uptime Kuma](uptime-kuma.json) | Self-hosted uptime monitoring |
 | [Valheim](valheim.json) | Viking survival game server, joined with a crossplay join code |
